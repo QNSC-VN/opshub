@@ -29,7 +29,7 @@ variable "github_org" {
   description = "GitHub org/owner that hosts the opshub repositories."
 }
 
-# ── Platform remote state (OIDC provider ARN from qnsc-infra) ──────────────
+# ── Platform remote state (OIDC provider ARN + KMS from qnsc-infra) ───────────
 data "terraform_remote_state" "platform" {
   backend = "s3"
   config = {
@@ -39,18 +39,50 @@ data "terraform_remote_state" "platform" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 # ── Container registries ──────────────────────────────────────────────────────
 module "ecr" {
-  source       = "../../modules/ecr"
-  repositories = ["opshub-api", "opshub-worker"]
-  kms_key_arn  = data.terraform_remote_state.platform.outputs.kms_key_arn
-  tags         = { Scope = "shared" }
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecr?ref=ecr-v1.0.0"
+
+  repository_names = ["opshub-api", "opshub-worker", "opshub-migrator"]
+  kms_key_arn      = data.terraform_remote_state.platform.outputs.kms_key_arn
+  tags             = { Scope = "shared" }
 }
 
-# ── GitHub OIDC deploy roles — opshub-web (S3 + CloudFront) ──────────────────
-locals {
-  github_org = var.github_org
+# ── GitHub Actions OIDC roles (ECS deploy + ECR push + infra CI) ─────────────
+module "iam_oidc" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v1.0.0"
 
+  product           = "opshub"
+  github_org        = var.github_org
+  oidc_provider_arn = data.terraform_remote_state.platform.outputs.oidc_provider_arn
+
+  environments = {
+    develop = {
+      allowed_subjects = [
+        "repo:${var.github_org}/opshub-api:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub-api:ref:refs/heads/develop",
+      ]
+    }
+    production = {
+      allowed_subjects = [
+        "repo:${var.github_org}/opshub-api:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub-api:ref:refs/tags/v*",
+      ]
+    }
+  }
+
+  app_repo_names         = ["opshub-api"]
+  infra_repo_name        = "opshub-infra"
+  ecr_repository_pattern = "opshub-*"
+  ecs_passrole_pattern   = "opshub-*"
+
+  tags = { Scope = "shared" }
+}
+
+# ── GitHub Actions OIDC role — opshub-web (S3 + CloudFront) ──────────────────
+locals {
   web_deploy_envs = {
     develop = {
       allowed_subjects = [
@@ -67,8 +99,6 @@ locals {
     }
   }
 }
-
-data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role" "web_deploy" {
   for_each = local.web_deploy_envs
@@ -122,13 +152,4 @@ resource "aws_iam_role_policy" "web_deploy" {
       },
     ]
   })
-}
-
-# ── GitHub Actions OIDC deploy role (ECS/ECR) ─────────────────────────────────
-module "iam_oidc" {
-  source            = "../../modules/iam-oidc"
-  github_org        = var.github_org
-  oidc_provider_arn = data.terraform_remote_state.platform.outputs.oidc_provider_arn
-  ecr_arns          = ["*"]
-  tags              = { Scope = "shared" }
 }

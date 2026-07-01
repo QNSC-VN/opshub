@@ -9,8 +9,7 @@ on:
     branches: [main]
     paths:
       - "live/**"
-      - "modules/**"
-      - ".github/workflows/apply.yml"
+      - ".github/workflows/infra-apply.yml"
 
 permissions:
   id-token: write

@@ -26,7 +26,7 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-# ── Read shared layer outputs (OIDC ARN, KMS ARN, artifacts bucket) ───────────
+# ── Read shared layer outputs (ECR URLs, KMS ARN, artifacts bucket) ───────────
 data "terraform_remote_state" "shared" {
   backend = "s3"
   config = {
@@ -51,68 +51,92 @@ locals {
 
 # ── Networking ────────────────────────────────────────────────────────────────
 module "network" {
-  source = "../../modules/network"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/network?ref=network-v1.1.2"
 
-  name                 = local.name
-  region               = local.region
-  azs                  = local.azs
+  name   = local.name
+  region = local.region
+  azs    = local.azs
+
   # 10.50.x.x — avoids overlap with rally-prod (10.20) and opshub-prod (10.30)
   vpc_cidr             = "10.50.0.0/16"
   public_subnet_cidrs  = ["10.50.0.0/24", "10.50.1.0/24", "10.50.2.0/24"]
   private_subnet_cidrs = ["10.50.10.0/24", "10.50.11.0/24", "10.50.12.0/24"]
   data_subnet_cidrs    = ["10.50.20.0/24", "10.50.21.0/24", "10.50.22.0/24"]
-  multi_az_nat         = false
-  app_port             = 3000
-  enable_flow_logs     = true
-  tags                 = { Environment = local.env }
-}
 
-# ── ECR repositories ──────────────────────────────────────────────────────────
-module "ecr" {
-  source       = "../../modules/ecr"
-  repositories = ["opshub-api", "opshub-worker", "opshub-migrator"]
-  tags         = { Environment = local.env }
-}
+  nat_type                   = "instance" # dev: fck-nat t4g.nano ~$3/mo vs NAT GW ~$33/mo
+  enable_interface_endpoints = false # dev: NAT already covers egress — save ~$22/mo
+  app_port                   = 3000
+  enable_flow_logs           = false # dev: no compliance requirement — save ~$4/mo
+  flow_log_retention_days    = 30
 
-# ── Secrets (containers only; values set out-of-band) ─────────────────────────
-module "secrets" {
-  source       = "../../modules/secrets"
-  prefix       = "opshub/${local.env}"
-  kms_key_arn  = local.kms_key_arn
-  secret_names = [
-    "db-url",
-    "jwt-secret",
-    "entra-client-secret",  # Azure Entra app client secret (for JWKS + Graph API)
-    "valkey-url",           # ElastiCache connection string injected after apply
-  ]
   tags = { Environment = local.env }
 }
 
-# ── RDS PostgreSQL 18 ─────────────────────────────────────────────────────────
-module "rds" {
-  source = "../../modules/rds"
+# ── Secrets (scaffolding only — fill values in Secrets Manager console) ───────
+module "secrets" {
+  source      = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/secrets?ref=secrets-v1.0.0"
+  prefix      = "opshub/${local.env}"
+  kms_key_arn = local.kms_key_arn
 
-  identifier               = local.name
-  subnet_ids               = module.network.data_subnet_ids
-  security_group_id        = module.network.sg_rds_id
-  kms_key_arn              = local.kms_key_arn
-  instance_class           = "db.t4g.medium"
+  secret_names = {
+    "db-url"              = "PostgreSQL connection URL"
+    "jwt-secret"          = "JWT signing secret"
+    "entra-client-secret" = "Azure Entra app client secret (JWKS + Graph API)"
+    "valkey-url"          = "ElastiCache Valkey connection URL"
+  }
+
+  tags = { Environment = local.env }
+}
+
+# ── RDS PostgreSQL ─────────────────────────────────────────────────────────────
+module "rds" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/rds?ref=rds-v1.0.1"
+
+  identifier        = local.name
+  subnet_ids        = module.network.data_subnet_ids
+  security_group_id = module.network.sg_rds_id
+  kms_key_arn       = local.kms_key_arn
+
+  instance_class           = "db.t4g.micro"
   allocated_storage_gb     = 20
   max_allocated_storage_gb = 100
   multi_az                 = false
   deletion_protection      = false
   backup_retention_days    = 3
-  tags                     = { Environment = local.env }
+  monitoring_interval      = 0 # disable Enhanced Monitoring in develop (saves CloudWatch cost)
+
+  tags = { Environment = local.env, AutoStop = "true" }
 }
 
-# ── Messaging (SQS outbox + SNS) ──────────────────────────────────────────────
+# ── ElastiCache Valkey (node mode — cheaper than serverless in dev) ───────────
+module "cache" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cache?ref=cache-v1.0.0"
+
+  name              = "${local.name}-valkey"
+  subnet_ids        = module.network.data_subnet_ids
+  security_group_id = module.network.sg_cache_id
+  kms_key_arn       = local.kms_key_arn
+
+  mode = "node" # dev: single cache.t4g.micro node (~$11/mo) vs serverless ~$90 floor
+
+  tags = { Environment = local.env, AutoStop = "true" }
+}
+
+# ── Messaging (SQS + SNS) ─────────────────────────────────────────────────────
 module "messaging" {
-  source = "../../modules/messaging"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/messaging?ref=messaging-v1.0.0"
   prefix = local.name
-  tags   = { Environment = local.env }
+
+  queues = {
+    outbox = { visibility_timeout = 60 }
+  }
+
+  topics = ["events"]
+
+  tags = { Environment = local.env }
 }
 
-# ── S3 upload bucket (leave docs, profile photos, attachments) ────────────────
+# ── S3 upload bucket ──────────────────────────────────────────────────────────
 resource "aws_s3_bucket" "uploads" {
   bucket        = "opshub-${local.env}-uploads"
   force_destroy = true
@@ -126,7 +150,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
       sse_algorithm     = "aws:kms"
       kms_master_key_id = local.kms_key_arn
     }
-    bucket_key_enabled = true   # reduces KMS request costs by ~99%
+    bucket_key_enabled = true
   }
 }
 
@@ -162,26 +186,6 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
   }
-}
-
-# ── ElastiCache Serverless (Valkey) — rate limiting + authz cache ─────────────
-resource "aws_elasticache_serverless_cache" "valkey" {
-  engine = "valkey"
-  name   = "${local.name}-valkey"
-
-  cache_usage_limits {
-    data_storage {
-      maximum = 1
-      unit    = "GB"
-    }
-    ecpu_per_second {
-      maximum = 1000
-    }
-  }
-
-  subnet_ids         = module.network.data_subnet_ids
-  security_group_ids = [module.network.sg_elasticache_id]
-  tags               = { Name = "${local.name}-valkey", Environment = local.env }
 }
 
 # ── ALB ───────────────────────────────────────────────────────────────────────
@@ -228,22 +232,65 @@ resource "aws_lb_listener" "http_redirect" {
   }
 }
 
-# ── ECS cluster ───────────────────────────────────────────────────────────────
+# ── ECS Cluster ───────────────────────────────────────────────────────────────
 module "ecs_cluster" {
-  source = "../../modules/ecs-cluster"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-cluster?ref=ecs-cluster-v1.0.0"
   name   = local.name
   tags   = { Environment = local.env }
 }
 
+# ── ECS Migrator task definition (one-shot, triggered by CI) ─────────────────
+resource "aws_cloudwatch_log_group" "migrator" {
+  name              = "/ecs/${local.name}/migrator"
+  retention_in_days = 7 # dev: keep only 7 days (migrator is a one-shot task)
+  tags              = { Environment = local.env, Service = "migrator" }
+}
+
+resource "aws_ecs_task_definition" "migrator" {
+  family                   = "${local.name}-migrator"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = module.api.execution_role_arn
+  task_role_arn            = module.api.task_role_arn
+
+  container_definitions = jsonencode([{
+    name      = "migrator"
+    image     = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
+    essential = true
+
+    environment = [
+      { name = "NODE_ENV",   value = "production" },
+      { name = "AWS_REGION", value = local.region },
+    ]
+
+    secrets = [
+      { name = "DATABASE_URL", valueFrom = module.secrets.secret_arns["db-url"] },
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.migrator.name
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "migrator"
+      }
+    }
+  }])
+
+  tags = { Environment = local.env, Service = "migrator" }
+}
+
 # ── API service ───────────────────────────────────────────────────────────────
 module "api" {
-  source = "../../modules/ecs-service"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.1.0"
 
   service_name = "api"
   cluster_name = module.ecs_cluster.cluster_name
   cluster_arn  = module.ecs_cluster.cluster_arn
-  image_uri    = local.ecr_api_url
   region       = local.region
+  image_uri    = local.ecr_api_url
 
   cpu            = 512
   memory         = 1024
@@ -253,9 +300,11 @@ module "api" {
   subnet_ids        = module.network.private_subnet_ids
   security_group_id = module.network.sg_app_id
 
-  desired_count = 1
-  min_count     = 1
-  max_count     = 3
+  desired_count      = 1
+  min_count          = 1
+  max_count          = 3
+  use_spot           = true # Fargate Spot: saves ~70% on compute
+  log_retention_days = 7    # dev: 7 days sufficient for debugging
 
   attach_alb        = true
   alb_listener_arn  = aws_lb_listener.https.arn
@@ -264,6 +313,7 @@ module "api" {
   health_check_path = "/v1/healthz"
 
   secret_arns = values(module.secrets.secret_arns)
+  kms_key_arn = local.kms_key_arn
   secrets = [
     { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
     { name = "JWT_SECRET",          secret_arn = module.secrets.secret_arns["jwt-secret"] },
@@ -274,25 +324,26 @@ module "api" {
     { name = "NODE_ENV",          value = "production" },
     { name = "PORT",              value = "3000" },
     { name = "AWS_REGION",        value = local.region },
-    { name = "SQS_OUTBOX_URL",    value = module.messaging.outbox_queue_url },
+    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
     { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
   s3_bucket_arns = [aws_s3_bucket.uploads.arn]
-  tags           = { Environment = local.env, Service = "api" }
+
+  tags = { Environment = local.env, Service = "api", AutoStop = "true" }
 }
 
 # ── Worker service ────────────────────────────────────────────────────────────
 module "worker" {
-  source = "../../modules/ecs-service"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.1.0"
 
   service_name = "worker"
   cluster_name = module.ecs_cluster.cluster_name
   cluster_arn  = module.ecs_cluster.cluster_arn
-  image_uri    = local.ecr_worker_url
   region       = local.region
+  image_uri    = local.ecr_worker_url
 
   cpu    = 256
   memory = 512
@@ -301,13 +352,16 @@ module "worker" {
   subnet_ids        = module.network.private_subnet_ids
   security_group_id = module.network.sg_app_id
 
-  desired_count = 1
-  min_count     = 1
-  max_count     = 2
+  desired_count      = 1
+  min_count          = 1
+  max_count          = 2
+  use_spot           = true # Fargate Spot: saves ~70% on compute
+  log_retention_days = 7    # dev: 7 days sufficient for debugging
 
   attach_alb = false
 
   secret_arns = values(module.secrets.secret_arns)
+  kms_key_arn = local.kms_key_arn
   secrets = [
     { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
     { name = "JWT_SECRET",          secret_arn = module.secrets.secret_arns["jwt-secret"] },
@@ -317,35 +371,46 @@ module "worker" {
   environment_vars = [
     { name = "NODE_ENV",         value = "production" },
     { name = "AWS_REGION",       value = local.region },
-    { name = "SQS_OUTBOX_URL",   value = module.messaging.outbox_queue_url },
+    { name = "SQS_OUTBOX_URL",   value = module.messaging.queue_urls["outbox"] },
     { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
   s3_bucket_arns = [aws_s3_bucket.uploads.arn]
-  tags           = { Environment = local.env, Service = "worker" }
+
+  tags = { Environment = local.env, Service = "worker", AutoStop = "true" }
 }
 
-# ── WAF ───────────────────────────────────────────────────────────────────────
+# ── WAF (disabled in dev — saves $5+/month per WebACL) ───────────────────────
 module "waf" {
-  source     = "../../modules/waf"
-  name       = local.name
-  enabled    = false   # WAF skipped in develop — saves $5+/month per WebACL; enabled in prod
-  alb_arn    = aws_lb.this.arn
-  rate_limit = 2000
-  tags       = { Environment = local.env }
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/waf?ref=waf-v1.0.1"
+
+  name                = local.name
+  enabled             = false
+  alb_arn             = aws_lb.this.arn
+  rate_limit_per_5min = 2000
+
+  tags = { Environment = local.env }
 }
-# ── CDN (S3 + CloudFront) — opshub-web SPA ─────────────────────────────────────
-# Prerequisites:
-#   1. Create ACM cert for the web domain in us-east-1 (CloudFront requirement)
-#   2. Pass its ARN as web_acm_cert_arn in tfvars
-#   3. After apply: set S3_BUCKET + CLOUDFRONT_ID as GitHub env vars for opshub-web
+
+# ── CDN (S3 + CloudFront) — opshub-web SPA ────────────────────────────────────
 module "cdn" {
-  source       = "../../modules/cdn"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cdn?ref=cdn-v1.0.0"
+
   name         = "opshub-web-develop"
   acm_cert_arn = var.web_acm_cert_arn
-  aliases      = []   # set to ["app-dev.opshub.qnsc.vn"] once DNS is configured
-  price_class  = "PriceClass_100"   # develop: US/EU PoPs only — cheaper than PriceClass_200
-  tags         = { Environment = local.env, Service = "web" }
+  aliases      = []
+  price_class  = "PriceClass_100" # develop: US/EU PoPs only — cheaper than PriceClass_200
+
+  tags = { Environment = local.env, Service = "web" }
+}
+
+# ── Dev scheduler: stop RDS + scale ECS to 0 off-hours ───────────────────────
+# Tag-driven: acts on resources tagged AutoStop=true.
+# Stops at 8pm ICT, restarts at 8am ICT weekdays.
+module "dev_scheduler" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dev-scheduler?ref=dev-scheduler-v1.0.0"
+  name   = local.name
+  tags   = { Environment = local.env }
 }
