@@ -76,14 +76,17 @@ jobs:
       - name: tofu plan
         id: plan
         working-directory: ${{ matrix.workspace }}
-        run: tofu plan -input=false -no-color 2>&1 | tee plan.txt
+        run: |
+          tofu plan -input=false -no-color -out=tfplan 2>&1 | tee plan.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
         env:
           TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN }}
           TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN }}
           TF_VAR_image_tag:        ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
-        continue-on-error: true
+        continue-on-error: true   # allow comment step to run; real failure gate below
 
       - name: Post plan comment
+        if: always()   # post even when plan fails so PR shows the error
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea   # v7.0.1
         with:
           script: |
@@ -101,6 +104,6 @@ jobs:
               body,
             });
 
-      - name: Fail if plan failed
-        if: steps.plan.outcome == 'failure'
+      - name: Fail if plan errored
+        if: steps.plan.outputs.exitcode != '0' && steps.plan.outputs.exitcode != '2'
         run: exit 1

@@ -111,6 +111,15 @@ jobs:
           build-target: api
           cache-scope: api
 
+      - name: Scan API image for critical CVEs
+        uses: aquasecurity/trivy-action@0.37.0
+        with:
+          image-ref: '${{ steps.aws.outputs.ecr-registry }}/opshub-api:${{ env.IMAGE_TAG }}'
+          format: table
+          exit-code: '1'
+          severity: CRITICAL
+          ignore-unfixed: true
+
       - name: Attest API image (SLSA provenance)
         uses: QNSC-VN/qnsc-ci/actions/attest-image@v1.0.1
         with:
@@ -128,6 +137,15 @@ jobs:
           build-target: worker
           cache-scope: worker
 
+      - name: Scan Worker image for critical CVEs
+        uses: aquasecurity/trivy-action@0.37.0
+        with:
+          image-ref: '${{ steps.aws.outputs.ecr-registry }}/opshub-worker:${{ env.IMAGE_TAG }}'
+          format: table
+          exit-code: '1'
+          severity: CRITICAL
+          ignore-unfixed: true
+
       - name: Attest Worker image (SLSA provenance)
         uses: QNSC-VN/qnsc-ci/actions/attest-image@v1.0.1
         with:
@@ -144,6 +162,15 @@ jobs:
           extra-tags: latest
           build-target: migrator
           cache-scope: migrator
+
+      - name: Scan Migrator image for critical CVEs
+        uses: aquasecurity/trivy-action@0.37.0
+        with:
+          image-ref: '${{ steps.aws.outputs.ecr-registry }}/opshub-migrator:${{ env.IMAGE_TAG }}'
+          format: table
+          exit-code: '1'
+          severity: CRITICAL
+          ignore-unfixed: true
 
       - name: Attest Migrator image (SLSA provenance)
         uses: QNSC-VN/qnsc-ci/actions/attest-image@v1.0.1
