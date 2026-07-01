@@ -21,10 +21,14 @@ opshub/
 
 Workspace model, develop, build, and deploy conventions mirror [`rally`](https://github.com/QNSC-VN/rally): NestJS backend is the pnpm root, `apps/web` is a workspace member; deploy is push-based to ECS via `qnsc-ci`.
 
-## ⚠️ Known issues (pre-existing, carried from opshub-api — NOT introduced by consolidation)
+## Build status
 
-1. **License module does not compile (4 errors).** `db/schema/licenses.ts` + `libs/modules/license` import `licenseTypeEnum` / `licenseStatusEnum`, but those enums were never defined in `db/schema/enums.ts`. A commented TODO stub is in `enums.ts` — **product must confirm the enum value set**, then uncomment. Until then the backend build fails on the license module only.
-2. **infra/modules/ are local copies**, not the shared `qnsc-tf-modules`. They have diverged from the shared modules, so migrating is not a mechanical source-swap — it needs interface reconciliation + `tofu plan` validation. Tracked as a follow-up.
-3. Stray compiled `.js`/`.js.map` files exist beside some `db/schema/*.ts` — should be cleaned and gitignored.
+Backend (`api` + `worker`) and web **build clean**. Consolidation is faithful (identical file counts to source); the Dockerfile now exposes the `api`/`worker`/`migrator` targets the CI expects (previously missing).
 
-The consolidation itself is faithful (identical file counts to source) and the Dockerfile now exposes the `api`/`worker`/`migrator` targets the CI expects (previously missing).
+### Fixed during consolidation
+- **License enums defined.** `db/schema/enums.ts` now defines `licenseTypeEnum` (`perpetual`, `subscription`, `per_seat`, `concurrent`) and `licenseStatusEnum` (`active`, `expiring_soon`, `expired`, `cancelled`) — values taken from the existing DTO Zod enums (`license.dto.ts`, the code-authoritative source). Also re-wired the `db/schema` and `@shared-kernel` barrels. Together these cleared the 17 pre-existing build errors carried from opshub-api.
+
+### Open follow-ups (not blocking build)
+1. **infra/modules/ are local copies**, not the shared `qnsc-tf-modules` — they have diverged, so migrating is not a mechanical source-swap; needs interface reconciliation + `tofu plan`.
+2. **Generate the first Drizzle migration** for the license enums/tables (`pnpm db:generate`) before deploying the license module.
+3. Stray compiled `.js`/`.js.map` files beside some `db/schema/*.ts` — clean + gitignore.

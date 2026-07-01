@@ -94,12 +94,22 @@ export const shiftTypeEnum = pgEnum('shift_type', ['night', 'on_call', 'weekend'
 // ── Storage ──────────────────────────────────────────────────────────────────
 export const storedFileStatusEnum = pgEnum('stored_file_status', ['pending', 'completed', 'deleted']);
 
-// ── License (TODO — pre-existing gap, needs product decision) ─────────────────
-// db/schema/licenses.ts and libs/modules/license import licenseTypeEnum +
-// licenseStatusEnum, but they were never defined here → the license module does
-// not compile. Evident defaults from licenses.ts: license_type='subscription',
-// status='active'. Confirm the full value SET with product before uncommenting
-// (pgEnum values become a Postgres enum type; changing them later needs ALTER TYPE).
-//
-// export const licenseTypeEnum = pgEnum('license_type', ['subscription', /* perpetual, trial, open_source, oem? */]);
-// export const licenseStatusEnum = pgEnum('license_status', ['active', /* expired, pending, cancelled, suspended? */]);
+// ── License ───────────────────────────────────────────────────────────────────
+// Value sets taken from the existing DTO Zod enums (the code-authoritative
+// source), in libs/modules/license/src/interface/http/dto/license.dto.ts:
+//   licenseTypeZ   = z.enum(['perpetual','subscription','per_seat','concurrent'])
+//   licenseStatusZ = z.enum(['active','expiring_soon','expired','cancelled'])
+// Schema must match the DTO so validated input round-trips to the column.
+// Defaults in licenses.ts (license_type='subscription', status='active') are in-set.
+export const licenseTypeEnum = pgEnum('license_type', [
+  'perpetual',
+  'subscription',
+  'per_seat',
+  'concurrent',
+]);
+export const licenseStatusEnum = pgEnum('license_status', [
+  'active',
+  'expiring_soon',
+  'expired',
+  'cancelled',
+]);
