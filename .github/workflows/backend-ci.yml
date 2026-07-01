@@ -257,5 +257,5 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: QNSC-VN/qnsc-ci/actions/validate-openapi-contract@v1.0.0
         with:
-          current-spec: openapi.json
-          base-branch: ${{ github.base_ref }}
+          current-spec-path: openapi.json
+          base-spec-path: base-openapi.json
