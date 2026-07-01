@@ -1,0 +1,6 @@
+{
+  "name": "@modules/notifications",
+  "sourceRoot": "libs/modules/notifications/src",
+  "projectType": "library",
+  "targets": {}
+}

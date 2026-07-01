@@ -1,0 +1,116 @@
+# =============================================================================
+# OpenTofu Apply — applies after merge to main.
+# Shared → develop → prod (prod requires GitHub Environment approval).
+# =============================================================================
+name: OpenTofu Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "live/**"
+      - "modules/**"
+      - ".github/workflows/apply.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TOFU_VERSION: "1.9.1"
+  AWS_REGION: ap-southeast-1
+
+jobs:
+  apply-shared:
+    runs-on: ubuntu-latest
+    environment: shared
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+
+      - uses: opentofu/setup-opentofu@909f0081d9d7379c18f3cb2c598fca1c21d5b7c0   # v1.0.5
+        with: { tofu_version: "${{ env.TOFU_VERSION }}" }
+
+      - uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d0407291516679297d9126   # v4.0.3
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: tofu init
+        working-directory: live/_shared
+        run: tofu init -input=false
+
+      - name: tofu validate
+        working-directory: live/_shared
+        run: tofu validate
+
+      - name: tofu apply
+        working-directory: live/_shared
+        run: tofu apply -input=false -auto-approve
+
+  apply-develop:
+    needs: apply-shared
+    runs-on: ubuntu-latest
+    environment: develop
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+
+      - uses: opentofu/setup-opentofu@909f0081d9d7379c18f3cb2c598fca1c21d5b7c0   # v1.0.5
+        with: { tofu_version: "${{ env.TOFU_VERSION }}" }
+
+      - uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d0407291516679297d9126   # v4.0.3
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: tofu init
+        working-directory: live/develop
+        run: tofu init -input=false
+
+      - name: tofu validate
+        working-directory: live/develop
+        run: tofu validate
+
+      - name: tofu apply
+        working-directory: live/develop
+        run: tofu apply -input=false -auto-approve
+        env:
+          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN_DEVELOP }}
+          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN_DEVELOP }}
+          TF_VAR_image_tag:        ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+
+  apply-prod:
+    needs: apply-develop
+    runs-on: ubuntu-latest
+    environment: production   # requires manual approval in GitHub Settings
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+
+      - uses: opentofu/setup-opentofu@909f0081d9d7379c18f3cb2c598fca1c21d5b7c0   # v1.0.5
+        with: { tofu_version: "${{ env.TOFU_VERSION }}" }
+
+      - uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d0407291516679297d9126   # v4.0.3
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: tofu init
+        working-directory: live/prod
+        run: tofu init -input=false
+
+      - name: tofu validate
+        working-directory: live/prod
+        run: tofu validate
+
+      - name: tofu apply
+        working-directory: live/prod
+        run: tofu apply -input=false -auto-approve
+        env:
+          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN_PROD }}
+          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN_PROD }}
+          TF_VAR_image_tag:        ${{ vars.PINNED_IMAGE_TAG }}

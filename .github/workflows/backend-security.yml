@@ -1,0 +1,145 @@
+# =============================================================================
+# Security — container CVE scan + SAST
+#
+# Runs on every PR and every push to main, plus a weekly scheduled scan
+# to catch newly disclosed CVEs even without a code push.
+#
+# Both jobs report findings to GitHub Security → Code Scanning dashboard.
+# =============================================================================
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * 1'   # weekly Monday 04:00 UTC
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.33.2'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. Trivy — scan the built Docker image for OS + library CVEs.
+  # ─────────────────────────────────────────────────────────────────────────
+  trivy:
+    name: Container security scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: api
+          push: false
+          load: true
+          tags: opshub-api:scan
+          cache-from: type=gha,scope=api
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: opshub-api:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-container
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. CodeQL — SAST for TypeScript source.
+  #    Scans for injection, path traversal, prototype pollution, OWASP Top 10.
+  # ─────────────────────────────────────────────────────────────────────────
+  codeql:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+
+      - name: Build for CodeQL
+        run: pnpm build:api
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql-typescript
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. Secret scanning — detect accidentally committed credentials.
+  # ─────────────────────────────────────────────────────────────────────────
+  secrets:
+    name: Secret scan (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.0.0
+        with:
+          fail-on-leak: "true"
+          scan-depth: "0"
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: critical

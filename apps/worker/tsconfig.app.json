@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/apps/worker",
+    "rootDir": "../../",
+    "declaration": false
+  },
+  "include": ["src/**/*", "../../libs/**/*", "../../db/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts", "../../libs/**/*.spec.ts", "../../libs/**/*.test.ts"]
+}

@@ -1,0 +1,109 @@
+# =============================================================================
+# OpenTofu Plan — dry-run on every PR targeting main.
+# Posts a plan comment per changed workspace directly on the PR.
+# =============================================================================
+name: OpenTofu Plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "live/**"
+      - "modules/**"
+      - ".github/workflows/plan.yml"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TOFU_VERSION: "1.9.1"
+  AWS_REGION: ap-southeast-1
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      workspaces: ${{ steps.set.outputs.workspaces }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with: { fetch-depth: 0 }
+
+      - id: set
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^live/' \
+            | sed 's|/.*||' \
+            | sort -u \
+            | grep -v '^live$' \
+            | jq -Rc '[.,inputs]' \
+            | jq -sc 'add // []')
+          MODULES_CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^modules/' | wc -l)
+          if [ "$MODULES_CHANGED" -gt 0 ]; then
+            CHANGED='["live/_shared","live/develop","live/prod"]'
+          fi
+          echo "workspaces=$CHANGED" >> $GITHUB_OUTPUT
+
+  plan:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.workspaces != '[]' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJson(needs.detect-changes.outputs.workspaces) }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+
+      - uses: opentofu/setup-opentofu@909f0081d9d7379c18f3cb2c598fca1c21d5b7c0   # v1.0.5
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d0407291516679297d9126   # v4.0.3
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-plan
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: tofu init
+        working-directory: ${{ matrix.workspace }}
+        run: tofu init -input=false
+
+      - name: tofu validate
+        working-directory: ${{ matrix.workspace }}
+        run: tofu validate
+
+      - name: tofu plan
+        id: plan
+        working-directory: ${{ matrix.workspace }}
+        run: tofu plan -input=false -no-color 2>&1 | tee plan.txt
+        env:
+          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN }}
+          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN }}
+          TF_VAR_image_tag:        ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+        continue-on-error: true
+
+      - name: Post plan comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea   # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ matrix.workspace }}/plan.txt', 'utf8');
+            const workspace = '${{ matrix.workspace }}';
+            const truncated = plan.length > 60000
+              ? plan.substring(0, 60000) + '\n\n... (truncated)'
+              : plan;
+            const body = `### OpenTofu Plan — \`${workspace}\`\n\`\`\`hcl\n${truncated}\n\`\`\``;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
