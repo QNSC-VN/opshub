@@ -35,6 +35,7 @@ export default defineConfig({
       LOG_SQL: 'false',
       OTEL_ENABLED: 'false',
       OTEL_SERVICE_NAME: 'opshub-api-test',
+      COOKIE_SECRET: 'test-cookie-secret-minimum-32-chars!!',
     },
     include: ['libs/**/*.spec.ts', 'apps/**/*.spec.ts'],
     exclude: ['node_modules', 'dist'],
