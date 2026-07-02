@@ -43,12 +43,12 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         note: input.note ?? null,
       })
       .returning();
-    return row as Timesheet;
+    return row;
   }
 
   async findTimesheetById(id: string): Promise<Timesheet | null> {
     const [row] = await this.db.select().from(timesheets).where(eq(timesheets.id, id)).limit(1);
-    return (row as Timesheet) ?? null;
+    return (row) ?? null;
   }
 
   async listTimesheets(
@@ -73,7 +73,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(timesheets)
       .where(where);
-    return { rows: rows as Timesheet[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setTimesheetStatus(
@@ -91,7 +91,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(timesheets.id, id))
       .returning();
-    return (row as Timesheet) ?? null;
+    return (row) ?? null;
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         requestId: input.requestId ?? null,
       })
       .returning();
-    return row as LeaveRequest;
+    return row;
   }
 
   async findLeaveById(id: string): Promise<LeaveRequest | null> {
@@ -117,7 +117,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .from(leaveRequests)
       .where(eq(leaveRequests.id, id))
       .limit(1);
-    return (row as LeaveRequest) ?? null;
+    return (row) ?? null;
   }
 
   async listLeave(
@@ -142,7 +142,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(leaveRequests)
       .where(where);
-    return { rows: rows as LeaveRequest[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setLeaveStatus(
@@ -160,7 +160,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(leaveRequests.id, id))
       .returning();
-    return (row as LeaveRequest) ?? null;
+    return (row) ?? null;
   }
 
   async setLeaveRequestId(id: string, requestId: string): Promise<void> {
@@ -209,7 +209,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         requestId: input.requestId ?? null,
       })
       .returning();
-    return row as OvertimeEntry;
+    return row;
   }
 
   async findOvertimeById(id: string): Promise<OvertimeEntry | null> {
@@ -218,7 +218,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .from(overtimeEntries)
       .where(eq(overtimeEntries.id, id))
       .limit(1);
-    return (row as OvertimeEntry) ?? null;
+    return (row) ?? null;
   }
 
   async listOvertime(
@@ -243,7 +243,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(overtimeEntries)
       .where(where);
-    return { rows: rows as OvertimeEntry[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setOvertimeStatus(
@@ -261,7 +261,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(overtimeEntries.id, id))
       .returning();
-    return (row as OvertimeEntry) ?? null;
+    return (row) ?? null;
   }
 
   async setOvertimeRequestId(id: string, requestId: string): Promise<void> {
@@ -284,12 +284,12 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         note: input.note ?? null,
       })
       .returning();
-    return row as ShiftLog;
+    return row;
   }
 
   async findShiftLogById(id: string): Promise<ShiftLog | null> {
     const [row] = await this.db.select().from(shiftLogs).where(eq(shiftLogs.id, id)).limit(1);
-    return (row as ShiftLog) ?? null;
+    return (row) ?? null;
   }
 
   async listShiftLogs(
@@ -314,6 +314,6 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(shiftLogs)
       .where(where);
-    return { rows: rows as ShiftLog[], total: count };
+    return { rows: rows, total: count };
   }
 }

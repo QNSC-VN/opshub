@@ -26,18 +26,18 @@ export class AssetDrizzleRepository implements IAssetRepository {
         specs: input.specs ?? {},
       })
       .returning();
-    return row as Asset;
+    return row;
   }
 
   async findById(id: string, tx?: DbExecutor): Promise<Asset | null> {
     const exec = tx ?? this.db;
     const [row] = await exec.select().from(assets).where(eq(assets.id, id)).limit(1);
-    return (row as Asset) ?? null;
+    return (row) ?? null;
   }
 
   async findByTag(assetTag: string): Promise<Asset | null> {
     const [row] = await this.db.select().from(assets).where(eq(assets.assetTag, assetTag)).limit(1);
-    return (row as Asset) ?? null;
+    return (row) ?? null;
   }
 
   async list(
@@ -72,7 +72,7 @@ export class AssetDrizzleRepository implements IAssetRepository {
       .from(assets)
       .where(where);
 
-    return { rows: rows as Asset[], total: count };
+    return { rows: rows, total: count };
   }
 
   async assign(
@@ -117,7 +117,7 @@ export class AssetDrizzleRepository implements IAssetRepository {
       .from(assetAssignments)
       .where(eq(assetAssignments.assetId, assetId))
       .orderBy(desc(assetAssignments.assignedAt));
-    return rows as AssetAssignment[];
+    return rows;
   }
 
   async updatePhoto(assetId: string, photoStorageKey: string | null): Promise<void> {

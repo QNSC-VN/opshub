@@ -9,7 +9,7 @@ import {
   ErrorCodes,
   StorageService,
 } from '@platform';
-import type { PresignUploadResult, ConfirmUploadResult } from '@platform';
+import type { PresignUploadResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { EmployeeService } from '@modules/identity';
 import { ASSET_REPOSITORY, type IAssetRepository } from '../domain/ports/asset.repository';

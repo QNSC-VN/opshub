@@ -24,7 +24,7 @@ export class CatalogDrizzleRepository implements ICatalogRepository {
         sortOrder: input.sortOrder ?? 0,
       })
       .returning();
-    return row!;
+    return row;
   }
 
   async findById(id: string): Promise<CatalogItem | null> {

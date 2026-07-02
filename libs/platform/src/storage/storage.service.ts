@@ -218,7 +218,7 @@ export class StorageService {
 
     void this.s3
       .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: file.key }))
-      .catch((err) => this.logger.error({ key: file.key, err }, 'S3 delete failed — manual cleanup needed'));
+      .catch((err: unknown) => this.logger.error({ key: file.key, err }, 'S3 delete failed — manual cleanup needed'));
   }
 
   /**
@@ -239,7 +239,7 @@ export class StorageService {
       rows.map((r) =>
         this.s3
           .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: r.key }))
-          .catch((err) => this.logger.warn({ key: r.key, err }, 'Orphan S3 delete failed')),
+          .catch((err: unknown) => this.logger.warn({ key: r.key, err }, 'Orphan S3 delete failed')),
       ),
     );
 
@@ -308,6 +308,6 @@ export class StorageService {
       .from(storedFiles)
       .where(eq(storedFiles.id, fileId))
       .limit(1);
-    return (row as StoredFile) ?? null;
+    return (row) ?? null;
   }
 }

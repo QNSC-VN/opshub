@@ -133,7 +133,7 @@ export class AccessRequestService {
       .orderBy(desc(accessGrants.grantedAt))
       .limit(1);
 
-    return grantRow as AccessGrant;
+    return grantRow;
   }
 
   async reject(

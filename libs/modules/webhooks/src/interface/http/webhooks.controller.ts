@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Auth, RequirePermission, ApiCommonErrors, CurrentUser } from '@platform';
+import { RequirePermission, ApiCommonErrors, CurrentUser } from '@platform';
 import type { JwtPayload } from '@platform';
 import { AuditService } from '@modules/audit';
 import { WebhooksService } from '../../application/webhooks.service';

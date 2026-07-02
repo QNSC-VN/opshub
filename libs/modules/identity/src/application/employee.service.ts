@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NotFoundException, ConflictException, ErrorCodes, CacheService, StorageService } from '@platform';
-import type { PresignUploadResult, ConfirmUploadResult } from '@platform';
+import type { PresignUploadResult } from '@platform';
 import { SEC_PER_DAY } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
 import {

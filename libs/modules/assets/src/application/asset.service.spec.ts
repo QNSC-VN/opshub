@@ -58,7 +58,7 @@ function makeService() {
   return new AssetService(
     mockAssetRepo as never,
     mockDb as never,
-    mockOutbox as never,
+    mockOutbox,
     mockStorage as never,
     mockAudit as never,
     mockEmployees as never,

@@ -30,12 +30,12 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
         entraOid: input.entraOid ?? null,
       })
       .returning();
-    return row as Employee;
+    return row;
   }
 
   async findById(id: string): Promise<Employee | null> {
     const [row] = await this.db.select().from(employees).where(eq(employees.id, id)).limit(1);
-    return (row as Employee) ?? null;
+    return (row) ?? null;
   }
 
   async findByEmail(email: string): Promise<Employee | null> {
@@ -44,7 +44,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(eq(employees.email, email.toLowerCase()))
       .limit(1);
-    return (row as Employee) ?? null;
+    return (row) ?? null;
   }
 
   async findByEntraOid(oid: string): Promise<Employee | null> {
@@ -53,7 +53,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(eq(employees.entraOid, oid))
       .limit(1);
-    return (row as Employee) ?? null;
+    return (row) ?? null;
   }
 
   async upsertByEntraOid(
@@ -67,7 +67,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
         .set({ displayName: input.displayName, email: input.email.toLowerCase(), updatedAt: new Date() })
         .where(eq(employees.entraOid, oid))
         .returning();
-      return updated as Employee;
+      return updated;
     }
 
     const byEmail = await this.findByEmail(input.email.toLowerCase());
@@ -77,7 +77,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
         .set({ entraOid: oid, displayName: input.displayName, updatedAt: new Date() })
         .where(eq(employees.id, byEmail.id))
         .returning();
-      return linked as Employee;
+      return linked;
     }
 
     return this.create({ ...input, entraOid: oid, roles: [] });
@@ -89,7 +89,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .set({ ...input, updatedAt: new Date() })
       .where(eq(employees.id, id))
       .returning();
-    return updated as Employee;
+    return updated;
   }
 
   async updateStatus(id: string, status: EmployeeStatus): Promise<Employee> {
@@ -98,7 +98,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .set({ status, updatedAt: new Date() })
       .where(eq(employees.id, id))
       .returning();
-    return updated as Employee;
+    return updated;
   }
 
   async list(
@@ -131,7 +131,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(where);
 
-    return { rows: rows as Employee[], total: count };
+    return { rows: rows, total: count };
   }
 
   async updatePhoto(id: string, photoStorageKey: string | null): Promise<void> {

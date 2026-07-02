@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AppConfigService, InjectDrizzle, type DrizzleDB, RequestEngine } from '@platform';
 import { desc, eq, and, isNull, gte } from 'drizzle-orm';
 import { employees, complianceFindings, accessGrants } from '../../../../../db/schema';
-import type { ChatMessage, ChatRequest, ChatResponse } from '../domain/ai.types';
+import type { ChatRequest, ChatResponse } from '../domain/ai.types';
 
 // ── Tool definitions ─────────────────────────────────────────────────────────
 

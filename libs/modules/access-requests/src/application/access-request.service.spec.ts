@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AccessRequestService } from './access-request.service';
-import { NotFoundException, PreconditionFailedException } from '@platform';
+import { NotFoundException } from '@platform';
 
 const mockRepo = {
   findById:          vi.fn(),
@@ -105,7 +105,7 @@ describe('AccessRequestService.approve()', () => {
 
     // Build service with tx-capable db mock
     const svc = new AccessRequestService(mockRepo as never, dbWithTx as never, mockEngine as never, mockAudit as never);
-    (svc as any)['db'] = dbWithTx;
+    (svc as unknown as { db: typeof dbWithTx }).db = dbWithTx;
 
     // approve() reads from db internally — mock relevant repo calls
     mockRepo.findById.mockResolvedValue(ACCESS_REQUEST);

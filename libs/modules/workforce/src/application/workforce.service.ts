@@ -66,7 +66,7 @@ export class WorkforceService {
     return this.repo.listTimesheets(filters, limit, offset);
   }
 
-  async submitTimesheet(id: string, actor: Actor): Promise<Timesheet> {
+  async submitTimesheet(id: string, _actor: Actor): Promise<Timesheet> {
     const t = await this.getTimesheet(id);
     if (t.status !== 'draft' && t.status !== 'rejected') {
       throw new PreconditionFailedException(
@@ -194,7 +194,7 @@ export class WorkforceService {
     return this.getLeave(id);
   }
 
-  async cancelLeave(id: string, actor: Actor): Promise<LeaveRequest> {
+  async cancelLeave(id: string, _actor: Actor): Promise<LeaveRequest> {
     const l = await this.getLeave(id);
     if (l.status !== 'pending' && l.status !== 'approved') {
       throw new PreconditionFailedException(

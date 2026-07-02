@@ -26,12 +26,6 @@ interface GraphSecureScoreControl {
   maxScore: number;
 }
 
-interface GraphDeviceConfiguration {
-  id: string;
-  displayName: string;
-  '@odata.type': string;
-}
-
 // ── Service ───────────────────────────────────────────────────────────────────
 
 @Injectable()

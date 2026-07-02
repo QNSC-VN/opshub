@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NotFoundException, ErrorCodes, RequestEngine } from '@platform';
-import { REQUEST_TYPE, AUDIT_ACTION } from '@shared-kernel';
+import { REQUEST_TYPE } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
 import { CATALOG_REPOSITORY, type ICatalogRepository } from '../domain/ports/catalog.repository';
 import type { CatalogItem, CreateCatalogItemInput, UpdateCatalogItemInput } from '../domain/catalog.types';

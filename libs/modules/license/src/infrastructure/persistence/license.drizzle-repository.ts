@@ -32,7 +32,7 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
         externalId: input.externalId ?? null,
       })
       .returning();
-    return row!;
+    return row;
   }
 
   async findById(id: string): Promise<SoftwareLicense | null> {
@@ -95,7 +95,7 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
       .insert(licenseAssignments)
       .values({ id: newId(), licenseId, employeeId, notes })
       .returning();
-    return row!;
+    return row;
   }
 
   async revoke(assignmentId: string): Promise<void> {

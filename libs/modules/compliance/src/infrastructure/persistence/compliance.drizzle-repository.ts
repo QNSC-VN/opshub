@@ -109,7 +109,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
         detectedAt: input.detectedAt ?? new Date(),
       })
       .returning();
-    return row!;
+    return row;
   }
 
   async findFindingById(id: string): Promise<ComplianceFinding | null> {
