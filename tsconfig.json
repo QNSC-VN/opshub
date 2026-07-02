@@ -1,4 +1,5 @@
 {
+  "exclude": ["node_modules", "dist", "apps/web"],
   "compilerOptions": {
     "module": "commonjs",
     "baseUrl": ".",

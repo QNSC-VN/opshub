@@ -1,8 +1,9 @@
 /**
  * Standalone migration runner — applies pending Drizzle migrations then exits.
  * Used by the CI/CD run-db-migration step and locally via `pnpm db:migrate`.
- * Loads .env via Node's native --env-file flag (see package.json script).
  */
+try { process.loadEnvFile('.env'); } catch { /* no .env in CI — env vars already set */ }
+
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';

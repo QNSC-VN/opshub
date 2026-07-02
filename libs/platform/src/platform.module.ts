@@ -48,7 +48,7 @@ import { StorageService } from './storage/storage.service';
         publicKey: config.get('JWT_PUBLIC_KEY'),
         signOptions: {
           algorithm: 'ES256',
-          expiresIn: config.get('JWT_ACCESS_EXPIRY'),
+          expiresIn: config.get('JWT_ACCESS_EXPIRY') as unknown as number,
           issuer: config.get('JWT_ISSUER'),
           audience: config.get('JWT_AUDIENCE'),
         },

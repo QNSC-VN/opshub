@@ -10,8 +10,10 @@
  *  - Consistent: the `roles` JSONB column on employees (used in JWT claims)
  *    always matches the RBAC table entries.
  *
- * Run with:  tsx --env-file=.env db/seed.ts
+ * Run with:  tsx db/seed.ts
  */
+try { process.loadEnvFile('.env'); } catch { /* no .env in CI */ }
+
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { Pool } from 'pg';
