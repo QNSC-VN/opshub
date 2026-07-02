@@ -16,6 +16,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { employees } from './schema/identity';
+import { pgOptions } from './pg-ssl';
 import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
 
 // ── Permission catalog ────────────────────────────────────────────────────────
@@ -284,10 +285,10 @@ const EMPLOYEES: Array<{
 ];
 
 async function main(): Promise<void> {
-  const connectionString = process.env['DATABASE_URL'];
-  if (!connectionString) throw new Error('DATABASE_URL env var is required');
+  const url = process.env['DATABASE_URL'];
+  if (!url) throw new Error('DATABASE_URL env var is required');
 
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new Pool({ ...pgOptions(url), max: 1 });
   const db = drizzle(pool);
 
   // 1. Permission catalog

@@ -46,6 +46,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build:api
 RUN pnpm build:worker
+# Compile Migrator  →  dist/db/
+# Pre-compiling eliminates tsx (and its embedded esbuild Go binaries) from the
+# migrator runtime image, removing the CVE surface without .trivyignore suppression.
+RUN pnpm build:migrator
 
 # ── api (default) ─────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS api
@@ -89,12 +93,18 @@ FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS migrator
 RUN apk upgrade --no-cache && apk add --no-cache tini && rm -rf /var/cache/apk/*
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/db ./db
+# Production deps only — tsx and esbuild (with Go CVE binaries) are devDeps,
+# so they are absent here. This is the key CVE fix.
+COPY --from=prod-deps /app/node_modules ./node_modules
+# Pre-compiled JS (dist/db/) from the builder stage.
+# Raw SQL migrations go into dist/db/migrations — matches __dirname in compiled migrate.js.
+COPY --from=builder /app/dist/db ./dist/db
+COPY --from=builder /app/db/migrations ./dist/db/migrations
 COPY --from=builder /app/package.json ./
 RUN addgroup --system --gid 1001 nodejs \
     && adduser  --system --uid 1001 migrator \
     && chown -R migrator:nodejs /app
 USER migrator
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node_modules/.bin/tsx", "db/migrate.ts"]
+# Plain node runs pre-compiled JS — no tsx, no esbuild, no Go binaries.
+CMD ["node", "dist/db/migrate.js"]

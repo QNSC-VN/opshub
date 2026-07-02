@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { Inject, Injectable } from '@nestjs/common';
 import { AppConfigService } from '../config/app-config.service';
 import * as schema from '../../../../db/schema';
+import { pgOptions } from '../../../../db/pg-ssl';
 
 export const DRIZZLE = Symbol('DRIZZLE');
 
@@ -25,7 +26,7 @@ export class DrizzleProvider {
 
   constructor(private readonly config: AppConfigService) {
     this.pool = new Pool({
-      connectionString: config.get('DATABASE_URL'),
+      ...pgOptions(config.get('DATABASE_URL')),
       min: config.get('DATABASE_POOL_MIN'),
       max: config.get('DATABASE_POOL_MAX'),
       idleTimeoutMillis: 30_000,

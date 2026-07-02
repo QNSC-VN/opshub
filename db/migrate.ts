@@ -6,25 +6,27 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
+import path from 'path';
+import { pgOptions } from './pg-ssl';
 
 async function main(): Promise<void> {
-  const connectionString = process.env['DATABASE_URL'];
-  if (!connectionString) throw new Error('DATABASE_URL is required');
+  const url = process.env['DATABASE_URL'];
+  if (!url) throw new Error('DATABASE_URL is required');
 
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new Pool({ ...pgOptions(url), max: 1 });
   const db = drizzle(pool);
 
   // Drizzle migration owns the full DDL lifecycle (CREATE SCHEMA, CREATE TYPE,
   // CREATE TABLE, indexes, FKs). Do NOT pre-create schemas here — that would
   // cause the migration to fail with "schema already exists".
-  await migrate(db, { migrationsFolder: './db/migrations' });
-   
+  // __dirname resolves correctly for both tsx (db/) and compiled JS (dist/db/).
+  await migrate(db, { migrationsFolder: path.join(__dirname, 'migrations') });
+
   console.log('✅ Migrations applied');
   await pool.end();
 }
 
 main().catch((err) => {
-   
   console.error('❌ Migration failed', err);
   process.exit(1);
 });
