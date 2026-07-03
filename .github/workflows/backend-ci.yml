@@ -254,7 +254,7 @@ jobs:
           echo "API_PID=$API_PID" >> "$GITHUB_ENV"
           # Poll until ready (max 30s)
           for i in $(seq 1 30); do
-            curl -sf http://localhost:3000/v1/healthz && break || sleep 1
+            curl -sf http://localhost:3000/healthz && break || sleep 1
           done
           curl -sf http://localhost:3000/api/docs-json -o openapi.json
           kill "$API_PID" || true

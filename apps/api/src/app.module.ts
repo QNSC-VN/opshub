@@ -1,6 +1,5 @@
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
-import { ScheduleModule } from '@nestjs/schedule';
 import { trace, isSpanContextValid } from '@opentelemetry/api';
 import { LoggerModule } from 'nestjs-pino';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -63,7 +62,6 @@ import { SecurityPostureModule } from '@modules/security-posture';
         },
       }),
     }),
-    ScheduleModule.forRoot(),
     PlatformModule,
     AuditModule,
     NotificationsModule,

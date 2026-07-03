@@ -75,9 +75,13 @@ export const EnvSchema = z.object({
 
   // ── Cache (Valkey / Redis — optional in dev) ───────────────────────────────
   REDIS_URL: z.string().optional(),
-  /** Alias for REDIS_URL injected by infra as VALKEY_URL. Takes precedence if both set. */
+  /** Alias for REDIS_URL injected by infra as VALKEY_URL. Resolved into REDIS_URL at startup. */
   VALKEY_URL: z.string().optional(),
   REDIS_KEY_PREFIX: z.string().default('opshub:'),
+
+  // ── Background jobs ────────────────────────────────────────────────────────
+  /** Audit log retention in days (SOC 2 baseline: 730 = 2 years). */
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(730),
 
   // ── AI assistant (optional) ────────────────────────────────────────────────
   // When ANTHROPIC_API_KEY is unset the AI module reports itself disabled
@@ -95,6 +99,11 @@ export const EnvSchema = z.object({
   // ── Frontend ───────────────────────────────────────────────────────────────
   /** Public base URL used to build links inside notification emails. */
   APP_URL: z.string().url().default('http://localhost:5173'),
-});
+}).transform((data) => ({
+  ...data,
+  // VALKEY_URL is the infra-injected alias for Redis-compatible caches (e.g. ElastiCache Valkey).
+  // Normalize at parse time so all callers use get('REDIS_URL') regardless of which var infra sets.
+  REDIS_URL: data.VALKEY_URL ?? data.REDIS_URL,
+}));
 
 export type Env = z.infer<typeof EnvSchema>;

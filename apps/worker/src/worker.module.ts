@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { PlatformModule, AppConfigService } from '@platform';
+import { AuditModule } from '@modules/audit';
+import { NotificationsModule } from '@modules/notifications';
+import { WebhooksModule } from '@modules/webhooks';
 import { ComplianceModule, ComplianceSyncCron } from '@modules/compliance';
 import { SecurityPostureModule, SecurityPostureSyncCron } from '@modules/security-posture';
 import { OutboxRelayService } from './outbox/outbox-relay.service';
@@ -25,6 +28,9 @@ import { StorageCleanupCron } from './cron/storage-cleanup.cron';
     }),
     ScheduleModule.forRoot(),
     PlatformModule,
+    AuditModule,
+    NotificationsModule,
+    WebhooksModule,
     ComplianceModule,
     SecurityPostureModule,
   ],
