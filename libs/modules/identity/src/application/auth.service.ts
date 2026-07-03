@@ -2,6 +2,7 @@ import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import type { JWTVerifyGetKey } from 'jose';
 import { UnauthorizedException, ErrorCodes, AppConfigService, CacheService } from '@platform';
 import { MS_PER_DAY } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
@@ -41,6 +42,10 @@ export interface TokenResult {
 export class AuthService {
   /** TTL for session revocation cache entries = access token lifetime (15 min). */
   static readonly SESSION_REVOKE_TTL = 15 * 60; // seconds
+
+  // Cached per-instance so jose's internal key cache is effective across logins.
+  // Re-created lazily when ENTRA_TENANT_ID changes (config is immutable per process).
+  #entraJwks: JWTVerifyGetKey | null = null;
 
   /** Convert a JWT expiry string like "15m", "8h", "1d" to seconds. */
   static parseExpiryToSeconds(expiry: string): number {
@@ -101,12 +106,14 @@ export class AuthService {
       );
     }
 
-    const jwksUrl = new URL(`https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`);
-    const JWKS = createRemoteJWKSet(jwksUrl);
+    if (!this.#entraJwks) {
+      const jwksUrl = new URL(`https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`);
+      this.#entraJwks = createRemoteJWKSet(jwksUrl);
+    }
 
     let claims: Record<string, unknown>;
     try {
-      const { payload } = await jwtVerify(idToken, JWKS, {
+      const { payload } = await jwtVerify(idToken, this.#entraJwks, {
         issuer: [
           `https://login.microsoftonline.com/${tenantId}/v2.0`,
           `https://sts.windows.net/${tenantId}/`,
