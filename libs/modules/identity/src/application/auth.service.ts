@@ -12,6 +12,7 @@ import {
   type IRefreshTokenRepository,
 } from '../domain/ports/refresh-token.repository';
 import type { Employee } from '../domain/employee.types';
+import type { AuthMethod } from '../domain/refresh-token.types';
 
 /** Shape returned by all login / refresh methods. */
 export interface TokenResult {
@@ -76,7 +77,7 @@ export class AuthService {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Unknown employee');
     }
     this.#assertActive(employee);
-    const result = await this.#mintTokens(employee, randomUUID());
+    const result = await this.#mintTokens(employee, randomUUID(), 'dev');
 
     await this.audit.record({
       actorId: employee.id,
@@ -155,7 +156,7 @@ export class AuthService {
       email: employee.email,
     });
 
-    const result = await this.#mintTokens({ ...employee, roles: effectiveRoles }, randomUUID());
+    const result = await this.#mintTokens({ ...employee, roles: effectiveRoles }, randomUUID(), 'sso');
 
     await this.audit.record({
       actorId: employee.id,
@@ -211,7 +212,7 @@ export class AuthService {
     }
     this.#assertActive(employee);
 
-    return this.#mintTokens(employee, stored.familyId);
+    return this.#mintTokens(employee, stored.familyId, stored.authMethod);
   }
 
   /** Revoke the session — also fast-revokes the matching access token via cache. */
@@ -247,7 +248,7 @@ export class AuthService {
     }
   }
 
-  async #mintTokens(employee: Employee, familyId: string): Promise<TokenResult> {
+  async #mintTokens(employee: Employee, familyId: string, authMethod: AuthMethod): Promise<TokenResult> {
     const sessionId = randomUUID();
     const rawRefreshToken = randomBytes(32).toString('base64url');
     const tokenHash = this.#hash(rawRefreshToken);
@@ -259,6 +260,7 @@ export class AuthService {
       employeeId: employee.id,
       tokenHash,
       familyId,
+      authMethod,
       expiresAt,
     });
 
@@ -269,6 +271,7 @@ export class AuthService {
       email: employee.email,
       name: employee.displayName,
       roles: employee.roles,
+      authMethod,
     });
 
     // Derive expiresIn from the actual JWT config so the frontend knows the real

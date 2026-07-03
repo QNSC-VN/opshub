@@ -15,6 +15,7 @@ export class RefreshTokenDrizzleRepository implements IRefreshTokenRepository {
       employeeId: input.employeeId,
       tokenHash: input.tokenHash,
       familyId: input.familyId,
+      authMethod: input.authMethod,
       expiresAt: input.expiresAt,
     });
   }

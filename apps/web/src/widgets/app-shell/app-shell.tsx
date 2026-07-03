@@ -25,8 +25,8 @@ import {
   PanelLeft,
 } from 'lucide-react';
 import { AiChatPanel } from '@/widgets/ai-chat/ai-chat-panel';
-import { useAuthStore } from '@/shared/api/auth-store';
-import { isSsoConfigured, msalLogoutRedirect } from '@/app/auth/msal';
+import { useAuthStore, getToken } from '@/shared/api/auth-store';
+import { msalLogoutRedirect } from '@/app/auth/msal';
 import { cn } from '@/shared/lib/utils';
 import { NotificationBell } from '@/widgets/notifications/notification-bell';
 import { CommandPalette } from '@/widgets/command-palette/command-palette';
@@ -196,14 +196,24 @@ export function AppShell() {
   }, [showPalette]);
 
   async function handleLogout() {
+    // Read authMethod from the JWT before clear() nulls the in-memory token.
+    let wasSSO = false;
+    const token = getToken();
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]!)) as { authMethod?: string };
+        wasSSO = payload.authMethod === 'sso';
+      } catch { /* malformed token — treat as non-SSO */ }
+    }
+
     try {
       await fetch('/v1/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {
       // best-effort
     }
     clear();
-    if (isSsoConfigured) {
-      // Sign out from Microsoft so the user isn't silently re-authenticated
+
+    if (wasSSO) {
       await msalLogoutRedirect(window.location.origin);
       return;
     }
