@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - "live/**"
+      - "live/*/modules/**"
       - ".github/workflows/infra-apply.yml"
 
 permissions:
@@ -73,9 +74,11 @@ jobs:
         working-directory: live/develop
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN_DEVELOP }}
-          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN_DEVELOP }}
-          TF_VAR_image_tag:        ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+          TF_VAR_acm_cert_arn:       ${{ secrets.ACM_CERT_ARN_DEVELOP }}
+          TF_VAR_web_acm_cert_arn:   ${{ secrets.WEB_ACM_CERT_ARN_DEVELOP }}
+          TF_VAR_image_tag:          ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+          TF_VAR_entra_tenant_id:    ${{ vars.ENTRA_TENANT_ID }}
+          TF_VAR_entra_client_id:    ${{ vars.ENTRA_CLIENT_ID }}
 
   apply-prod:
     needs: apply-develop
@@ -104,6 +107,8 @@ jobs:
         working-directory: live/prod
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN_PROD }}
-          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN_PROD }}
-          TF_VAR_image_tag:        ${{ vars.PINNED_IMAGE_TAG }}
+          TF_VAR_acm_cert_arn:       ${{ secrets.ACM_CERT_ARN_PROD }}
+          TF_VAR_web_acm_cert_arn:   ${{ secrets.WEB_ACM_CERT_ARN_PROD }}
+          TF_VAR_image_tag:          ${{ vars.PINNED_IMAGE_TAG }}
+          TF_VAR_entra_tenant_id:    ${{ vars.ENTRA_TENANT_ID }}
+          TF_VAR_entra_client_id:    ${{ vars.ENTRA_CLIENT_ID }}

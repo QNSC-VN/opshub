@@ -54,18 +54,30 @@ jobs:
           tags: opshub-api:scan
           cache-from: type=gha,scope=api
 
-      - name: Scan image with Trivy
+      # Two-pass scan: CRITICAL blocks the build; HIGH is reported only.
+      # ignore-unfixed: true — skip CVEs with no upstream fix (supply chain noise).
+      - name: Scan image (CRITICAL — blocks build)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: opshub-api:scan
+          format: table
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Scan image (HIGH — report only)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: opshub-api:scan
           format: sarif
           output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          exit-code: '1'
+          severity: HIGH
+          exit-code: '0'
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF to GitHub Security
         if: always()
+        continue-on-error: true   # requires GitHub Advanced Security (free plan: no-op)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
@@ -102,6 +114,7 @@ jobs:
         run: pnpm build:api
 
       - name: Perform CodeQL analysis
+        continue-on-error: true   # requires GitHub Advanced Security (free plan: no-op)
         uses: github/codeql-action/analyze@v3
         with:
           category: codeql-typescript

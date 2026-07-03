@@ -3,7 +3,7 @@
 # Gate: lint → typecheck → unit tests → e2e tests → docker build → openapi diff
 # Security scans (Trivy, CodeQL) live in security.yml — independently runnable.
 # =============================================================================
-name: CI
+name: CI — Backend
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-backend-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -29,6 +29,7 @@ jobs:
   quality:
     name: Lint & typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +50,7 @@ jobs:
   test:
     name: Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -63,6 +65,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -102,9 +113,12 @@ jobs:
           JWT_PRIVATE_KEY: ${{ env.CI_JWT_PRIVATE_KEY }}
           JWT_PUBLIC_KEY: ${{ env.CI_JWT_PUBLIC_KEY }}
           JWT_ACCESS_EXPIRY: 8h
+          JWT_REFRESH_EXPIRY_DAYS: '7'
           JWT_ISSUER: opshub-api
           JWT_AUDIENCE: opshub-web
           CORS_ORIGINS: http://localhost:5173
+          VALKEY_URL: redis://localhost:6379
+          COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
           LOG_LEVEL: silent
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api-test
@@ -117,9 +131,12 @@ jobs:
           JWT_PRIVATE_KEY: ${{ env.CI_JWT_PRIVATE_KEY }}
           JWT_PUBLIC_KEY: ${{ env.CI_JWT_PUBLIC_KEY }}
           JWT_ACCESS_EXPIRY: 8h
+          JWT_REFRESH_EXPIRY_DAYS: '7'
           JWT_ISSUER: opshub-api
           JWT_AUDIENCE: opshub-web
           CORS_ORIGINS: http://localhost:5173
+          VALKEY_URL: redis://localhost:6379
+          COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
           LOG_LEVEL: silent
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api-test
@@ -140,6 +157,7 @@ jobs:
     name: Docker build
     runs-on: ubuntu-latest
     needs: [quality, test]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -180,6 +198,7 @@ jobs:
     name: OpenAPI contract
     runs-on: ubuntu-latest
     needs: [quality]
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -190,6 +209,11 @@ jobs:
           POSTGRES_DB: opshub_openapi
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -230,7 +254,7 @@ jobs:
           echo "API_PID=$API_PID" >> "$GITHUB_ENV"
           # Poll until ready (max 30s)
           for i in $(seq 1 30); do
-            curl -sf http://localhost:3000/healthz && break || sleep 1
+            curl -sf http://localhost:3000/v1/healthz && break || sleep 1
           done
           curl -sf http://localhost:3000/api/docs-json -o openapi.json
           kill "$API_PID" || true
@@ -242,6 +266,9 @@ jobs:
           JWT_ISSUER: opshub-api
           JWT_AUDIENCE: opshub-web
           CORS_ORIGINS: http://localhost:5173
+          VALKEY_URL: redis://localhost:6379
+          COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
+          JWT_REFRESH_EXPIRY_DAYS: '7'
           LOG_LEVEL: silent
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api
@@ -249,13 +276,56 @@ jobs:
       - name: Upload OpenAPI spec artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openapi-spec
+          name: openapi-spec-${{ github.sha }}
           path: openapi.json
           retention-days: 30
+
+      # On PRs: download the base-branch spec and diff for breaking changes.
+      - name: Download base spec
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true   # first PR has no base artifact yet
+        with:
+          workflow: backend-ci.yml
+          branch: ${{ github.base_ref }}
+          name: openapi-spec-${{ github.event.pull_request.base.sha }}
+          path: base-spec/
 
       - name: Check for breaking API changes (PR only)
         if: github.event_name == 'pull_request'
         uses: QNSC-VN/qnsc-ci/actions/validate-openapi-contract@v1.0.0
         with:
           current-spec-path: openapi.json
-          base-spec-path: base-openapi.json
+          base-spec-path: base-spec/openapi.json
+          fail-on-breaking: "true"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5. PR title lint — enforce Conventional Commits format on the PR title.
+  #    Release Please reads PR titles to generate changelogs, so this gate
+  #    ensures the title is machine-readable before the PR can merge.
+  # ─────────────────────────────────────────────────────────────────────────
+  pr-title:
+    name: PR title (conventional commits)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 5
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            refactor
+            perf
+            security
+            chore
+            ci
+            deps
+            docs
+            test
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" must start with a lowercase letter.
