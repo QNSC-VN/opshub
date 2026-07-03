@@ -33,7 +33,7 @@
 #     opshub-github-ecr-push        build-push job (ECR push + retag)
 #     opshub-github-deploy-<env>    deploy job (ECS + task-def registration)
 # =============================================================================
-name: Deploy
+name: Deploy — Backend
 
 on:
   push:

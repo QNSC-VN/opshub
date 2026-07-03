@@ -26,7 +26,7 @@
 #   Environment-scoped IAM roles (provisioned by opshub-infra):
 #     opshub-github-web-deploy-<env>   S3 sync + CloudFront invalidation
 # =============================================================================
-name: Deploy
+name: Deploy — Web
 
 on:
   push:
@@ -44,7 +44,7 @@ permissions:
 env:
   NODE_VERSION: '22'
   PNPM_VERSION: '10.33.2'
-  GITOPS_SHA: v1.0.1
+  GITOPS_SHA: v1.0.2
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
