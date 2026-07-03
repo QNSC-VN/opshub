@@ -2,10 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AppConfigService } from '../config/app-config.service';
-import { CacheService } from '../cache/cache.service';
-import { requestContextStorage } from '../context/request-context';
-import { UnauthorizedException } from '../errors/exceptions';
-import { ErrorCodes } from '../errors/error-codes';
 
 /**
  * Authenticated principal attached to request.user after JWT validation.
@@ -21,6 +17,8 @@ export interface JwtPayload {
   email: string;
   name: string;
   roles: string[];
+  /** How the session was established: 'sso' = Entra ID, 'dev' = dev-login (non-prod only). */
+  authMethod: 'sso' | 'dev';
   iss: string;
   aud: string | string[];
   iat: number;
@@ -29,10 +27,7 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(
-    config: AppConfigService,
-    private readonly cache: CacheService,
-  ) {
+  constructor(config: AppConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -43,37 +38,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  /**
-   * Called on every authenticated request after the JWT signature and standard
-   * claims (exp, iss, aud) have been verified by passport-jwt.
-   *
-   * Two fast-revocation checks (OWASP JWT Cheat Sheet, §No Built-In Token Revocation):
-   *   1. Session-level  — explicit logout or rotation-theft detection
-   *   2. Employee-level — offboarding revokes all outstanding access tokens
-   *
-   * Falls back silently when Redis is unavailable (access tokens still expire
-   * naturally within 15 min).
-   */
-  async validate(payload: JwtPayload): Promise<JwtPayload> {
-    if (this.cache.isAvailable) {
-      const [sessionRevoked, employeeRevoked] = await Promise.all([
-        // OWASP recommends keying the denylist on the `jti` claim (RFC 7519)
-        this.cache.get(`revoked:session:${payload.jti}`),
-        this.cache.get(`revoked:employee:${payload.sub}`),
-      ]);
-      if (sessionRevoked || employeeRevoked) {
-        throw new UnauthorizedException(ErrorCodes.AUTH_TOKEN_INVALID, 'Session has been revoked');
-      }
-    }
-
-    // Stamp the per-request ALS context so the logging interceptor and
-    // AuditService can read the actor without explicit parameter threading.
-    const store = requestContextStorage.getStore();
-    if (store) {
-      store.userId = payload.sub;
-      store.userEmail = payload.email;
-    }
-
+  validate(payload: JwtPayload): JwtPayload {
+    // Signature, exp, iss, aud already verified by passport-jwt.
+    // Denylist check (revocation) is handled in JwtAuthGuard.canActivate().
     return payload;
   }
 }
