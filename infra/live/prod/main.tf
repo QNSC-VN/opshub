@@ -90,7 +90,9 @@ module "secrets" {
 
   secret_names = {
     "db-url"              = "PostgreSQL connection URL"
-    "jwt-secret"          = "JWT signing secret"
+    "jwt-private-key"     = "JWT ES256 private key (PEM or base64-encoded PEM)"
+    "jwt-public-key"      = "JWT ES256 public key (PEM or base64-encoded PEM)"
+    "cookie-secret"       = "Fastify cookie signing secret (min 32 chars)"
     "entra-client-secret" = "Azure Entra app client secret (JWKS + Graph API)"
     "valkey-url"          = "ElastiCache Valkey connection URL"
   }
@@ -343,16 +345,22 @@ module "api" {
   kms_key_arn = local.kms_key_arn
   secrets = [
     { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_SECRET",          secret_arn = module.secrets.secret_arns["jwt-secret"] },
+    { name = "JWT_PRIVATE_KEY",     secret_arn = module.secrets.secret_arns["jwt-private-key"] },
+    { name = "JWT_PUBLIC_KEY",      secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+    { name = "COOKIE_SECRET",       secret_arn = module.secrets.secret_arns["cookie-secret"] },
     { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
     { name = "VALKEY_URL",          secret_arn = module.secrets.secret_arns["valkey-url"] },
   ]
   environment_vars = [
-    { name = "NODE_ENV",         value = "production" },
-    { name = "PORT",             value = "3000" },
-    { name = "AWS_REGION",       value = local.region },
-    { name = "SQS_OUTBOX_URL",   value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "NODE_ENV",          value = "production" },
+    { name = "PORT",              value = "3000" },
+    { name = "AWS_REGION",        value = local.region },
+    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
+    { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
+    { name = "ENTRA_TENANT_ID",   value = var.entra_tenant_id },
+    { name = "ENTRA_CLIENT_ID",   value = var.entra_client_id },
+    { name = "CORS_ORIGINS",      value = "https://app.opshub.qnsc.vn" },
+    { name = "APP_URL",           value = "https://app.opshub.qnsc.vn" },
   ]
 
   sqs_queue_arns     = values(module.messaging.queue_arns)
@@ -392,15 +400,19 @@ module "worker" {
   kms_key_arn = local.kms_key_arn
   secrets = [
     { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_SECRET",          secret_arn = module.secrets.secret_arns["jwt-secret"] },
+    { name = "JWT_PRIVATE_KEY",     secret_arn = module.secrets.secret_arns["jwt-private-key"] },
+    { name = "JWT_PUBLIC_KEY",      secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+    { name = "COOKIE_SECRET",       secret_arn = module.secrets.secret_arns["cookie-secret"] },
     { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
     { name = "VALKEY_URL",          secret_arn = module.secrets.secret_arns["valkey-url"] },
   ]
   environment_vars = [
-    { name = "NODE_ENV",         value = "production" },
-    { name = "AWS_REGION",       value = local.region },
-    { name = "SQS_OUTBOX_URL",   value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "NODE_ENV",          value = "production" },
+    { name = "AWS_REGION",        value = local.region },
+    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
+    { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
+    { name = "ENTRA_TENANT_ID",   value = var.entra_tenant_id },
+    { name = "ENTRA_CLIENT_ID",   value = var.entra_client_id },
   ]
 
   sqs_queue_arns     = values(module.messaging.queue_arns)
@@ -422,14 +434,32 @@ module "waf" {
   tags = { Environment = local.env }
 }
 
+# ── CloudFront → ALB HTTP forward rule for /v1/* ─────────────────────────────
+resource "aws_lb_listener_rule" "http_api_forward" {
+  listener_arn = aws_lb_listener.http_redirect.arn
+  priority     = 1
+
+  action {
+    type             = "forward"
+    target_group_arn = module.api.target_group_arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/v1/*"]
+    }
+  }
+}
+
 # ── CDN (S3 + CloudFront) — opshub-web SPA ────────────────────────────────────
 module "cdn" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cdn?ref=cdn-v1.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cdn?ref=cdn-v1.0.3"
 
-  name         = "opshub-web-prod"
-  acm_cert_arn = var.web_acm_cert_arn
-  aliases      = [] # set to ["app.opshub.qnsc.vn"] once DNS is configured
-  price_class  = "PriceClass_All"
+  name                   = "opshub-web-prod"
+  acm_cert_arn           = var.web_acm_cert_arn
+  aliases                = [] # set to ["app.opshub.qnsc.vn"] once DNS is configured
+  price_class            = "PriceClass_All"
+  api_origin_domain_name = aws_lb.this.dns_name
 
   tags = { Environment = local.env, Service = "web" }
 }
