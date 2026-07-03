@@ -18,12 +18,25 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 
 const enabled = process.env['OTEL_ENABLED'] === 'true';
 
+let _sdk: NodeSDK | undefined;
+
+/**
+ * Flush pending spans and shut down the SDK.
+ * Called from main.ts signal handler BEFORE app.close() so in-flight spans are
+ * exported before DB/cache connections close underneath them.
+ */
+export async function shutdownOtel(): Promise<void> {
+  if (_sdk) {
+    await _sdk.shutdown();
+  }
+}
+
 if (enabled) {
   const serviceName = process.env['OTEL_SERVICE_NAME'] ?? 'opshub-api';
   const serviceVersion = process.env['SERVICE_VERSION'] ?? 'dev';
   const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] ?? 'http://localhost:4318';
 
-  const sdk = new NodeSDK({
+  _sdk = new NodeSDK({
     resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: serviceName,
       [ATTR_SERVICE_VERSION]: serviceVersion,
@@ -35,7 +48,6 @@ if (enabled) {
     }),
     instrumentations: [
       getNodeAutoInstrumentations({
-        // Disable noisy instrumentations that add overhead without value
         '@opentelemetry/instrumentation-fs': { enabled: false },
         '@opentelemetry/instrumentation-dns': { enabled: false },
         '@opentelemetry/instrumentation-net': { enabled: false },
@@ -43,9 +55,5 @@ if (enabled) {
     ],
   });
 
-  sdk.start();
-
-  process.on('SIGTERM', () => {
-    sdk.shutdown().catch((err) => console.error('OTel SDK shutdown error', err));
-  });
+  _sdk.start();
 }

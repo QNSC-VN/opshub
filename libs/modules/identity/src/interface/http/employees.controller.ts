@@ -57,6 +57,7 @@ function toDto(e: Employee): EmployeeResponseDto {
 
 @ApiTags('employees')
 @Controller('employees')
+@Auth()
 export class EmployeesController {
   constructor(
     private readonly employeeService: EmployeeService,
@@ -64,7 +65,6 @@ export class EmployeesController {
   ) {}
 
   @Get()
-  @Auth()
   @RateLimit('STRICT')
   @ApiOperation({ summary: 'List employees' })
   @ApiPagedResponse(EmployeeResponseDto)
@@ -79,7 +79,6 @@ export class EmployeesController {
   }
 
   @Get(':id')
-  @Auth()
   @ApiOperation({ summary: 'Get an employee by id' })
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 404)
@@ -165,7 +164,6 @@ export class EmployeesController {
   // ── Avatar ──────────────────────────────────────────────────────────────────
 
   @Post(':id/avatar/presign')
-  @Auth()
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an employee avatar' })
   @ApiOkResponse({
     schema: {
@@ -187,7 +185,6 @@ export class EmployeesController {
   }
 
   @Post(':id/avatar/confirm')
-  @Auth()
   @ApiOperation({ summary: 'Confirm avatar upload completed — links the photo to the employee' })
   @ApiOkResponse({
     schema: { properties: { avatarUrl: { type: 'string' } }, required: ['avatarUrl'] },
@@ -202,7 +199,6 @@ export class EmployeesController {
   }
 
   @Get(':id/avatar')
-  @Auth()
   @ApiOperation({ summary: 'Get a time-limited download URL for the employee avatar' })
   @ApiOkResponse({
     schema: {

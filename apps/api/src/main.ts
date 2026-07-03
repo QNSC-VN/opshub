@@ -1,5 +1,5 @@
 // OTel must be imported before any other module — registers auto-instrumentation
-import '@platform/observability/otel';
+import { shutdownOtel } from '@platform/observability/otel';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -14,6 +14,9 @@ async function main(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
+      // Disable Fastify's built-in logger — pino handles all logging; without this,
+      // Fastify's pinoHttp runs in parallel with nestjs-pino producing duplicate lines.
+      logger: false,
       trustProxy: true,
       // Explicit body limit — prevents zip-bomb / oversized payload attacks (OWASP A04)
       bodyLimit: 10 * 1024 * 1024, // 10 MB; tighten per-route if needed
@@ -30,10 +33,37 @@ async function main(): Promise<void> {
 
   await app.listen(port, host);
   logger.log(`OpsHub API listening on http://${host}:${port} (docs: /api/docs)`);
+
+  // ── Process signal handlers ────────────────────────────────────────────────
+  // ECS sends SIGTERM on task replacement; Docker Ctrl-C sends SIGINT.
+  // Order: flush OTel spans FIRST, then close NestJS (drains DB pool, Redis, etc.).
+  const shutdown = async (signal: string): Promise<void> => {
+    logger.log(`Received ${signal} — shutting down gracefully`, 'Bootstrap');
+    try {
+      await shutdownOtel();
+      await app.close();
+      logger.log('Shutdown complete', 'Bootstrap');
+    } catch (err) {
+      logger.error({ msg: 'Error during shutdown', err }, 'Bootstrap');
+    } finally {
+      process.exit(0);
+    }
+  };
+
+  process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+  process.on('SIGINT',  () => { void shutdown('SIGINT'); });
+
+  process.on('unhandledRejection', (reason: unknown) => {
+    logger.error({ msg: 'Unhandled promise rejection', reason }, 'Bootstrap');
+  });
+
+  process.on('uncaughtException', (error: Error) => {
+    logger.error({ msg: 'Uncaught exception', error }, 'Bootstrap');
+    process.exit(1);
+  });
 }
 
 main().catch((err) => {
-   
   console.error('Fatal bootstrap error', err);
   process.exit(1);
 });

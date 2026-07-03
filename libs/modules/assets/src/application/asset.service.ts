@@ -32,7 +32,7 @@ export class AssetService {
       throw new ConflictException(ErrorCodes.ASSET_TAG_TAKEN, `Asset tag ${input.assetTag} is taken`);
     }
     const asset = await this.assetRepo.create(input);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'asset.created',
@@ -83,7 +83,7 @@ export class AssetService {
       });
     });
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'asset.assigned',
@@ -110,7 +110,7 @@ export class AssetService {
       });
     });
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'asset.unassigned',
@@ -137,7 +137,7 @@ export class AssetService {
         payload: { assetId },
       });
     });
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'asset.retired',

@@ -97,6 +97,7 @@ function toShiftLogDto(s: ShiftLog): ShiftLogResponseDto {
 
 @ApiTags('workforce')
 @Controller('workforce')
+@Auth()
 export class WorkforceController {
   constructor(
     private readonly service: WorkforceService,
@@ -106,7 +107,6 @@ export class WorkforceController {
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
   @Get('timesheets')
-  @Auth()
   @ApiOperation({ summary: 'List timesheets' })
   @ApiPagedResponse(TimesheetResponseDto)
   @ApiCommonErrors(401)
@@ -122,7 +122,6 @@ export class WorkforceController {
   }
 
   @Post('timesheets')
-  @Auth()
   @ApiOperation({ summary: 'Create a draft timesheet for the current user' })
   @ApiCommonErrors(401, 422)
   async createTimesheet(
@@ -142,7 +141,6 @@ export class WorkforceController {
   }
 
   @Post('timesheets/:id/submit')
-  @Auth()
   @ApiOperation({ summary: 'Submit a timesheet for approval' })
   @ApiCommonErrors(401, 404, 412)
   async submitTimesheet(
@@ -182,7 +180,6 @@ export class WorkforceController {
 
   // ── Leave ──────────────────────────────────────────────────────────────────
   @Get('leave')
-  @Auth()
   @ApiOperation({ summary: 'List leave requests' })
   @ApiPagedResponse(LeaveResponseDto)
   @ApiCommonErrors(401)
@@ -196,7 +193,6 @@ export class WorkforceController {
   }
 
   @Post('leave')
-  @Auth()
   @ApiOperation({ summary: 'Request leave for the current user' })
   @ApiCommonErrors(401, 409, 412, 422)
   async createLeave(
@@ -236,7 +232,6 @@ export class WorkforceController {
   }
 
   @Post('leave/:id/cancel')
-  @Auth()
   @ApiOperation({ summary: 'Cancel a leave request' })
   @ApiCommonErrors(401, 404, 412)
   async cancelLeave(
@@ -256,7 +251,6 @@ export class WorkforceController {
 
   // ── Overtime ───────────────────────────────────────────────────────────────
   @Get('overtime')
-  @Auth()
   @ApiOperation({ summary: 'List overtime entries' })
   @ApiPagedResponse(OvertimeResponseDto)
   @ApiCommonErrors(401)
@@ -272,7 +266,6 @@ export class WorkforceController {
   }
 
   @Post('overtime')
-  @Auth()
   @ApiOperation({ summary: 'Log overtime for the current user' })
   @ApiCommonErrors(401, 422)
   async createOvertime(
@@ -313,7 +306,6 @@ export class WorkforceController {
 
   // ── Shift logs ─────────────────────────────────────────────────────────────
   @Get('shifts')
-  @Auth()
   @ApiOperation({ summary: 'List night/on-call/weekend shift logs' })
   @ApiPagedResponse(ShiftLogResponseDto)
   @ApiCommonErrors(401)
@@ -329,7 +321,6 @@ export class WorkforceController {
   }
 
   @Post('shifts')
-  @Auth()
   @ApiOperation({ summary: 'Log a worked shift for the current user' })
   @ApiCommonErrors(401, 412, 422)
   async createShift(
@@ -407,7 +398,6 @@ export class WorkforceController {
   // ── Leave document upload ─────────────────────────────────────────────
 
   @Post('leave-requests/:id/document/presign')
-  @Auth()
   @ApiOperation({
     summary:
       'Get a presigned S3 PUT URL to upload a leave supporting document (e.g. medical certificate)',
@@ -433,7 +423,6 @@ export class WorkforceController {
   }
 
   @Post('leave-requests/:id/document/confirm')
-  @Auth()
   @ApiOperation({ summary: 'Confirm leave document upload completed' })
   @ApiResponse({
     status: 200,
@@ -449,7 +438,6 @@ export class WorkforceController {
   }
 
   @Get('leave-requests/:id/document')
-  @Auth()
   @ApiOperation({ summary: 'Get a time-limited download URL for the leave supporting document' })
   @ApiResponse({
     status: 200,

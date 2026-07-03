@@ -36,7 +36,7 @@ export class ComplianceService {
       throw new ConflictException(ErrorCodes.CONFLICT, 'Software with this name already exists');
     }
     const entry = await this.repo.createSoftware(input);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'software.added',
@@ -61,7 +61,7 @@ export class ComplianceService {
     await this.getSoftware(id);
     const updated = await this.repo.updateSoftware(id, patch);
     if (!updated) throw new NotFoundException(ErrorCodes.SOFTWARE_NOT_FOUND, 'Software not found');
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'software.updated',
@@ -112,7 +112,7 @@ export class ComplianceService {
     const status = riskAccepted ? 'risk_accepted' : 'resolved';
     const updated = await this.repo.setFindingStatus(id, status, actor.sub, note);
     if (!updated) throw new NotFoundException(ErrorCodes.FINDING_NOT_FOUND, 'Finding not found');
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: `finding.${status}`,
@@ -135,7 +135,7 @@ export class ComplianceService {
     }
     const updated = await this.repo.setFindingStatus(id, 'acknowledged', null, null);
     if (!updated) throw new NotFoundException(ErrorCodes.FINDING_NOT_FOUND, 'Finding not found');
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'finding.acknowledged',

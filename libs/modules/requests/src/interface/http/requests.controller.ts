@@ -73,6 +73,7 @@ function toCommentDto(c: RequestComment): RequestCommentResponseDto {
 
 @ApiTags('requests')
 @Controller('requests')
+@Auth()
 export class RequestsController {
   constructor(
     private readonly engine: RequestEngine,
@@ -92,7 +93,6 @@ export class RequestsController {
    * Use `myQueue=true` to get requests awaiting the caller's action.
    */
   @Get()
-  @Auth()
   @ApiOperation({ summary: 'List request items (unified inbox)' })
   @ApiPagedResponse(RequestItemResponseDto)
   async list(
@@ -117,7 +117,6 @@ export class RequestsController {
 
   /** Get a single request item with its full approval history. */
   @Get(':id')
-  @Auth()
   @ApiOperation({ summary: 'Get request item with approval history' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async getById(
@@ -128,7 +127,6 @@ export class RequestsController {
 
   /** Approve a pending request. Requires the relevant `*.approve` permission. */
   @Post(':id/approve')
-  @Auth()
   @ApiOperation({ summary: 'Approve a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async approve(
@@ -150,7 +148,6 @@ export class RequestsController {
 
   /** Reject a pending request. Requires the relevant `*.approve` permission. */
   @Post(':id/reject')
-  @Auth()
   @ApiOperation({ summary: 'Reject a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async reject(
@@ -172,7 +169,6 @@ export class RequestsController {
 
   /** Cancel a pending request (requester or admin). */
   @Post(':id/cancel')
-  @Auth()
   @ApiOperation({ summary: 'Cancel a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async cancel(
@@ -198,7 +194,6 @@ export class RequestsController {
    * Comments are informational only — they do not affect request state.
    */
   @Get(':id/comments')
-  @Auth()
   @ApiOperation({ summary: 'List comments on a request' })
   @ApiOkResponse({ type: [RequestCommentResponseDto] })
   async listComments(
@@ -212,7 +207,6 @@ export class RequestsController {
 
   /** Post a discussion comment. Does not trigger any state transition. */
   @Post(':id/comments')
-  @Auth()
   @HttpCode(201)
   @ApiOperation({ summary: 'Post a comment on a request' })
   @ApiCreatedResponse({ type: RequestCommentResponseDto })

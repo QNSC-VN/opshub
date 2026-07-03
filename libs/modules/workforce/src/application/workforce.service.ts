@@ -91,7 +91,7 @@ export class WorkforceService {
       approve ? 'approved' : 'rejected',
       approve ? actor.sub : null,
     );
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: approve ? 'timesheet.approved' : 'timesheet.rejected',
@@ -138,7 +138,7 @@ export class WorkforceService {
 
     await this.repo.setLeaveRequestId(leave.id, engineItem.id);
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'leave.requested',
@@ -181,7 +181,7 @@ export class WorkforceService {
     } else {
       // Legacy path
       const updated = await this.repo.setLeaveStatus(id, approve ? 'approved' : 'rejected', actor.sub);
-      await this.audit.record({
+      void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
         action: approve ? 'leave.approved' : 'leave.rejected',
@@ -261,7 +261,7 @@ export class WorkforceService {
     } else {
       // Legacy path
       const updated = await this.repo.setOvertimeStatus(id, approve ? 'approved' : 'rejected', actor.sub);
-      await this.audit.record({
+      void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
         action: approve ? 'overtime.approved' : 'overtime.rejected',
@@ -337,7 +337,7 @@ export class WorkforceService {
       ...(input.accessNeeds?.length && { accessNeeds: input.accessNeeds }),
     };
     const item = await this.engine.submit('onboarding', payload, actor);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'workforce.onboarding_submitted',
@@ -365,7 +365,7 @@ export class WorkforceService {
       ...(input.reason && { reason: input.reason }),
     };
     const item = await this.engine.submit('offboarding', payload, actor);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'workforce.offboarding_submitted',

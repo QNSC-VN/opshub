@@ -34,6 +34,7 @@ function toDto(c: CatalogItem): CatalogItemResponseDto {
 
 @ApiTags('catalog')
 @Controller('catalog')
+@Auth()
 export class CatalogController {
   constructor(
     private readonly catalogService: CatalogService,
@@ -41,7 +42,6 @@ export class CatalogController {
   ) {}
 
   @Get()
-  @Auth()
   @ApiOperation({ summary: 'List active service catalog items' })
   @ApiOkResponse({ type: CatalogItemResponseDto, isArray: true })
   @ApiCommonErrors(401)
@@ -68,7 +68,6 @@ export class CatalogController {
   }
 
   @Get(':id')
-  @Auth()
   @ApiOperation({ summary: 'Get a catalog item by id' })
   @ApiOkResponse({ type: CatalogItemResponseDto })
   @ApiCommonErrors(401, 404)
@@ -101,7 +100,6 @@ export class CatalogController {
   }
 
   @Post(':id/request')
-  @Auth()
   @ApiOperation({ summary: 'Submit a service catalog request' })
   @ApiCreatedResponse({ schema: { properties: { requestId: { type: 'string' } } } })
   @ApiCommonErrors(400, 401, 404)

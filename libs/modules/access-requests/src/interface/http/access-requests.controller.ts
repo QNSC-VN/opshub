@@ -51,6 +51,7 @@ function toGrantDto(g: AccessGrant): AccessGrantResponseDto {
 
 @ApiTags('access-requests')
 @Controller('access-requests')
+@Auth()
 export class AccessRequestsController {
   constructor(
     private readonly service: AccessRequestService,
@@ -58,7 +59,6 @@ export class AccessRequestsController {
   ) {}
 
   @Get()
-  @Auth()
   @ApiOperation({ summary: 'List access requests' })
   @ApiPagedResponse(AccessRequestResponseDto)
   @ApiCommonErrors(401)
@@ -74,7 +74,6 @@ export class AccessRequestsController {
   }
 
   @Get(':id')
-  @Auth()
   @ApiOperation({ summary: 'Get an access request by id' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 404)
@@ -83,7 +82,6 @@ export class AccessRequestsController {
   }
 
   @Post()
-  @Auth()
   @ApiOperation({ summary: 'Submit a privileged-access request' })
   @ApiCreatedResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 422)
@@ -172,7 +170,6 @@ export class AccessRequestsController {
   }
 
   @Get('grants/me/active')
-  @Auth()
   @ApiOperation({ summary: 'List my active grants' })
   @ApiOkResponse({ type: [AccessGrantResponseDto] })
   @ApiCommonErrors(401)

@@ -58,7 +58,7 @@ export class AccessRequestService {
       .set({ requestId: engineItem.id })
       .where(eq(accessRequests.id, domainRow.id));
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'access_request.submitted',
@@ -117,7 +117,7 @@ export class AccessRequestService {
       await this.db.transaction(async (tx) => {
         await this.repo.approve(requestId, actor.sub, note, grant, tx);
       });
-      await this.audit.record({
+      void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
         action: 'access_request.approved',
@@ -153,7 +153,7 @@ export class AccessRequestService {
       await this.engine.reject(request.requestId, note, actor);
     } else {
       await this.repo.reject(requestId, actor.sub, note);
-      await this.audit.record({
+      void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
         action: 'access_request.rejected',
@@ -175,7 +175,7 @@ export class AccessRequestService {
       );
     }
     await this.repo.revokeGrant(grantId);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'access_grant.revoked',

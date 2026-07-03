@@ -84,7 +84,7 @@ export class AuthService {
     this.#assertActive(employee);
     const result = await this.#mintTokens(employee, randomUUID(), 'dev');
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: employee.id,
       actorEmail: employee.email,
       action: 'auth.login.dev',
@@ -165,7 +165,7 @@ export class AuthService {
 
     const result = await this.#mintTokens({ ...employee, roles: effectiveRoles }, randomUUID(), 'sso');
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: employee.id,
       actorEmail: employee.email,
       action: 'auth.login.sso',
@@ -194,7 +194,7 @@ export class AuthService {
     if (stored.revoked) {
       // Token reuse detected — revoke the entire family
       await this.refreshTokenRepo.revokeFamily(stored.familyId);
-      await this.audit.record({
+      void this.audit.record({
         actorId: stored.employeeId,
         action: 'auth.token_theft_detected',
         resourceType: 'session',
@@ -238,7 +238,7 @@ export class AuthService {
 
     await this.cache.set(`revoked:session:${stored.id}`, '1', ttlSeconds);
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: stored.employeeId,
       action: 'auth.logout',
       resourceType: 'session',

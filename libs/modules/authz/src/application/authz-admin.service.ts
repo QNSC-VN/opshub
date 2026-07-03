@@ -70,7 +70,7 @@ export class AuthzAdminService {
     }
     await this.assertPermissionsExist(input.permissions);
     const role = await this.roleRepo.create(input);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'authz.role.created',
@@ -89,7 +89,7 @@ export class AuthzAdminService {
     const role = await this.getRole(roleId);
     await this.assertPermissionsExist(permissionKeys);
     await this.roleRepo.setPermissions(roleId, permissionKeys);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'authz.role.permissions_updated',
@@ -110,7 +110,7 @@ export class AuthzAdminService {
       );
     }
     await this.roleRepo.delete(roleId);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'authz.role.deleted',
@@ -159,7 +159,7 @@ export class AuthzAdminService {
     // then bust the permission cache so enforcement is immediate.
     await this.assignmentRepo.syncEmployeeRoleClaims(command.userId);
     await this.authz.invalidate(command.userId);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'authz.role.assigned',
@@ -225,7 +225,7 @@ export class AuthzAdminService {
     await this.authz.invalidate(userId);
 
     const granted = [...desiredRoleIds].map((id) => keyById.get(id)).filter(Boolean);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'authz.role.synced',
@@ -244,7 +244,7 @@ export class AuthzAdminService {
     await this.assignmentRepo.revoke(id);
     await this.assignmentRepo.syncEmployeeRoleClaims(assignment.userId);
     await this.authz.invalidate(assignment.userId);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'authz.role.revoked',

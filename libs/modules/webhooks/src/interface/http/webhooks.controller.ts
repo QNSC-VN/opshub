@@ -64,7 +64,7 @@ export class WebhooksController {
       events: [...dto.events],
       description: dto.description,
     });
-    await this.audit.record({
+    void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
       action: 'webhooks.subscription_created',
@@ -107,7 +107,7 @@ export class WebhooksController {
     @CurrentUser() user: JwtPayload,
   ): Promise<WebhookSubscriptionResponseDto> {
     const sub = await this.service.setActive(id, dto.active);
-    await this.audit.record({
+    void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
       action: dto.active ? 'webhooks.subscription_enabled' : 'webhooks.subscription_disabled',
@@ -127,7 +127,7 @@ export class WebhooksController {
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.service.delete(id);
-    await this.audit.record({
+    void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
       action: 'webhooks.subscription_deleted',
@@ -160,7 +160,7 @@ export class WebhooksController {
     @CurrentUser() user: JwtPayload,
   ): Promise<WebhookDeliveryResponseDto> {
     const delivery = await this.service.retryDelivery(id);
-    await this.audit.record({
+    void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
       action: 'webhooks.delivery_retried',

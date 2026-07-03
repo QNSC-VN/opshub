@@ -37,6 +37,17 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
   app.enableCors({
     origin: config.get('CORS_ORIGINS').split(',').map((o) => o.trim()),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Correlation-Id',
+      'X-CSRF-Token',
+      'traceparent',
+      'tracestate',
+      'baggage',
+    ],
+    exposedHeaders: ['X-Correlation-Id', 'RateLimit-Limit', 'RateLimit-Remaining', 'Retry-After'],
   });
 
   app.setGlobalPrefix('v1', { exclude: ['healthz', 'readyz'] });
@@ -48,7 +59,7 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
       .setTitle('OpsHub API')
       .setDescription('Internal operations platform — assets, access, compliance, workforce.')
       .setVersion(config.get('SERVICE_VERSION'))
-      .addBearerAuth()
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'access-token')
       .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document, {

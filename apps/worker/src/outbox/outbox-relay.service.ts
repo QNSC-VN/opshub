@@ -1,16 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB, AppConfigService } from '@platform';
 import { outboxEvents } from '../../../../db/schema';
 
 const BATCH_SIZE = 50;
+const MAX_ATTEMPTS = 5;
 
 /**
- * Outbox relay — polls unpublished domain events and forwards them to SQS
- * (or logs them when no queue is configured, e.g. local dev), then marks
- * them published. Guarantees at-least-once delivery.
+ * Outbox relay — polls pending domain events and forwards them to SQS,
+ * then marks them sent. Guarantees at-least-once delivery.
+ *
+ * Retry: up to MAX_ATTEMPTS retries with last_error recorded.
+ * After MAX_ATTEMPTS failures the row moves to 'failed' and is excluded
+ * from future polls (ops alert or manual replay required).
+ *
+ * FOR UPDATE SKIP LOCKED: safe for multiple worker replicas — each relay
+ * instance claims its own exclusive batch without blocking peers.
  */
 @Injectable()
 export class OutboxRelayService {
@@ -27,37 +34,59 @@ export class OutboxRelayService {
     this.queueUrl = this.config.get('SQS_OUTBOX_URL');
   }
 
-  @Interval(5000)
+  @Cron('*/5 * * * * *', { name: 'outbox-relay' })
   async relay(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
-      const batch = await this.db
-        .select()
-        .from(outboxEvents)
-        .where(eq(outboxEvents.published, false))
-        .orderBy(asc(outboxEvents.createdAt))
-        .limit(BATCH_SIZE);
+      await this.db.transaction(async (tx) => {
+        const batch = await tx
+          .select()
+          .from(outboxEvents)
+          .where(and(eq(outboxEvents.status, 'pending'), lt(outboxEvents.attempts, MAX_ATTEMPTS)))
+          .orderBy(asc(outboxEvents.createdAt))
+          .limit(BATCH_SIZE)
+          .for('update', { skipLocked: true });
 
-      for (const event of batch) {
-        await this.publish(event);
-        await this.db
-          .update(outboxEvents)
-          .set({ published: true, publishedAt: new Date() })
-          .where(eq(outboxEvents.id, event.id));
-      }
+        if (batch.length === 0) return;
 
-      if (batch.length > 0) {
-        this.logger.log(`Relayed ${batch.length} outbox event(s)`);
-      }
+        for (const event of batch) {
+          try {
+            await this.#publish(event);
+            await tx
+              .update(outboxEvents)
+              .set({ status: 'sent', sentAt: new Date() })
+              .where(eq(outboxEvents.id, event.id));
+          } catch (err) {
+            const newAttempts = event.attempts + 1;
+            await tx
+              .update(outboxEvents)
+              .set({
+                attempts: newAttempts,
+                lastError: String(err),
+                status: newAttempts >= MAX_ATTEMPTS ? 'failed' : 'pending',
+              })
+              .where(eq(outboxEvents.id, event.id));
+            this.logger.warn(
+              { eventId: event.id, eventType: event.eventType, attempt: newAttempts, err },
+              `Outbox event publish failed (attempt ${newAttempts}/${MAX_ATTEMPTS})`,
+            );
+          }
+        }
+
+        const sent = batch.filter((e) => e.attempts < MAX_ATTEMPTS).length;
+        if (sent > 0) {
+          this.logger.log(`Relayed ${sent} outbox event(s)`);
+        }
+      });
     } catch (err) {
-      this.logger.error({ err }, 'Outbox relay failed');
+      this.logger.error({ err }, 'Outbox relay transaction failed');
     } finally {
       this.running = false;
     }
   }
 
-  private async publish(event: typeof outboxEvents.$inferSelect): Promise<void> {
+  async #publish(event: typeof outboxEvents.$inferSelect): Promise<void> {
     if (!this.queueUrl) {
       this.logger.debug(
         { eventType: event.eventType, aggregateId: event.aggregateId },

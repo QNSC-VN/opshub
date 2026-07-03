@@ -55,6 +55,7 @@ function toAssignmentDto(a: AssetAssignment): AssetAssignmentResponseDto {
 
 @ApiTags('assets')
 @Controller('assets')
+@Auth()
 export class AssetsController {
   constructor(
     private readonly assetService: AssetService,
@@ -62,7 +63,6 @@ export class AssetsController {
   ) {}
 
   @Get()
-  @Auth()
   @ApiOperation({ summary: 'List hardware assets' })
   @ApiPagedResponse(AssetResponseDto)
   @ApiCommonErrors(401)
@@ -81,7 +81,6 @@ export class AssetsController {
   }
 
   @Get(':id')
-  @Auth()
   @ApiOperation({ summary: 'Get an asset by id' })
   @ApiOkResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 404)
@@ -90,7 +89,6 @@ export class AssetsController {
   }
 
   @Get(':id/assignments')
-  @Auth()
   @ApiOperation({ summary: 'List the assignment history of an asset' })
   @ApiOkResponse({ type: [AssetAssignmentResponseDto] })
   @ApiCommonErrors(401, 404)

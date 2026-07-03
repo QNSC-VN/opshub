@@ -42,7 +42,7 @@ export class EmployeeService {
     }
     const employee = await this.employeeRepo.create({ ...input, email: input.email.toLowerCase() });
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'employee.created',
@@ -66,7 +66,7 @@ export class EmployeeService {
 
     const updated = await this.employeeRepo.update(id, input);
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'employee.updated',
@@ -102,7 +102,7 @@ export class EmployeeService {
       await this.cache.del(`revoked:employee:${id}`);
     }
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'employee.status_changed',

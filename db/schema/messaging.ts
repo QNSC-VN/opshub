@@ -26,12 +26,15 @@ export const outboxEvents = messagingSchema.table(
     aggregateId:   varchar('aggregate_id', { length: 64 }).notNull(),
     eventType:     varchar('event_type', { length: 100 }).notNull(),
     payload:       jsonb('payload').notNull().$type<Record<string, unknown>>(),
-    published:     boolean('published').notNull().default(false),
+    /** 'pending' → relay picks up; 'sent' → SQS ack'd; 'failed' → max retries exceeded. */
+    status:        varchar('status', { length: 20 }).notNull().default('pending'),
+    attempts:      integer('attempts').notNull().default(0),
+    lastError:     text('last_error'),
     createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    publishedAt:   timestamp('published_at', { withTimezone: true }),
+    sentAt:        timestamp('sent_at', { withTimezone: true }),
   },
   (t) => ({
-    unpublishedIdx: index('ix_outbox_unpublished').on(t.published, t.createdAt),
+    pendingIdx: index('ix_outbox_pending').on(t.status, t.createdAt),
   }),
 );
 

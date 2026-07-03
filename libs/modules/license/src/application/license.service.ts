@@ -25,7 +25,7 @@ export class LicenseService {
 
   async create(input: CreateLicenseInput, actor: Actor): Promise<SoftwareLicense> {
     const license = await this.repo.create(input);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'license.created',
@@ -54,7 +54,7 @@ export class LicenseService {
     await this.getById(id);
     const updated = await this.repo.update(id, input);
     if (!updated) throw new NotFoundException(ErrorCodes.NOT_FOUND, 'License not found');
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'license.updated',
@@ -74,7 +74,7 @@ export class LicenseService {
       );
     }
     await this.repo.delete(id);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'license.deleted',
@@ -104,7 +104,7 @@ export class LicenseService {
     }
 
     const assignment = await this.repo.assign(licenseId, employeeId, notes);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'license.seat_assigned',
@@ -117,7 +117,7 @@ export class LicenseService {
 
   async revoke(assignmentId: string, actor: Actor): Promise<void> {
     await this.repo.revoke(assignmentId);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'license.seat_revoked',

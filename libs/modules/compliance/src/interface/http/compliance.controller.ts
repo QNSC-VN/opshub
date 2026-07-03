@@ -54,6 +54,7 @@ function toFindingDto(f: ComplianceFinding): FindingResponseDto {
 
 @ApiTags('compliance')
 @Controller('compliance')
+@Auth()
 export class ComplianceController {
   constructor(
     private readonly service: ComplianceService,
@@ -64,7 +65,6 @@ export class ComplianceController {
   // ── Software catalog ───────────────────────────────────────────────────────
 
   @Get('software')
-  @Auth()
   @ApiOperation({ summary: 'List the software catalog (whitelist/blacklist)' })
   @ApiPagedResponse(SoftwareResponseDto)
   @ApiCommonErrors(401)
@@ -80,7 +80,6 @@ export class ComplianceController {
   }
 
   @Get('software/:id')
-  @Auth()
   @ApiOperation({ summary: 'Get a software catalog entry' })
   @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 404)

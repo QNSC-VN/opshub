@@ -17,7 +17,7 @@ export class CatalogService {
 
   async createItem(input: CreateCatalogItemInput, actor: Actor): Promise<CatalogItem> {
     const item = await this.repo.create(input);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'catalog.item_created',
@@ -42,7 +42,7 @@ export class CatalogService {
     await this.getItem(id);
     const updated = await this.repo.update(id, input);
     if (!updated) throw new NotFoundException(ErrorCodes.NOT_FOUND, 'Catalog item not found');
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'catalog.item_updated',
@@ -55,7 +55,7 @@ export class CatalogService {
   async deleteItem(id: string, actor: Actor): Promise<void> {
     await this.getItem(id);
     await this.repo.delete(id);
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'catalog.item_deleted',
@@ -83,7 +83,7 @@ export class CatalogService {
       },
     );
 
-    await this.audit.record({
+    void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'catalog.request_submitted',
