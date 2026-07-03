@@ -3,7 +3,6 @@ import { AuditModule } from '@modules/audit';
 import { ComplianceService } from './application/compliance.service';
 import { GraphSyncService } from './application/graph-sync.service';
 import { ShadowItDetectionService } from './application/shadow-it-detection.service';
-import { ComplianceSyncCron } from './application/compliance-sync.cron';
 import { ComplianceController } from './interface/http/compliance.controller';
 import { ComplianceDrizzleRepository } from './infrastructure/persistence/compliance.drizzle-repository';
 import { COMPLIANCE_REPOSITORY } from './domain/ports/compliance.repository';
@@ -15,7 +14,6 @@ import { COMPLIANCE_REPOSITORY } from './domain/ports/compliance.repository';
     ComplianceService,
     GraphSyncService,
     ShadowItDetectionService,
-    ComplianceSyncCron,
     { provide: COMPLIANCE_REPOSITORY, useClass: ComplianceDrizzleRepository },
   ],
   exports: [ComplianceService, GraphSyncService, ShadowItDetectionService],
