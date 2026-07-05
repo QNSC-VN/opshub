@@ -1,25 +1,20 @@
 /**
- * Production seed — bootstraps the RBAC catalog (permissions + system roles)
- * and a representative set of employee accounts for every role.
+ * RBAC catalog seed — bootstraps permissions and system roles.
  *
  * Design goals:
- *  - Idempotent: safe to run multiple times on a live DB (ON CONFLICT DO NOTHING
- *    / existence checks).
- *  - Complete: every system role has at least one user so devs can test all
- *    permission boundaries without manual setup.
- *  - Consistent: the `roles` JSONB column on employees (used in JWT claims)
- *    always matches the RBAC table entries.
+ *  - Idempotent: safe to run multiple times (ON CONFLICT DO NOTHING).
+ *  - Catalog only: employees are JIT-provisioned on first Entra SSO login.
+ *    Roles are assigned via Entra App Roles → syncUserRolesByKeys() at login time.
  *
  * Run with:  tsx db/seed.ts
  */
 try { process.loadEnvFile('.env'); } catch { /* no .env in CI */ }
 
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { Pool } from 'pg';
-import { employees } from './schema/identity';
 import { pgOptions } from './pg-ssl';
-import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
+import { permissions, roles, rolePermissions } from './schema/authz';
 
 // ── Permission catalog ────────────────────────────────────────────────────────
 const PERMISSIONS: Array<{ key: string; description: string }> = [
@@ -193,102 +188,9 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
   },
 ];
 
-// ── Representative employees (one per role) ───────────────────────────────────
-// roleKeys populates BOTH the JSONB `roles` column (JWT claims) AND the RBAC
-// user_role_assignments table — they must stay in sync.
-const EMPLOYEES: Array<{
-  email: string;
-  displayName: string;
-  department: string;
-  jobTitle: string;
-  roleKeys: string[];
-  status: 'active' | 'on_leave' | 'offboarded';
-}> = [
-  {
-    email: 'admin@opshub.local',
-    displayName: 'Platform Admin',
-    department: 'IT Operations',
-    jobTitle: 'Platform Administrator',
-    roleKeys: ['admin'],
-    status: 'active',
-  },
-  {
-    email: 'it.admin@opshub.local',
-    displayName: 'IT Admin',
-    department: 'IT Operations',
-    jobTitle: 'IT Systems Administrator',
-    roleKeys: ['it-admin'],
-    status: 'active',
-  },
-  {
-    email: 'security@opshub.local',
-    displayName: 'Security Officer',
-    department: 'Information Security',
-    jobTitle: 'Information Security Officer',
-    roleKeys: ['security'],
-    status: 'active',
-  },
-  {
-    email: 'hr@opshub.local',
-    displayName: 'HR Manager',
-    department: 'Human Resources',
-    jobTitle: 'HR Manager',
-    roleKeys: ['hr'],
-    status: 'active',
-  },
-  {
-    email: 'manager@opshub.local',
-    displayName: 'People Manager',
-    department: 'Engineering',
-    jobTitle: 'Engineering Manager',
-    roleKeys: ['manager'],
-    status: 'active',
-  },
-  {
-    email: 'helpdesk@opshub.local',
-    displayName: 'Help Desk Agent',
-    department: 'IT Operations',
-    jobTitle: 'IT Support Specialist',
-    roleKeys: ['helpdesk'],
-    status: 'active',
-  },
-  {
-    email: 'auditor@opshub.local',
-    displayName: 'Internal Auditor',
-    department: 'Compliance',
-    jobTitle: 'Internal Auditor',
-    roleKeys: ['auditor'],
-    status: 'active',
-  },
-  {
-    email: 'alice@opshub.local',
-    displayName: 'Alice Johnson',
-    department: 'Engineering',
-    jobTitle: 'Software Engineer',
-    roleKeys: ['employee'],
-    status: 'active',
-  },
-  {
-    email: 'bob@opshub.local',
-    displayName: 'Bob Smith',
-    department: 'Sales',
-    jobTitle: 'Account Executive',
-    roleKeys: ['employee'],
-    status: 'active',
-  },
-  {
-    email: 'carol@opshub.local',
-    displayName: 'Carol White',
-    department: 'Finance',
-    jobTitle: 'Financial Analyst',
-    roleKeys: ['employee'],
-    status: 'active',
-  },
-];
-
-async function main(): Promise<void> {
-  const url = process.env['DATABASE_URL'];
-  if (!url) throw new Error('DATABASE_URL env var is required');
+export async function seed(connectionUrl?: string): Promise<void> {
+  const url = connectionUrl ?? process.env['DATABASE_URL'];
+  if (!url) throw new Error('DATABASE_URL or connectionUrl required');
 
   const pool = new Pool({ ...pgOptions(url), max: 1 });
   const db = drizzle(pool);
@@ -326,74 +228,14 @@ async function main(): Promise<void> {
       .onConflictDoNothing({ target: [rolePermissions.roleId, rolePermissions.permissionKey] });
   }
 
-  // 4. Employees (with JSONB roles for JWT claims)
-  await db
-    .insert(employees)
-    .values(
-      EMPLOYEES.map((e) => ({
-        email: e.email,
-        displayName: e.displayName,
-        department: e.department,
-        jobTitle: e.jobTitle,
-        roles: e.roleKeys,
-        status: e.status,
-      })),
-    )
-    .onConflictDoNothing({ target: employees.email });
-
-  const empRows = await db
-    .select({ id: employees.id, email: employees.email })
-    .from(employees)
-    .where(
-      inArray(
-        employees.email,
-        EMPLOYEES.map((e) => e.email),
-      ),
-    );
-  const empIdByEmail = new Map(empRows.map((e) => [e.email, e.id]));
-
-  const adminId = empIdByEmail.get('admin@opshub.local');
-
-  // 5. RBAC user_role_assignments (global scope, idempotent)
-  for (const emp of EMPLOYEES) {
-    const userId = empIdByEmail.get(emp.email);
-    if (!userId) continue;
-
-    for (const roleKey of emp.roleKeys) {
-      const roleId = roleIdByKey.get(roleKey);
-      if (!roleId) continue;
-
-      const [existing] = await db
-        .select({ id: userRoleAssignments.id })
-        .from(userRoleAssignments)
-        .where(
-          and(
-            eq(userRoleAssignments.userId, userId),
-            eq(userRoleAssignments.roleId, roleId),
-            eq(userRoleAssignments.scopeType, 'global'),
-            isNull(userRoleAssignments.scopeId),
-          ),
-        )
-        .limit(1);
-      if (existing) continue;
-
-      await db.insert(userRoleAssignments).values({
-        userId,
-        roleId,
-        scopeType: 'global',
-        scopeId: null,
-        grantedBy: adminId ?? userId,
-      });
-    }
-  }
-
-  console.log(
-    `✅ Seeded: ${PERMISSIONS.length} permissions | ${ROLES.length} roles | ${EMPLOYEES.length} employees`,
-  );
+  console.log(`✅ Seeded: ${PERMISSIONS.length} permissions | ${ROLES.length} roles`);
   await pool.end();
 }
 
-main().catch((err) => {
-  console.error('❌ Seed failed:', err);
-  process.exit(1);
-});
+// Run directly: pnpm db:seed
+if (process.argv[1]?.endsWith('seed.ts') || process.argv[1]?.endsWith('seed.js')) {
+  seed().catch((err) => {
+    console.error('❌ Seed failed:', err);
+    process.exit(1);
+  });
+}

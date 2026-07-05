@@ -22,7 +22,6 @@ export const EnvSchema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(20),
 
   // ── Auth ───────────────────────────────────────────────────────────────────
-  // Scaffold: HS256 + dev-login. Production: Entra ID OIDC (MSAL → entra-login).
   // JWT — ES256 asymmetric signing (Ed25519-class security, forward-secrecy capable)
   // Keys must be PEM-encoded EC P-256 keypair. Accepted as raw PEM or base64-encoded PEM.
   // Generate: openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt

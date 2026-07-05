@@ -17,8 +17,8 @@ export interface JwtPayload {
   email: string;
   name: string;
   roles: string[];
-  /** How the session was established: 'sso' = Entra ID, 'dev' = dev-login (non-prod only). */
-  authMethod: 'sso' | 'dev';
+  /** How the session was established — always 'sso' (Entra ID OIDC). */
+  authMethod: 'sso';
   iss: string;
   aud: string | string[];
   iat: number;

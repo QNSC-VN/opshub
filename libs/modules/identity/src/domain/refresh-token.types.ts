@@ -1,4 +1,4 @@
-export type AuthMethod = 'sso' | 'dev';
+export type AuthMethod = 'sso';
 
 export interface RefreshToken {
   id: string;
@@ -6,7 +6,7 @@ export interface RefreshToken {
   tokenHash: string;
   /** Groups all rotated tokens from the same login chain. Used for theft detection. */
   familyId: string;
-  /** 'sso' for Entra ID logins; 'dev' for dev-login (non-production only). */
+  /** 'sso' — session established via Entra ID OIDC. */
   authMethod: AuthMethod;
   revoked: boolean;
   expiresAt: Date;

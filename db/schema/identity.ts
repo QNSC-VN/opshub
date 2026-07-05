@@ -55,7 +55,7 @@ export const refreshTokens = identitySchema.table(
      * Copied from Rally's auth_sessions pattern.
      */
     familyId: uuid('family_id').notNull(),
-    /** 'sso' for Entra ID logins; 'dev' for dev-login (non-production only). Drives sign-out routing. */
+    /** Always 'sso' — session established via Entra ID OIDC. Kept as varchar for forward compatibility. */
     authMethod: varchar('auth_method', { length: 10 }).notNull().default('sso'),
     /** True once the token has been rotated or explicitly revoked. */
     revoked: boolean('revoked').notNull().default(false),

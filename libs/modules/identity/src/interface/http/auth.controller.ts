@@ -6,7 +6,6 @@ import {
   CurrentUser,
   Public,
   UnauthorizedException,
-  PermissionDeniedException,
   ErrorCodes,
   AppConfigService,
   AuthzService,
@@ -16,7 +15,7 @@ import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import '@fastify/cookie';
 import { AuthService } from '../../application/auth.service';
-import { DevLoginDto, EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
+import { EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
 
 const REFRESH_COOKIE = 'refresh_token';
 
@@ -63,31 +62,6 @@ export class AuthController {
     const { accessToken, expiresIn, rawRefreshToken } = await this.authService.entraLogin(
       dto.idToken,
     );
-    reply.setCookie(
-      REFRESH_COOKIE,
-      rawRefreshToken,
-      refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
-    );
-    return { accessToken, expiresIn };
-  }
-
-  @Post('dev-login')
-  @Public()
-  @RateLimit('AUTH_LOGIN')
-  @HttpCode(200)
-  @ApiOperation({
-    summary: 'Dev login — only available outside production (Entra OIDC is used in prod)',
-  })
-  @ApiOkResponse({ type: AuthResponseDto })
-  @ApiCommonErrors(401, 403, 422)
-  async devLogin(
-    @Body() dto: DevLoginDto,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<AuthResponseDto> {
-    if (this.#isProd) {
-      throw new PermissionDeniedException('Dev login is disabled in production');
-    }
-    const { accessToken, expiresIn, rawRefreshToken } = await this.authService.devLogin(dto.email);
     reply.setCookie(
       REFRESH_COOKIE,
       rawRefreshToken,

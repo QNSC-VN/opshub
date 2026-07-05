@@ -22,11 +22,13 @@ export type RequestType = (typeof REQUEST_TYPE)[keyof typeof REQUEST_TYPE];
 // ── RBAC role keys ────────────────────────────────────────────────────────────
 
 export const ROLE = {
+  ADMIN: 'admin',
   IT_ADMIN: 'it-admin',
   SECURITY: 'security',
   HR: 'hr',
   AUDITOR: 'auditor',
   MANAGER: 'manager',
+  HELPDESK: 'helpdesk',
   EMPLOYEE: 'employee',
 } as const;
 
@@ -82,7 +84,6 @@ export const PAGE_SIZE = {
 
 export const AUDIT_ACTION = {
   // Auth
-  AUTH_LOGIN_DEV: 'auth.login.dev',
   // Employees
   EMPLOYEE_CREATED: 'employee.created',
   EMPLOYEE_UPDATED: 'employee.updated',

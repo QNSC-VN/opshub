@@ -76,25 +76,6 @@ export class AuthService {
     @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokenRepo: IRefreshTokenRepository,
   ) {}
 
-  async devLogin(email: string): Promise<TokenResult> {
-    const employee = await this.employeeRepo.findByEmail(email.toLowerCase());
-    if (!employee) {
-      throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Unknown employee');
-    }
-    this.#assertActive(employee);
-    const result = await this.#mintTokens(employee, randomUUID(), 'dev');
-
-    void this.audit.record({
-      actorId: employee.id,
-      actorEmail: employee.email,
-      action: 'auth.login.dev',
-      resourceType: 'session',
-      metadata: { email: employee.email },
-    });
-
-    return result;
-  }
-
   async entraLogin(idToken: string): Promise<TokenResult> {
     const tenantId = this.config.get('ENTRA_TENANT_ID');
     const clientId = this.config.get('ENTRA_CLIENT_ID');
