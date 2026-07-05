@@ -33,7 +33,7 @@ export class AccessRequestResponseDto {
   accessType!: string;
   target!: string;
   justification!: string;
-  durationHours!: string;
+  durationHours!: number;
   status!: string;
   reviewerId!: string | null;
   reviewNote!: string | null;

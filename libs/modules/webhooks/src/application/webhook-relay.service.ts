@@ -106,7 +106,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
   protected async markSent(tx: DrizzleTx, rowId: string): Promise<void> {
     await tx
       .update(webhookDeliveries)
-      .set({ status: 'delivered', deliveredAt: new Date() })
+      .set({ status: 'sent', deliveredAt: new Date() })
       .where(eq(webhookDeliveries.id, rowId));
   }
 

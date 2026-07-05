@@ -65,6 +65,7 @@ export class ComplianceController {
   // ── Software catalog ───────────────────────────────────────────────────────
 
   @Get('software')
+  @RequirePermission('compliance.read')
   @ApiOperation({ summary: 'List the software catalog (whitelist/blacklist)' })
   @ApiPagedResponse(SoftwareResponseDto)
   @ApiCommonErrors(401)
@@ -80,6 +81,7 @@ export class ComplianceController {
   }
 
   @Get('software/:id')
+  @RequirePermission('compliance.read')
   @ApiOperation({ summary: 'Get a software catalog entry' })
   @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 404)

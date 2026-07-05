@@ -41,6 +41,7 @@ function toDeliveryDto(d: WebhookDelivery): WebhookDeliveryResponseDto {
 
 @ApiTags('webhooks')
 @Controller('webhooks')
+@RequirePermission('rbac.manage')
 export class WebhooksController {
   constructor(
     private readonly service: WebhooksService,

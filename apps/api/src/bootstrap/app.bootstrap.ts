@@ -1,6 +1,5 @@
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
-import fastifyCsrf from '@fastify/csrf-protection';
 import fastifyHelmet from '@fastify/helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -31,8 +30,6 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCompress);
   const cookieSecret = config.get('COOKIE_SECRET');
   await app.register(fastifyCookie, { secret: cookieSecret });
-  // CSRF double-submit cookie — protects state-mutating endpoints.
-  await app.register(fastifyCsrf, { cookieOpts: { signed: true } });
 
   app.enableCors({
     origin: config.get('CORS_ORIGINS').split(',').map((o) => o.trim()),

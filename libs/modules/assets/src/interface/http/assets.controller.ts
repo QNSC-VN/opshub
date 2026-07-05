@@ -63,6 +63,7 @@ export class AssetsController {
   ) {}
 
   @Get()
+  @RequirePermission('asset.read')
   @ApiOperation({ summary: 'List hardware assets' })
   @ApiPagedResponse(AssetResponseDto)
   @ApiCommonErrors(401)
@@ -81,6 +82,7 @@ export class AssetsController {
   }
 
   @Get(':id')
+  @RequirePermission('asset.read')
   @ApiOperation({ summary: 'Get an asset by id' })
   @ApiOkResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 404)
@@ -89,6 +91,7 @@ export class AssetsController {
   }
 
   @Get(':id/assignments')
+  @RequirePermission('asset.read')
   @ApiOperation({ summary: 'List the assignment history of an asset' })
   @ApiOkResponse({ type: [AssetAssignmentResponseDto] })
   @ApiCommonErrors(401, 404)

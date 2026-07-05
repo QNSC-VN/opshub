@@ -12,7 +12,7 @@ export interface AccessRequest {
   accessType: AccessType;
   target: string;
   justification: string;
-  durationHours: string;
+  durationHours: number;
   status: AccessRequestStatus;
   reviewerId: string | null;
   reviewNote: string | null;

@@ -43,6 +43,34 @@
       "when": 1751600000000,
       "tag": "0005_outbox_retry",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783000000000,
+      "tag": "0006_outbox_status_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783000001000,
+      "tag": "0007_request_decision_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783000002000,
+      "tag": "0008_security_posture_enums",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783000003000,
+      "tag": "0009_fk_constraints_duration_hours",
+      "breakpoints": true
     }
   ]
 }

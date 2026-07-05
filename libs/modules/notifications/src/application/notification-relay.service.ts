@@ -138,7 +138,7 @@ export class NotificationRelayService
   protected async markSent(tx: DrizzleTx, rowId: string): Promise<void> {
     await tx
       .update(notificationOutbox)
-      .set({ status: 'dispatched', dispatchedAt: new Date() })
+      .set({ status: 'sent', dispatchedAt: new Date() })
       .where(eq(notificationOutbox.id, rowId));
   }
 
@@ -151,7 +151,7 @@ export class NotificationRelayService
   ): Promise<void> {
     await tx
       .update(notificationOutbox)
-      .set({ attempts: newAttempts, status: newStatus === 'failed' ? 'dead' : 'pending', lastError })
+      .set({ attempts: newAttempts, status: newStatus, lastError })
       .where(eq(notificationOutbox.id, rowId));
   }
 }

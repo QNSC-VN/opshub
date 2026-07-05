@@ -65,6 +65,7 @@ export class EmployeesController {
   ) {}
 
   @Get()
+  @RequirePermission('employee.read')
   @RateLimit('STRICT')
   @ApiOperation({ summary: 'List employees' })
   @ApiPagedResponse(EmployeeResponseDto)
@@ -79,6 +80,7 @@ export class EmployeesController {
   }
 
   @Get(':id')
+  @RequirePermission('employee.read')
   @ApiOperation({ summary: 'Get an employee by id' })
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 404)

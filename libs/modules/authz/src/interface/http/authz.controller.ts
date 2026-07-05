@@ -11,7 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ApiCommonErrors, CurrentUser, RequirePermission } from '@platform';
+import { ApiCommonErrors, Auth, CurrentUser, RequirePermission } from '@platform';
 import type { JwtPayload, Permission, RoleAssignment, RoleWithPermissions } from '@platform';
 import { DelegationService, type ApprovalDelegation } from '@platform';
 import { AuditService } from '@modules/audit';
@@ -223,6 +223,7 @@ export class AuthzController {
   // ── Approval Delegation ────────────────────────────────────────────────────
 
   @Post('delegations')
+  @Auth()
   @ApiOperation({
     summary: 'Create an approval delegation',
     description:
@@ -254,6 +255,7 @@ export class AuthzController {
   }
 
   @Get('delegations')
+  @Auth()
   @ApiOperation({
     summary: 'List approval delegations',
     description:
@@ -274,6 +276,7 @@ export class AuthzController {
   }
 
   @Delete('delegations/:id')
+  @Auth()
   @HttpCode(204)
   @ApiOperation({ summary: 'Revoke an approval delegation' })
   @ApiNoContentResponse()

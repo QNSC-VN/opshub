@@ -1,7 +1,7 @@
 /**
  * access schema — privileged access requests + active grants (temp local admin, PIM, etc).
  */
-import { pgSchema, uuid, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgSchema, uuid, integer, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
 import { accessRequestStatusEnum, accessTypeEnum } from './enums';
 import { requestItems } from './requests';
 
@@ -17,7 +17,7 @@ export const accessRequests = accessSchema.table(
     target: varchar('target', { length: 200 }).notNull(),
     justification: text('justification').notNull(),
     /** Requested duration in hours (time-boxed privileged access). */
-    durationHours: varchar('duration_hours', { length: 10 }).notNull(),
+    durationHours: integer('duration_hours').notNull(),
     status: accessRequestStatusEnum('status').notNull().default('pending'),
     reviewerId: uuid('reviewer_id'),
     reviewNote: text('review_note'),

@@ -112,7 +112,7 @@ export class AccessRequestService {
         accessType: request.accessType,
         target: request.target,
         grantedAt: now,
-        expiresAt: new Date(now.getTime() + Number(request.durationHours) * MS_PER_HOUR),
+        expiresAt: new Date(now.getTime() + request.durationHours * MS_PER_HOUR),
       };
       await this.db.transaction(async (tx) => {
         await this.repo.approve(requestId, actor.sub, note, grant, tx);

@@ -5,7 +5,7 @@ import { ClientSecretCredential } from '@azure/identity';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js';
 import { newId } from '@shared-kernel';
 import { desc, sql, gte } from 'drizzle-orm';
-import { secureScoreSnapshots, baselineChecks } from '../../../../../db/schema';
+import { secureScoreSnapshots, baselineChecks, baselineCheckCategoryEnum, baselineCheckStatusEnum } from '../../../../../db/schema';
 
 // ── Graph types ───────────────────────────────────────────────────────────────
 
@@ -134,7 +134,7 @@ export class GraphSecureScoreService {
     return rows.length;
   }
 
-  private mapControlStatus(status: string | null): string {
+  private mapControlStatus(status: string | null): (typeof baselineCheckStatusEnum.enumValues)[number] {
     switch (status) {
       case 'implemented': return 'pass';
       case 'notImplemented': return 'fail';
@@ -144,7 +144,7 @@ export class GraphSecureScoreService {
     }
   }
 
-  private mapControlCategory(category: string): string {
+  private mapControlCategory(category: string): (typeof baselineCheckCategoryEnum.enumValues)[number] {
     const lower = category?.toLowerCase() ?? '';
     if (lower.includes('asr') || lower.includes('attack')) return 'asr';
     if (lower.includes('firewall') || lower.includes('network')) return 'firewall';

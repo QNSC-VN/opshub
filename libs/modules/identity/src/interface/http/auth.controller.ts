@@ -14,10 +14,12 @@ import {
 import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import '@fastify/cookie';
+import { randomBytes } from 'node:crypto';
 import { AuthService } from '../../application/auth.service';
 import { EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
 
 const REFRESH_COOKIE = 'refresh_token';
+const CSRF_COOKIE = 'csrf_token';
 
 /** Path-scoped cookie options — ensures the refresh token is only sent to the auth path. */
 function refreshCookieOptions(maxAge: number, isProd: boolean) {
@@ -26,6 +28,17 @@ function refreshCookieOptions(maxAge: number, isProd: boolean) {
     secure: isProd,
     sameSite: 'lax' as const,
     path: '/v1/auth',
+    maxAge,
+  };
+}
+
+/** JS-readable CSRF cookie — set on login, validated on refresh via X-CSRF-Token header. */
+function csrfCookieOptions(maxAge: number, isProd: boolean) {
+  return {
+    httpOnly: false,
+    secure: isProd,
+    sameSite: 'lax' as const,
+    path: '/',
     maxAge,
   };
 }
@@ -67,6 +80,8 @@ export class AuthController {
       rawRefreshToken,
       refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
     );
+    const csrfToken = randomBytes(32).toString('hex');
+    reply.setCookie(CSRF_COOKIE, csrfToken, csrfCookieOptions(this.#refreshMaxAge, this.#isProd));
     return { accessToken, expiresIn };
   }
 
@@ -86,12 +101,20 @@ export class AuthController {
       reply.clearCookie(REFRESH_COOKIE, { path: '/v1/auth' });
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'No refresh token');
     }
+    // Double-submit CSRF check: client must echo the csrf_token cookie value in X-CSRF-Token header.
+    const cookieCsrf = request.cookies?.[CSRF_COOKIE];
+    const headerCsrf = request.headers['x-csrf-token'];
+    if (!cookieCsrf || !headerCsrf || cookieCsrf !== headerCsrf) {
+      throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'CSRF token mismatch');
+    }
     const { accessToken, expiresIn, rawRefreshToken } = await this.authService.refresh(rawToken);
+    const csrfToken = randomBytes(32).toString('hex');
     reply.setCookie(
       REFRESH_COOKIE,
       rawRefreshToken,
       refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
     );
+    reply.setCookie(CSRF_COOKIE, csrfToken, csrfCookieOptions(this.#refreshMaxAge, this.#isProd));
     return { accessToken, expiresIn };
   }
 
@@ -115,6 +138,7 @@ export class AuthController {
       await this.authService.logout(rawToken, user.exp);
     }
     reply.clearCookie(REFRESH_COOKIE, { path: '/v1/auth' });
+    reply.clearCookie(CSRF_COOKIE, { path: '/' });
   }
 
   @Get('me')
