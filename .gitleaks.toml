@@ -1,0 +1,15 @@
+title = "opshub gitleaks config"
+
+[allowlist]
+description = "Known false-positives in test and dev files"
+
+# Test JWT key pairs in vitest.config.ts — placeholder EC P-256 keys, never used for real signing.
+paths = [
+  '''vitest\.config\.ts''',
+]
+
+# Hardcoded dev/CI service credentials intentionally public.
+# postgres/postgres is the standard docker-compose convention for ephemeral CI containers.
+regexes = [
+  '''POSTGRES_PASSWORD:\s*postgres''',
+]

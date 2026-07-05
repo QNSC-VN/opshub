@@ -1,0 +1,7 @@
+# .trivyignore — CVE fingerprints acknowledged as false-positives or accepted risks.
+#
+# Format: CVE-YYYY-NNNNN
+# Add entries only after security review; include a comment with the reason.
+#
+# Example:
+# CVE-2023-XXXXX  # Not exploitable — only affects foo when bar=true, which we never set.

@@ -1,0 +1,11 @@
+# .gitleaksignore — fingerprints of known false-positive findings.
+#
+# Each line is a gitleaks fingerprint (<commit>:<file>:<rule>:<line>).
+# Fingerprints are commit-scoped: they suppress only the exact finding in
+# that commit, so a real secret added later would still be caught.
+#
+# ─── Test fixture: EC P-256 JWT key in vitest.config.ts ──────────────────────
+# The vitest.config.ts path is already covered by the [allowlist] paths rule
+# in .gitleaks.toml. Add commit-specific fingerprints here if any gitleaks
+# findings survive the path allowlist (e.g. test/global-setup.ts or test/setup.ts
+# if they embed the same key material).
