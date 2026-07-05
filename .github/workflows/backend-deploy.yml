@@ -100,10 +100,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with:
+          fetch-depth: 0   # scan-secrets needs full history, not a shallow clone
 
       - name: Scan for secrets
         if: github.ref_type != 'tag'
-        uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.4
+        uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.6
 
       - name: Setup AWS OIDC + ECR login
         id: aws

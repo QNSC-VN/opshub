@@ -82,18 +82,20 @@ module "iam_oidc" {
 }
 
 # ── GitHub Actions OIDC role — opshub-web (S3 + CloudFront) ──────────────────
+# Bucket names keep the "opshub-web-*" naming (unrelated to the repo split
+# below) — S3 bucket names are free-form and these are already live.
 locals {
   web_deploy_envs = {
     develop = {
       allowed_subjects = [
-        "repo:${var.github_org}/opshub-web:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub:ref:refs/heads/main",
       ]
       s3_bucket = "opshub-web-develop"
     }
     production = {
       allowed_subjects = [
-        "repo:${var.github_org}/opshub-web:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub-web:ref:refs/tags/v*",
+        "repo:${var.github_org}/opshub:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub:ref:refs/tags/v*",
       ]
       s3_bucket = "opshub-web-prod"
     }

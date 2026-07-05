@@ -135,10 +135,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.0.0
+      - uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.6
         with:
           fail-on-leak: "true"
-          scan-depth: "0"
 
   dependency-review:
     name: Dependency review
