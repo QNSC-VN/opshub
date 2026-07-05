@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PAGE_SIZE } from '@shared-kernel';
 
 export const ListRequestsQuerySchema = z.object({
   type: z.string().optional(),
@@ -11,7 +12,7 @@ export const ListRequestsQuerySchema = z.object({
   myQueue: z
     .preprocess((v) => v === 'true' || v === true, z.boolean())
     .optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(PAGE_SIZE.NOTIFICATION_DEFAULT),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

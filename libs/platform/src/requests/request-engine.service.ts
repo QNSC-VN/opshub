@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import { newId } from '@shared-kernel';
+import { newId, type Actor } from '@shared-kernel';
 import { InjectDrizzle, type DrizzleDB } from '../database/drizzle.provider';
 import { AuthzService } from '../auth/authz.service';
 import {
@@ -22,8 +22,6 @@ import type {
   RequestComment,
   SubmitRequestOptions,
 } from './request-engine.types';
-
-type Actor = { sub: string; email: string };
 
 /**
  * Universal request state machine. All request workflows (access, leave,

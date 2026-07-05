@@ -1,7 +1,9 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
+import { accessTypeEnum } from '@db/schema/enums';
 
-const accessType = z.enum(['local_admin', 'pim_role', 'app_admin', 'vpn', 'other']);
+const accessType = z.enum(accessTypeEnum.enumValues);
 
 export const SubmitAccessRequestSchema = z.object({
   accessType,
@@ -21,9 +23,7 @@ export class ReviewAccessRequestDto extends createZodDto(ReviewAccessRequestSche
 export const ListAccessRequestsQuerySchema = z.object({
   requesterId: z.string().uuid().optional(),
   status: z.enum(['pending', 'approved', 'rejected', 'expired', 'revoked']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 
 export class ListAccessRequestsQueryDto extends createZodDto(ListAccessRequestsQuerySchema) {}
 

@@ -1,14 +1,13 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
 
 export const AuditQuerySchema = z.object({
   actorId: z.string().uuid().optional(),
   resourceType: z.string().optional(),
   resourceId: z.string().optional(),
   action: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 
 export class AuditQueryDto extends createZodDto(AuditQuerySchema) {}
 

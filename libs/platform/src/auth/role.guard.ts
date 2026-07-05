@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionDeniedException } from '../errors/exceptions';
 import { ROLES_KEY } from './decorators';
+import { ROLE } from '@shared-kernel';
 import type { JwtPayload } from './jwt.strategy';
 
 /**
@@ -21,8 +22,8 @@ export class RoleGuard implements CanActivate {
 
     const user = context.switchToHttp().getRequest<{ user?: JwtPayload }>().user;
     const roles = user?.roles ?? [];
-    // 'admin' role has wildcard permissions — bypass all role restrictions.
-    if (roles.includes('admin')) return true;
+    // admin role has wildcard permissions — bypass all role restrictions.
+    if (roles.includes(ROLE.ADMIN)) return true;
     if (required.some((r) => roles.includes(r))) return true;
 
     throw new PermissionDeniedException(`Requires one of roles: ${required.join(', ')}`);

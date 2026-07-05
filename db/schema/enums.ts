@@ -113,3 +113,27 @@ export const licenseStatusEnum = pgEnum('license_status', [
   'expired',
   'cancelled',
 ]);
+
+export const outboxStatusEnum = pgEnum('outbox_status', ['pending', 'sent', 'failed']);
+
+export const requestDecisionEnum = pgEnum('request_decision', [
+  'approved',
+  'rejected',
+  'delegated',
+]);
+
+export const baselineCheckCategoryEnum = pgEnum('baseline_check_category', [
+  'asr',
+  'firewall',
+  'encryption',
+  'endpoint',
+  'identity',
+  'other',
+]);
+
+export const baselineCheckStatusEnum = pgEnum('baseline_check_status', [
+  'pass',
+  'fail',
+  'warning',
+  'not_applicable',
+]);

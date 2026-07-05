@@ -14,7 +14,7 @@ import {
   timestamp,
   index,
 } from 'drizzle-orm/pg-core';
-import { requestPriorityEnum, requestStatusEnum } from './enums';
+import { requestPriorityEnum, requestStatusEnum, requestDecisionEnum } from './enums';
 
 export const requestsSchema = pgSchema('requests');
 
@@ -86,8 +86,7 @@ export const requestApprovals = requestsSchema.table(
       .references(() => requestItems.id, { onDelete: 'cascade' }),
     step: integer('step').notNull().default(1),
     approverId: uuid('approver_id').notNull(),
-    /** 'approved' | 'rejected' | 'delegated' */
-    decision: varchar('decision', { length: 20 }).notNull(),
+    decision: requestDecisionEnum('decision').notNull(),
     note: text('note'),
     /**
      * If the approver was acting as a delegate for another user (approval delegation),

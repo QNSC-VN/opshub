@@ -55,7 +55,9 @@
       "@modules/security-posture": ["./libs/modules/security-posture/src/index"],
       "@modules/security-posture/*": ["./libs/modules/security-posture/src/*"],
       "@platform/email": ["./libs/platform/src/email/index"],
-      "@platform/notifications": ["./libs/platform/src/notifications/index"]
+      "@platform/notifications": ["./libs/platform/src/notifications/index"],
+      "@db": ["./db/index"],
+      "@db/*": ["./db/*"]
     }
   }
 }

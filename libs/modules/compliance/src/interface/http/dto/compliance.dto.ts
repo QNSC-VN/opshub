@@ -1,9 +1,11 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
+import { softwareListingEnum, findingSeverityEnum, findingStatusEnum } from '@db/schema/enums';
 
-const listing = z.enum(['whitelisted', 'blacklisted', 'review']);
-const severity = z.enum(['low', 'medium', 'high', 'critical']);
-const findingStatus = z.enum(['open', 'acknowledged', 'resolved', 'risk_accepted']);
+const listing = z.enum(softwareListingEnum.enumValues);
+const severity = z.enum(findingSeverityEnum.enumValues);
+const findingStatus = z.enum(findingStatusEnum.enumValues);
 
 export const AddSoftwareSchema = z.object({
   name: z.string().min(1).max(200),
@@ -26,9 +28,7 @@ export class UpdateSoftwareDto extends createZodDto(UpdateSoftwareSchema) {}
 export const ListSoftwareQuerySchema = z.object({
   listing: listing.optional(),
   search: z.string().max(200).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 
 export class ListSoftwareQueryDto extends createZodDto(ListSoftwareQuerySchema) {}
 
@@ -37,9 +37,7 @@ export const ListFindingsQuerySchema = z.object({
   severity: severity.optional(),
   assetId: z.string().uuid().optional(),
   employeeId: z.string().uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 
 export class ListFindingsQueryDto extends createZodDto(ListFindingsQuerySchema) {}
 

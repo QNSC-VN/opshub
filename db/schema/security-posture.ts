@@ -2,6 +2,7 @@
  * security_posture schema — Microsoft Secure Score snapshots + baseline drift checks.
  */
 import { pgSchema, uuid, varchar, text, numeric, timestamp, index } from 'drizzle-orm/pg-core';
+import { baselineCheckCategoryEnum, baselineCheckStatusEnum } from './enums';
 
 export const securityPostureSchema = pgSchema('security_posture');
 
@@ -36,12 +37,10 @@ export const baselineChecks = securityPostureSchema.table(
   'baseline_checks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    /** e.g. 'asr' | 'firewall' | 'encryption' | 'gpo' */
-    category: varchar('category', { length: 40 }).notNull(),
+    category: baselineCheckCategoryEnum('category').notNull(),
     /** Human-readable rule name, e.g. "Block Office macros from child processes" */
     checkName: varchar('check_name', { length: 300 }).notNull(),
-    /** 'pass' | 'fail' | 'warning' | 'not_applicable' */
-    status: varchar('status', { length: 20 }).notNull().default('not_applicable'),
+    status: baselineCheckStatusEnum('status').notNull().default('not_applicable'),
     /** Intune managed-device ID (null = tenant-level check) */
     deviceId: varchar('device_id', { length: 64 }),
     deviceName: varchar('device_name', { length: 200 }),

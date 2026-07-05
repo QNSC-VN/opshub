@@ -1,5 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
+import { timesheetStatusEnum, leaveTypeEnum, leaveStatusEnum, overtimeStatusEnum, shiftTypeEnum } from '@db/schema/enums';
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 
@@ -13,10 +15,8 @@ export class CreateTimesheetDto extends createZodDto(CreateTimesheetSchema) {}
 
 export const ListTimesheetsQuerySchema = z.object({
   employeeId: z.string().uuid().optional(),
-  status: z.enum(['draft', 'submitted', 'approved', 'rejected']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+  status: z.enum(timesheetStatusEnum.enumValues).optional(),
+}).merge(PaginationQuerySchema);
 export class ListTimesheetsQueryDto extends createZodDto(ListTimesheetsQuerySchema) {}
 
 export class TimesheetResponseDto {
@@ -34,7 +34,7 @@ export class TimesheetResponseDto {
 // ── Leave ────────────────────────────────────────────────────────────────────
 export const CreateLeaveSchema = z
   .object({
-    leaveType: z.enum(['annual', 'sick', 'unpaid', 'parental', 'other']),
+    leaveType: z.enum(leaveTypeEnum.enumValues),
     startDate: dateStr,
     endDate: dateStr,
     reason: z.string().max(1000).optional(),
@@ -47,10 +47,8 @@ export class CreateLeaveDto extends createZodDto(CreateLeaveSchema) {}
 
 export const ListLeaveQuerySchema = z.object({
   employeeId: z.string().uuid().optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+  status: z.enum(leaveStatusEnum.enumValues).optional(),
+}).merge(PaginationQuerySchema);
 export class ListLeaveQueryDto extends createZodDto(ListLeaveQuerySchema) {}
 
 export class LeaveResponseDto {
@@ -76,10 +74,8 @@ export class CreateOvertimeDto extends createZodDto(CreateOvertimeSchema) {}
 
 export const ListOvertimeQuerySchema = z.object({
   employeeId: z.string().uuid().optional(),
-  status: z.enum(['pending', 'approved', 'rejected']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+  status: z.enum(overtimeStatusEnum.enumValues).optional(),
+}).merge(PaginationQuerySchema);
 export class ListOvertimeQueryDto extends createZodDto(ListOvertimeQuerySchema) {}
 
 export class OvertimeResponseDto {
@@ -97,7 +93,7 @@ export class OvertimeResponseDto {
 // ── Shift logs ───────────────────────────────────────────────────────────────
 export const CreateShiftLogSchema = z
   .object({
-    shiftType: z.enum(['night', 'on_call', 'weekend']),
+    shiftType: z.enum(shiftTypeEnum.enumValues),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
     note: z.string().max(500).optional(),
@@ -110,10 +106,8 @@ export class CreateShiftLogDto extends createZodDto(CreateShiftLogSchema) {}
 
 export const ListShiftLogsQuerySchema = z.object({
   employeeId: z.string().uuid().optional(),
-  shiftType: z.enum(['night', 'on_call', 'weekend']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+  shiftType: z.enum(shiftTypeEnum.enumValues).optional(),
+}).merge(PaginationQuerySchema);
 export class ListShiftLogsQueryDto extends createZodDto(ListShiftLogsQuerySchema) {}
 
 export class ShiftLogResponseDto {

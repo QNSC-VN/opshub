@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConflictException, NotFoundException, PreconditionFailedException, ErrorCodes } from '@platform';
+import { type Actor } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
 import {
   LICENSE_REPOSITORY,
@@ -13,8 +14,6 @@ import type {
   UpdateLicenseInput,
   LicenseFilters,
 } from '../domain/license.types';
-
-type Actor = { sub: string; email: string };
 
 @Injectable()
 export class LicenseService {

@@ -1,5 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
+import { employeeStatusEnum } from '@db/schema/enums';
 
 // NOTE: Roles are intentionally NOT settable here. Role assignment is a
 // governance action handled exclusively by the authz module
@@ -17,12 +19,10 @@ export const CreateEmployeeSchema = z.object({
 export class CreateEmployeeDto extends createZodDto(CreateEmployeeSchema) {}
 
 export const ListEmployeesQuerySchema = z.object({
-  status: z.enum(['active', 'on_leave', 'offboarded']).optional(),
+  status: z.enum(employeeStatusEnum.enumValues).optional(),
   department: z.string().optional(),
   search: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 
 export class ListEmployeesQueryDto extends createZodDto(ListEmployeesQuerySchema) {}
 
@@ -37,7 +37,7 @@ export const UpdateEmployeeSchema = z.object({
 export class UpdateEmployeeDto extends createZodDto(UpdateEmployeeSchema) {}
 
 export const UpdateStatusSchema = z.object({
-  status: z.enum(['active', 'on_leave', 'offboarded']),
+  status: z.enum(employeeStatusEnum.enumValues),
 });
 export class UpdateStatusDto extends createZodDto(UpdateStatusSchema) {}
 

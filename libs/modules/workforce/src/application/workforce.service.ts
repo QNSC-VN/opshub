@@ -9,7 +9,7 @@ import {
 } from '@platform';
 import type { PresignUploadResult } from '@platform';
 import { AuditService } from '@modules/audit';
-import { MS_PER_HOUR } from '@shared-kernel';
+import { MS_PER_HOUR, type Actor } from '@shared-kernel';
 import {
   WORKFORCE_REPOSITORY,
   type IWorkforceRepository,
@@ -32,8 +32,6 @@ import type { LeaveRequestPayload } from './leave-request.type-def';
 import type { OvertimePayload } from './overtime.type-def';
 import type { OnboardingPayload } from './onboarding.type-def';
 import type { OffboardingPayload } from './offboarding.type-def';
-
-type Actor = { sub: string; email: string };
 
 @Injectable()
 export class WorkforceService {

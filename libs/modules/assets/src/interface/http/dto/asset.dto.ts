@@ -1,15 +1,9 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
+import { assetTypeEnum, assetStatusEnum } from '@db/schema/enums';
 
-const assetType = z.enum([
-  'laptop',
-  'desktop',
-  'monitor',
-  'phone',
-  'tablet',
-  'peripheral',
-  'other',
-]);
+const assetType = z.enum(assetTypeEnum.enumValues);
 
 export const CreateAssetSchema = z.object({
   assetTag: z.string().min(1).max(50),
@@ -26,13 +20,11 @@ export const CreateAssetSchema = z.object({
 export class CreateAssetDto extends createZodDto(CreateAssetSchema) {}
 
 export const ListAssetsQuerySchema = z.object({
-  status: z.enum(['in_stock', 'assigned', 'in_repair', 'retired', 'lost']).optional(),
+  status: z.enum(assetStatusEnum.enumValues).optional(),
   type: assetType.optional(),
   assignedTo: z.string().uuid().optional(),
   search: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 
 export class ListAssetsQueryDto extends createZodDto(ListAssetsQuerySchema) {}
 

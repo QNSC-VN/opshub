@@ -1,8 +1,10 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@shared-kernel';
+import { licenseTypeEnum, licenseStatusEnum } from '@db/schema/enums';
 
-const licenseTypeZ = z.enum(['perpetual', 'subscription', 'per_seat', 'concurrent']);
-const licenseStatusZ = z.enum(['active', 'expiring_soon', 'expired', 'cancelled']);
+const licenseTypeZ = z.enum(licenseTypeEnum.enumValues);
+const licenseStatusZ = z.enum(licenseStatusEnum.enumValues);
 
 export const CreateLicenseSchema = z.object({
   name: z.string().min(1).max(150),
@@ -33,9 +35,7 @@ export const ListLicensesQuerySchema = z.object({
   status: licenseStatusZ.optional(),
   vendor: z.string().optional(),
   search: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
+}).merge(PaginationQuerySchema);
 export class ListLicensesQueryDto extends createZodDto(ListLicensesQuerySchema) {}
 
 export const AssignSeatSchema = z.object({

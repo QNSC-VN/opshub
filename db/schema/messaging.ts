@@ -13,6 +13,7 @@ import {
   index, uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { outboxStatusEnum } from './enums';
 
 export const messagingSchema = pgSchema('messaging');
 
@@ -27,7 +28,7 @@ export const outboxEvents = messagingSchema.table(
     eventType:     varchar('event_type', { length: 100 }).notNull(),
     payload:       jsonb('payload').notNull().$type<Record<string, unknown>>(),
     /** 'pending' → relay picks up; 'sent' → SQS ack'd; 'failed' → max retries exceeded. */
-    status:        varchar('status', { length: 20 }).notNull().default('pending'),
+    status:        outboxStatusEnum('status').notNull().default('pending'),
     attempts:      integer('attempts').notNull().default(0),
     lastError:     text('last_error'),
     createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -49,7 +50,7 @@ export const notificationOutbox = messagingSchema.table(
     type:           varchar('type', { length: 100 }).notNull(),
     vars:           jsonb('vars').notNull().$type<Record<string, unknown>>(),
     resourceId:     uuid('resource_id'),
-    status:         varchar('status', { length: 20 }).notNull().default('pending'),
+    status:         outboxStatusEnum('status').notNull().default('pending'),
     attempts:       integer('attempts').notNull().default(0),
     lastError:      text('last_error'),
     idempotencyKey: varchar('idempotency_key', { length: 255 }),
@@ -74,7 +75,7 @@ export const emailOutbox = messagingSchema.table(
     to:             varchar('to', { length: 320 }).notNull(),
     template:       varchar('template', { length: 100 }).notNull(),
     vars:           jsonb('vars').notNull().$type<Record<string, unknown>>(),
-    status:         varchar('status', { length: 20 }).notNull().default('pending'),
+    status:         outboxStatusEnum('status').notNull().default('pending'),
     attempts:       integer('attempts').notNull().default(0),
     lastError:      text('last_error'),
     idempotencyKey: varchar('idempotency_key', { length: 255 }),
@@ -131,7 +132,7 @@ export const webhookDeliveries = messagingSchema.table(
     subscriptionId: uuid('subscription_id').notNull(),
     eventType:      varchar('event_type', { length: 100 }).notNull(),
     payload:        jsonb('payload').notNull().$type<Record<string, unknown>>(),
-    status:         varchar('status', { length: 20 }).notNull().default('pending'),
+    status:         outboxStatusEnum('status').notNull().default('pending'),
     attempts:       integer('attempts').notNull().default(0),
     nextAttemptAt:  timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
     deliveredAt:    timestamp('delivered_at', { withTimezone: true }),

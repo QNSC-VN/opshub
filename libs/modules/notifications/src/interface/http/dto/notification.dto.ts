@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createZodDto } from 'nestjs-zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PAGE_SIZE } from '@shared-kernel';
 
 export class NotificationResponseDto {
   @ApiProperty() id!:            string;
@@ -28,7 +29,7 @@ export const ListNotificationsQuerySchema = z.object({
     (v) => (v === 'true' ? true : v === 'false' ? false : undefined),
     z.boolean().optional(),
   ),
-  limit:  z.coerce.number().int().min(1).max(100).default(20),
+  limit:  z.coerce.number().int().min(1).max(100).default(PAGE_SIZE.NOTIFICATION_DEFAULT),
   cursor: z.string().optional(),
 });
 
