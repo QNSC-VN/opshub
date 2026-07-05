@@ -78,7 +78,7 @@ jobs:
       - name: Upload Trivy SARIF to GitHub Security
         if: always()
         continue-on-error: true   # requires GitHub Advanced Security (free plan: no-op)
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Initialise CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           queries: security-and-quality
@@ -115,7 +115,7 @@ jobs:
 
       - name: Perform CodeQL analysis
         continue-on-error: true   # requires GitHub Advanced Security (free plan: no-op)
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: codeql-typescript
 
