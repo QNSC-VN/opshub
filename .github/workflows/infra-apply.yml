@@ -8,8 +8,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "live/**"
-      - "live/*/modules/**"
+      - "infra/live/**"
       - ".github/workflows/infra-apply.yml"
 
 permissions:
@@ -29,22 +28,22 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.2
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
         with:
           role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region:   ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
       - name: tofu init
-        working-directory: live/_shared
+        working-directory: infra/live/_shared
         run: tofu init -input=false
 
       - name: tofu validate
-        working-directory: live/_shared
+        working-directory: infra/live/_shared
         run: tofu validate
 
       - name: tofu apply
-        working-directory: live/_shared
+        working-directory: infra/live/_shared
         run: tofu apply -input=false -auto-approve
 
   apply-develop:
@@ -56,22 +55,22 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.2
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
         with:
           role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region:   ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
       - name: tofu init
-        working-directory: live/develop
+        working-directory: infra/live/develop
         run: tofu init -input=false
 
       - name: tofu validate
-        working-directory: live/develop
+        working-directory: infra/live/develop
         run: tofu validate
 
       - name: tofu apply
-        working-directory: live/develop
+        working-directory: infra/live/develop
         run: tofu apply -input=false -auto-approve
         env:
           TF_VAR_acm_cert_arn:       ${{ secrets.ACM_CERT_ARN_DEVELOP }}
@@ -89,22 +88,22 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.2
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
         with:
           role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region:   ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
       - name: tofu init
-        working-directory: live/prod
+        working-directory: infra/live/prod
         run: tofu init -input=false
 
       - name: tofu validate
-        working-directory: live/prod
+        working-directory: infra/live/prod
         run: tofu validate
 
       - name: tofu apply
-        working-directory: live/prod
+        working-directory: infra/live/prod
         run: tofu apply -input=false -auto-approve
         env:
           TF_VAR_acm_cert_arn:       ${{ secrets.ACM_CERT_ARN_PROD }}
