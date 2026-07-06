@@ -190,48 +190,18 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
   }
 }
 
-# ── ALB ───────────────────────────────────────────────────────────────────────
-resource "aws_lb" "this" {
-  name                       = local.name
-  internal                   = false
-  load_balancer_type         = "application"
-  security_groups            = [module.network.sg_alb_id]
-  subnets                    = module.network.public_subnet_ids
-  enable_deletion_protection = false
-  drop_invalid_header_fields = true
-  tags                       = { Name = local.name, Environment = local.env }
-}
+# ── ALB (shared module: LB + HTTPS/HTTP listener pair) ───────────────────────
+module "alb" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/alb?ref=alb-v1.0.0"
 
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.this.arn
-  port              = 443
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.acm_cert_arn
+  name               = local.name
+  security_group_ids = [module.network.sg_alb_id]
+  subnet_ids         = module.network.public_subnet_ids
+  certificate_arn    = var.acm_cert_arn
 
-  default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Not found"
-      status_code  = "404"
-    }
-  }
-}
+  enable_deletion_protection = false # dev: easy teardown
 
-resource "aws_lb_listener" "http_redirect" {
-  load_balancer_arn = aws_lb.this.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
+  tags = { Environment = local.env }
 }
 
 # ── ECS Cluster ───────────────────────────────────────────────────────────────
@@ -241,45 +211,28 @@ module "ecs_cluster" {
   tags   = { Environment = local.env }
 }
 
-# ── ECS Migrator task definition (one-shot, triggered by CI) ─────────────────
-resource "aws_cloudwatch_log_group" "migrator" {
-  name              = "/ecs/${local.name}/migrator"
-  retention_in_days = 7 # dev: keep only 7 days (migrator is a one-shot task)
-  tags              = { Environment = local.env, Service = "migrator" }
-}
+# ── Migrator (one-shot, triggered by CI) ──────────────────────────────────────
+module "migrator" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/oneshot-task?ref=oneshot-task-v1.0.0"
 
-resource "aws_ecs_task_definition" "migrator" {
-  family                   = "${local.name}-migrator"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = 512
-  memory                   = 1024
-  execution_role_arn       = module.api.execution_role_arn
-  task_role_arn            = module.api.task_role_arn
+  name           = "${local.name}-migrator"
+  container_name = "migrator"
+  image          = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
+  cpu            = 512
+  memory         = 1024
+  execution_role_arn = module.api.execution_role_arn
+  task_role_arn      = module.api.task_role_arn
+  region             = local.region
+  log_retention_days = 7 # dev: keep only 7 days (migrator is a one-shot task)
 
-  container_definitions = jsonencode([{
-    name      = "migrator"
-    image     = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
-    essential = true
+  environment = {
+    NODE_ENV   = "production"
+    AWS_REGION = local.region
+  }
 
-    environment = [
-      { name = "NODE_ENV",   value = "production" },
-      { name = "AWS_REGION", value = local.region },
-    ]
-
-    secrets = [
-      { name = "DATABASE_URL", valueFrom = module.secrets.secret_arns["db-url"] },
-    ]
-
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = aws_cloudwatch_log_group.migrator.name
-        "awslogs-region"        = local.region
-        "awslogs-stream-prefix" = "migrator"
-      }
-    }
-  }])
+  secrets = {
+    DATABASE_URL = module.secrets.secret_arns["db-url"]
+  }
 
   tags = { Environment = local.env, Service = "migrator" }
 }
@@ -309,7 +262,7 @@ module "api" {
   log_retention_days = 7    # dev: 7 days sufficient for debugging
 
   attach_alb        = true
-  alb_listener_arn  = aws_lb_listener.https.arn
+  alb_listener_arn  = module.alb.https_listener_arn
   alb_priority      = 100
   alb_path_patterns = ["/*"]
   health_check_path = "/v1/healthz"
@@ -400,7 +353,7 @@ module "waf" {
 
   name                = local.name
   enabled             = false
-  alb_arn             = aws_lb.this.arn
+  alb_arn             = module.alb.arn
   rate_limit_per_5min = 2000
 
   tags = { Environment = local.env }
@@ -412,7 +365,7 @@ module "waf" {
 # issued for the custom API domain. This rule accepts those HTTP requests and
 # forwards /v1/* to the API target group; all other paths remain HTTP→HTTPS redirect.
 resource "aws_lb_listener_rule" "http_api_forward" {
-  listener_arn = aws_lb_listener.http_redirect.arn
+  listener_arn = module.alb.http_listener_arn
   priority     = 1
 
   action {
@@ -435,7 +388,7 @@ module "cdn" {
   acm_cert_arn           = var.web_acm_cert_arn
   aliases                = []
   price_class            = "PriceClass_100" # develop: US/EU PoPs only — cheaper than PriceClass_200
-  api_origin_domain_name = aws_lb.this.dns_name
+  api_origin_domain_name = module.alb.dns_name
 
   tags = { Environment = local.env, Service = "web" }
 }

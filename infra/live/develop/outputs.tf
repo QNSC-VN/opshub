@@ -1,15 +1,15 @@
-output "alb_dns_name"          { value = aws_lb.this.dns_name }
+output "alb_dns_name"          { value = module.alb.dns_name }
 output "ecs_cluster_name"      { value = module.ecs_cluster.cluster_name }
 output "ecs_api_service"       { value = module.api.service_name }
 output "ecs_worker_service"    { value = module.worker.service_name }
 output "ecs_migrator_task_def" {
-  value       = aws_ecs_task_definition.migrator.family
+  value       = module.migrator.family
   description = "Migrator task definition family name — use with aws ecs run-task"
 }
 output "rds_endpoint"          { value = module.rds.endpoint }
 output "rds_master_secret_arn" { value = module.rds.master_secret_arn }
 output "cache_endpoint"        { value = module.cache.endpoint }
-output "outbox_queue_url"      { value = module.messaging.outbox_queue_url }
+output "outbox_queue_url"      { value = module.messaging.queue_urls["outbox"] }
 output "secret_arns"           { value = module.secrets.secret_arns }
 
 # Networking — needed for ECS run-task (migrator) and GitHub env vars

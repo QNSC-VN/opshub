@@ -24,10 +24,7 @@ provider "aws" {
   }
 }
 
-variable "github_org" {
-  type        = string
-  description = "GitHub org/owner that hosts the opshub repositories."
-}
+# github_org is declared in variables.tf (with a QNSC-VN default).
 
 # ── Platform remote state (OIDC provider ARN + KMS from qnsc-infra) ───────────
 data "terraform_remote_state" "platform" {
@@ -39,8 +36,6 @@ data "terraform_remote_state" "platform" {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
 # ── Container registries ──────────────────────────────────────────────────────
 module "ecr" {
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecr?ref=ecr-v1.0.0"
@@ -51,8 +46,12 @@ module "ecr" {
 }
 
 # ── GitHub Actions OIDC roles (ECS deploy + ECR push + infra CI) ─────────────
+# Owns ALL opshub deploy roles: API (per-env), ECR push, infra plan/apply, AND
+# web (SPA) deploy roles (previously hand-rolled below — now the module's
+# web_deploy_environments input). opshub is a monorepo; subjects use the
+# "opshub" repo (the archived "opshub-api"/"opshub-web" split repos are dead).
 module "iam_oidc" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v1.1.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v1.2.0"
 
   product           = "opshub"
   github_org        = var.github_org
@@ -61,34 +60,24 @@ module "iam_oidc" {
   environments = {
     develop = {
       allowed_subjects = [
-        "repo:${var.github_org}/opshub-api:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub-api:ref:refs/heads/develop",
+        "repo:${var.github_org}/opshub:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub:environment:develop",
       ]
     }
     production = {
       allowed_subjects = [
-        "repo:${var.github_org}/opshub-api:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub-api:ref:refs/tags/v*",
+        "repo:${var.github_org}/opshub:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub:ref:refs/tags/v*",
+        "repo:${var.github_org}/opshub:environment:production",
       ]
     }
   }
 
-  app_repo_names         = ["opshub-api"]
-  infra_repo_name        = "opshub-infra"
-  ecr_repository_pattern = "opshub-*"
-  ecs_passrole_pattern   = "opshub-*"
-
-  tags = { Scope = "shared" }
-}
-
-# ── GitHub Actions OIDC role — opshub-web (S3 + CloudFront) ──────────────────
-# Bucket names keep the "opshub-web-*" naming (unrelated to the repo split
-# below) — S3 bucket names are free-form and these are already live.
-locals {
-  web_deploy_envs = {
+  web_deploy_environments = {
     develop = {
       allowed_subjects = [
         "repo:${var.github_org}/opshub:ref:refs/heads/main",
+        "repo:${var.github_org}/opshub:environment:develop",
       ]
       s3_bucket = "opshub-web-develop"
     }
@@ -96,62 +85,16 @@ locals {
       allowed_subjects = [
         "repo:${var.github_org}/opshub:ref:refs/heads/main",
         "repo:${var.github_org}/opshub:ref:refs/tags/v*",
+        "repo:${var.github_org}/opshub:environment:production",
       ]
       s3_bucket = "opshub-web-prod"
     }
   }
-}
 
-resource "aws_iam_role" "web_deploy" {
-  for_each = local.web_deploy_envs
+  app_repo_names         = ["opshub"]
+  infra_repo_name        = "opshub"
+  ecr_repository_pattern = "opshub-*"
+  ecs_passrole_pattern   = "opshub-*"
 
-  name        = "opshub-github-web-deploy-${each.key}"
-  description = "Assumed by GitHub Actions to deploy opshub-web to ${each.key}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = data.terraform_remote_state.platform.outputs.oidc_provider_arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        }
-        StringLike = {
-          "token.actions.githubusercontent.com:sub" = each.value.allowed_subjects
-        }
-      }
-    }]
-  })
-
-  tags = { Scope = "shared", Environment = each.key }
-}
-
-resource "aws_iam_role_policy" "web_deploy" {
-  for_each = local.web_deploy_envs
-
-  name = "opshub-web-deploy-${each.key}"
-  role = aws_iam_role.web_deploy[each.key].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "S3Sync"
-        Effect = "Allow"
-        Action = ["s3:PutObject", "s3:DeleteObject", "s3:GetObject", "s3:ListBucket"]
-        Resource = [
-          "arn:aws:s3:::${each.value.s3_bucket}",
-          "arn:aws:s3:::${each.value.s3_bucket}/*",
-        ]
-      },
-      {
-        Sid      = "CloudFrontInvalidate"
-        Effect   = "Allow"
-        Action   = ["cloudfront:CreateInvalidation"]
-        Resource = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"
-      },
-    ]
-  })
+  tags = { Scope = "shared" }
 }

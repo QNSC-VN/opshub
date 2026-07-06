@@ -48,14 +48,9 @@ locals {
   ecr_api_url    = "${local.ecr_base}/opshub-api:${var.image_tag}"
   ecr_worker_url = "${local.ecr_base}/opshub-worker:${var.image_tag}"
 
-  # Cloudflare IPv4 ranges — https://cloudflare.com/ips-v4
-  cloudflare_ipv4 = [
-    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22",
-    "103.31.4.0/22",   "141.101.64.0/18", "108.162.192.0/18",
-    "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22",
-    "198.41.128.0/17", "162.158.0.0/15",  "104.16.0.0/13",
-    "104.24.0.0/14",   "172.64.0.0/13",   "131.0.72.0/22",
-  ]
+  # Cloudflare IPv4 ranges — single source of truth in qnsc-infra bootstrap
+  # (read via _shared remote state), so a CF range change is one edit there.
+  cloudflare_ipv4 = data.terraform_remote_state.shared.outputs.cloudflare_ipv4
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -214,53 +209,22 @@ module "alb_logs" {
   tags           = { Environment = local.env }
 }
 
-resource "aws_lb" "this" {
-  name                       = local.name
-  internal                   = false
-  load_balancer_type         = "application"
-  security_groups            = [module.network.sg_alb_id]
-  subnets                    = module.network.public_subnet_ids
+# ── ALB (shared module: LB + HTTPS/HTTP listener pair) ───────────────────────
+# Prod: deletion protection + access logs. opshub proxies /v1/* via the HTTP
+# listener for its CloudFront http-only origin (see rule below), unlike rally
+# prod which attaches directly to HTTPS.
+module "alb" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/alb?ref=alb-v1.0.0"
+
+  name               = local.name
+  security_group_ids = [module.network.sg_alb_id]
+  subnet_ids         = module.network.public_subnet_ids
+  certificate_arn    = var.acm_cert_arn
+
   enable_deletion_protection = true
-  drop_invalid_header_fields = true
+  access_logs_bucket         = module.alb_logs.bucket_id
 
-  access_logs {
-    bucket  = module.alb_logs.bucket_id
-    enabled = true
-  }
-
-  tags = { Name = local.name, Environment = local.env }
-}
-
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.this.arn
-  port              = 443
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.acm_cert_arn
-
-  default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Not found"
-      status_code  = "404"
-    }
-  }
-}
-
-resource "aws_lb_listener" "http_redirect" {
-  load_balancer_arn = aws_lb.this.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
+  tags = { Environment = local.env }
 }
 
 # ── ECS Cluster ───────────────────────────────────────────────────────────────
@@ -270,45 +234,28 @@ module "ecs_cluster" {
   tags   = { Environment = local.env }
 }
 
-# ── ECS Migrator task definition (one-shot, triggered by CI) ─────────────────
-resource "aws_cloudwatch_log_group" "migrator" {
-  name              = "/ecs/${local.name}/migrator"
-  retention_in_days = 90
-  tags              = { Environment = local.env, Service = "migrator" }
-}
+# ── Migrator (one-shot, triggered by CI) ──────────────────────────────────────
+module "migrator" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/oneshot-task?ref=oneshot-task-v1.0.0"
 
-resource "aws_ecs_task_definition" "migrator" {
-  family                   = "${local.name}-migrator"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = 512
-  memory                   = 1024
-  execution_role_arn       = module.api.execution_role_arn
-  task_role_arn            = module.api.task_role_arn
+  name           = "${local.name}-migrator"
+  container_name = "migrator"
+  image          = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
+  cpu            = 512
+  memory         = 1024
+  execution_role_arn = module.api.execution_role_arn
+  task_role_arn      = module.api.task_role_arn
+  region             = local.region
+  log_retention_days = 90
 
-  container_definitions = jsonencode([{
-    name      = "migrator"
-    image     = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
-    essential = true
+  environment = {
+    NODE_ENV   = "production"
+    AWS_REGION = local.region
+  }
 
-    environment = [
-      { name = "NODE_ENV",   value = "production" },
-      { name = "AWS_REGION", value = local.region },
-    ]
-
-    secrets = [
-      { name = "DATABASE_URL", valueFrom = module.secrets.secret_arns["db-url"] },
-    ]
-
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = aws_cloudwatch_log_group.migrator.name
-        "awslogs-region"        = local.region
-        "awslogs-stream-prefix" = "migrator"
-      }
-    }
-  }])
+  secrets = {
+    DATABASE_URL = module.secrets.secret_arns["db-url"]
+  }
 
   tags = { Environment = local.env, Service = "migrator" }
 }
@@ -336,7 +283,7 @@ module "api" {
   max_count     = 6
 
   attach_alb        = true
-  alb_listener_arn  = aws_lb_listener.https.arn
+  alb_listener_arn  = module.alb.https_listener_arn
   alb_priority      = 100
   alb_path_patterns = ["/*"]
   health_check_path = "/v1/healthz"
@@ -428,7 +375,7 @@ module "waf" {
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/waf?ref=waf-v1.0.1"
 
   name                = local.name
-  alb_arn             = aws_lb.this.arn
+  alb_arn             = module.alb.arn
   rate_limit_per_5min = 5000
 
   tags = { Environment = local.env }
@@ -436,7 +383,7 @@ module "waf" {
 
 # ── CloudFront → ALB HTTP forward rule for /v1/* ─────────────────────────────
 resource "aws_lb_listener_rule" "http_api_forward" {
-  listener_arn = aws_lb_listener.http_redirect.arn
+  listener_arn = module.alb.http_listener_arn
   priority     = 1
 
   action {
@@ -459,7 +406,7 @@ module "cdn" {
   acm_cert_arn           = var.web_acm_cert_arn
   aliases                = [] # set to ["app.opshub.qnsc.vn"] once DNS is configured
   price_class            = "PriceClass_All"
-  api_origin_domain_name = aws_lb.this.dns_name
+  api_origin_domain_name = module.alb.dns_name
 
   tags = { Environment = local.env, Service = "web" }
 }
