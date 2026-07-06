@@ -1,7 +1,8 @@
 terraform {
   required_version = ">= 1.9"
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+    aws        = { source = "hashicorp/aws", version = "~> 5.0" }
+    cloudflare = { source = "cloudflare/cloudflare", version = "~> 4.0" }
   }
 
   backend "s3" {
@@ -25,6 +26,14 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+
+# Cloudflare provider — API token supplied out-of-band (TF_VAR_cloudflare_api_token
+# / CLOUDFLARE_API_TOKEN in CI). DNS + Pages resources are created only when the
+# zone id / account id are set, so the stack applies cleanly before Cloudflare is
+# wired. Same pattern as rally, keeping the two products consistent.
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : null
+}
 
 # ── Read shared layer outputs (ECR URLs, KMS ARN, artifacts bucket) ───────────
 data "terraform_remote_state" "shared" {
@@ -53,6 +62,10 @@ locals {
   # Matches opshub prod: the ALB is fronted by Cloudflare, so ingress is locked
   # to Cloudflare edge IPs (keeps dev/prod parity within opshub).
   cloudflare_ipv4 = data.terraform_remote_state.shared.outputs.cloudflare_ipv4
+
+  # Cloudflare zone id (qnsc.vn) from bootstrap via _shared. DNS + Pages custom
+  # domain are created only when this is set, so the stack applies before wiring.
+  cloudflare_zone_id = try(data.terraform_remote_state.shared.outputs.cloudflare_zone_id, "")
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -340,38 +353,37 @@ module "waf" {
   tags = { Environment = local.env }
 }
 
-# ── CloudFront → ALB HTTP forward rule for /v1/* ─────────────────────────────
-# CloudFront connects to the ALB on HTTP (port 80) to avoid TLS SNI mismatch
-# between the CloudFront origin request (raw ELB hostname) and the ACM cert
-# issued for the custom API domain. This rule accepts those HTTP requests and
-# forwards /v1/* to the API target group; all other paths remain HTTP→HTTPS redirect.
-resource "aws_lb_listener_rule" "http_api_forward" {
-  listener_arn = module.alb.http_listener_arn
-  priority     = 1
+# ── Web SPA — Cloudflare Pages (zero-egress, native SPA routing) ─────────────
+# Consistent with rally: SPA on Cloudflare Pages (app-dev.opshub.qnsc.vn), API
+# on its own Cloudflare-proxied subdomain → ALB. Replaces the deprecated
+# CloudFront same-origin proxy. Gated on cloudflare_account_id so the stack
+# still applies before the Cloudflare account is wired.
+module "web" {
+  count  = var.cloudflare_account_id != "" ? 1 : 0
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/pages-web?ref=pages-web-v1.0.0"
 
-  action {
-    type             = "forward"
-    target_group_arn = module.api.target_group_arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/v1/*"]
-    }
-  }
+  account_id  = var.cloudflare_account_id
+  name        = "opshub-develop-web"
+  zone_id     = local.cloudflare_zone_id
+  domain      = local.cloudflare_zone_id != "" ? "app-dev.opshub.qnsc.vn" : ""
+  record_name = local.cloudflare_zone_id != "" ? "app-dev" : ""
+  comment     = "opshub-develop web SPA → Cloudflare Pages (managed by opshub-infra develop)"
 }
 
-# ── CDN (S3 + CloudFront) — opshub-web SPA ────────────────────────────────────
-module "cdn" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cdn?ref=cdn-v1.0.3"
+# ── DNS — app-api-dev.opshub.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────
+# The API's public edge, matching rally. Cloudflare-proxied (orange cloud) so
+# the ALB is never directly reachable; the ALB SG is locked to cloudflare_ipv4.
+# The api ECS service already forwards /* on the ALB HTTPS listener.
+module "dns_api" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.0.0"
 
-  name                   = "opshub-web-develop"
-  acm_cert_arn           = var.web_acm_cert_arn
-  aliases                = []
-  price_class            = "PriceClass_100" # develop: US/EU PoPs only — cheaper than PriceClass_200
-  api_origin_domain_name = module.alb.dns_name
-
-  tags = { Environment = local.env, Service = "web" }
+  enabled = local.cloudflare_zone_id != ""
+  zone_id = local.cloudflare_zone_id
+  name    = "app-api-dev"
+  type    = "CNAME"
+  content = module.alb.dns_name
+  proxied = true
+  comment = "opshub-develop API → ALB via Cloudflare proxy (managed by opshub-infra develop)"
 }
 
 # ── Dev scheduler: stop RDS + scale ECS to 0 off-hours ───────────────────────
