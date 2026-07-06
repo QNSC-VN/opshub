@@ -404,7 +404,7 @@ module "cdn" {
 # Tag-driven: acts on resources tagged AutoStop=true.
 # Stops at 8pm ICT, restarts at 8am ICT weekdays.
 module "dev_scheduler" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dev-scheduler?ref=dev-scheduler-v1.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dev-scheduler?ref=dev-scheduler-v1.1.0"
   name   = local.name
   tags   = { Environment = local.env }
 }
