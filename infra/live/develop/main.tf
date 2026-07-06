@@ -146,55 +146,29 @@ module "messaging" {
 }
 
 # ── S3 upload bucket ──────────────────────────────────────────────────────────
-resource "aws_s3_bucket" "uploads" {
-  bucket        = "opshub-${local.env}-uploads"
+module "app_bucket" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/app-bucket?ref=app-bucket-v1.0.0"
+
+  name          = "opshub-${local.env}-uploads"
+  kms_key_arn   = local.kms_key_arn
+  versioning    = true
   force_destroy = true
-  tags          = { Name = "opshub-${local.env}-uploads", Environment = local.env }
-}
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = local.kms_key_arn
-    }
-    bucket_key_enabled = true
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "uploads" {
-  bucket                  = aws_s3_bucket.uploads.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_versioning" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  versioning_configuration { status = "Enabled" }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  rule {
-    id     = "expire-unconfirmed-uploads"
-    status = "Enabled"
-    filter { prefix = "tmp/" }
-    expiration { days = 1 }
-  }
-}
-
-resource "aws_s3_bucket_cors_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  cors_rule {
+  cors_rules = [{
     allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
     allowed_methods = ["PUT"]
     allowed_origins = ["http://localhost:5174", "https://app-dev.opshub.qnsc.vn"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
-  }
+  }]
+
+  lifecycle_rules = [{
+    id              = "expire-unconfirmed-uploads"
+    prefix          = "tmp/"
+    expiration_days = 1
+  }]
+
+  tags = { Environment = local.env }
 }
 
 # ── ALB (shared module: LB + HTTPS/HTTP listener pair) ───────────────────────
@@ -289,7 +263,7 @@ module "api" {
     { name = "PORT", value = "3000" },
     { name = "AWS_REGION", value = local.region },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
     { name = "CORS_ORIGINS", value = "https://app-dev.opshub.qnsc.vn" },
@@ -298,7 +272,7 @@ module "api" {
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
-  s3_bucket_arns = [aws_s3_bucket.uploads.arn]
+  s3_bucket_arns = [module.app_bucket.arn]
 
   tags = { Environment = local.env, Service = "api", AutoStop = "true" }
 }
@@ -342,14 +316,14 @@ module "worker" {
     { name = "NODE_ENV", value = "production" },
     { name = "AWS_REGION", value = local.region },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
-  s3_bucket_arns = [aws_s3_bucket.uploads.arn]
+  s3_bucket_arns = [module.app_bucket.arn]
 
   tags = { Environment = local.env, Service = "worker", AutoStop = "true" }
 }
