@@ -47,6 +47,12 @@ locals {
   ecr_base       = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${local.region}.amazonaws.com"
   ecr_api_url    = "${local.ecr_base}/opshub-api:${var.image_tag}"
   ecr_worker_url = "${local.ecr_base}/opshub-worker:${var.image_tag}"
+
+  # Cloudflare IPv4 ranges — single source of truth in qnsc-infra bootstrap
+  # (read via _shared remote state), so a CF range change is one edit there.
+  # Matches opshub prod: the ALB is fronted by Cloudflare, so ingress is locked
+  # to Cloudflare edge IPs (keeps dev/prod parity within opshub).
+  cloudflare_ipv4 = data.terraform_remote_state.shared.outputs.cloudflare_ipv4
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -64,9 +70,10 @@ module "network" {
   data_subnet_cidrs    = ["10.50.20.0/24", "10.50.21.0/24", "10.50.22.0/24"]
 
   nat_type                   = "instance" # dev: fck-nat t4g.nano ~$3/mo vs NAT GW ~$33/mo
-  enable_interface_endpoints = false # dev: NAT already covers egress — save ~$22/mo
+  enable_interface_endpoints = false      # dev: NAT already covers egress — save ~$22/mo
   app_port                   = 3000
-  enable_flow_logs           = false # dev: no compliance requirement — save ~$4/mo
+  alb_ingress_cidrs          = local.cloudflare_ipv4 # lock ALB to Cloudflare orange-cloud proxy IPs (matches prod)
+  enable_flow_logs           = false                 # dev: no compliance requirement — save ~$4/mo
   flow_log_retention_days    = 30
 
   tags = { Environment = local.env }
@@ -215,11 +222,11 @@ module "ecs_cluster" {
 module "migrator" {
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/oneshot-task?ref=oneshot-task-v1.0.0"
 
-  name           = "${local.name}-migrator"
-  container_name = "migrator"
-  image          = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
-  cpu            = 512
-  memory         = 1024
+  name               = "${local.name}-migrator"
+  container_name     = "migrator"
+  image              = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
+  cpu                = 512
+  memory             = 1024
   execution_role_arn = module.api.execution_role_arn
   task_role_arn      = module.api.task_role_arn
   region             = local.region
@@ -270,23 +277,23 @@ module "api" {
   secret_arns = values(module.secrets.secret_arns)
   kms_key_arn = local.kms_key_arn
   secrets = [
-    { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY",     secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY",      secret_arn = module.secrets.secret_arns["jwt-public-key"] },
-    { name = "COOKIE_SECRET",       secret_arn = module.secrets.secret_arns["cookie-secret"] },
+    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
+    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
+    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+    { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
     { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
-    { name = "VALKEY_URL",          secret_arn = module.secrets.secret_arns["valkey-url"] },
+    { name = "VALKEY_URL", secret_arn = module.secrets.secret_arns["valkey-url"] },
   ]
   environment_vars = [
-    { name = "NODE_ENV",          value = "production" },
-    { name = "PORT",              value = "3000" },
-    { name = "AWS_REGION",        value = local.region },
-    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
-    { name = "ENTRA_TENANT_ID",   value = var.entra_tenant_id },
-    { name = "ENTRA_CLIENT_ID",   value = var.entra_client_id },
-    { name = "CORS_ORIGINS",      value = "https://app-dev.opshub.qnsc.vn" },
-    { name = "APP_URL",           value = "https://app-dev.opshub.qnsc.vn" },
+    { name = "NODE_ENV", value = "production" },
+    { name = "PORT", value = "3000" },
+    { name = "AWS_REGION", value = local.region },
+    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
+    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
+    { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
+    { name = "CORS_ORIGINS", value = "https://app-dev.opshub.qnsc.vn" },
+    { name = "APP_URL", value = "https://app-dev.opshub.qnsc.vn" },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
@@ -324,20 +331,20 @@ module "worker" {
   secret_arns = values(module.secrets.secret_arns)
   kms_key_arn = local.kms_key_arn
   secrets = [
-    { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY",     secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY",      secret_arn = module.secrets.secret_arns["jwt-public-key"] },
-    { name = "COOKIE_SECRET",       secret_arn = module.secrets.secret_arns["cookie-secret"] },
+    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
+    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
+    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+    { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
     { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
-    { name = "VALKEY_URL",          secret_arn = module.secrets.secret_arns["valkey-url"] },
+    { name = "VALKEY_URL", secret_arn = module.secrets.secret_arns["valkey-url"] },
   ]
   environment_vars = [
-    { name = "NODE_ENV",          value = "production" },
-    { name = "AWS_REGION",        value = local.region },
-    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
-    { name = "ENTRA_TENANT_ID",   value = var.entra_tenant_id },
-    { name = "ENTRA_CLIENT_ID",   value = var.entra_client_id },
+    { name = "NODE_ENV", value = "production" },
+    { name = "AWS_REGION", value = local.region },
+    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
+    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
+    { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
