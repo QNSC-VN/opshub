@@ -97,7 +97,7 @@ jobs:
       # ── Build Vite bundle ─────────────────────────────────────────────────
       # All VITE_ vars are baked into the bundle at build time.
       - name: Build
-        run: pnpm build
+        run: pnpm --filter opshub-web build
         env:
           VITE_API_URL:           ${{ vars.VITE_API_URL }}
           VITE_APP_ENV:           ${{ vars.VITE_APP_ENV }}
