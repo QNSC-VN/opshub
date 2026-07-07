@@ -170,7 +170,7 @@ module "app_bucket" {
   cors_rules = [{
     allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["http://localhost:5174", "https://app-dev.opshub.qnsc.vn"]
+    allowed_origins = ["http://localhost:5174", "https://opshub-dev.qnsc.vn"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
   }]
@@ -279,8 +279,8 @@ module "api" {
     { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
-    { name = "CORS_ORIGINS", value = "https://app-dev.opshub.qnsc.vn" },
-    { name = "APP_URL", value = "https://app-dev.opshub.qnsc.vn" },
+    { name = "CORS_ORIGINS", value = "https://opshub-dev.qnsc.vn" },
+    { name = "APP_URL", value = "https://opshub-dev.qnsc.vn" },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
@@ -354,7 +354,7 @@ module "waf" {
 }
 
 # ── Web SPA — Cloudflare Pages (zero-egress, native SPA routing) ─────────────
-# Consistent with rally: SPA on Cloudflare Pages (app-dev.opshub.qnsc.vn), API
+# Consistent with rally: SPA on Cloudflare Pages (opshub-dev.qnsc.vn), API
 # on its own Cloudflare-proxied subdomain → ALB. Replaces the deprecated
 # CloudFront same-origin proxy. Gated on cloudflare_account_id so the stack
 # still applies before the Cloudflare account is wired.
@@ -365,12 +365,12 @@ module "web" {
   account_id  = var.cloudflare_account_id
   name        = "opshub-develop-web"
   zone_id     = local.cloudflare_zone_id
-  domain      = local.cloudflare_zone_id != "" ? "app-dev.opshub.qnsc.vn" : ""
-  record_name = local.cloudflare_zone_id != "" ? "app-dev" : ""
+  domain      = local.cloudflare_zone_id != "" ? "opshub-dev.qnsc.vn" : ""
+  record_name = local.cloudflare_zone_id != "" ? "opshub-dev" : ""
   comment     = "opshub-develop web SPA → Cloudflare Pages (managed by opshub-infra develop)"
 }
 
-# ── DNS — app-api-dev.opshub.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────
+# ── DNS — opshub-api-dev.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────
 # The API's public edge, matching rally. Cloudflare-proxied (orange cloud) so
 # the ALB is never directly reachable; the ALB SG is locked to cloudflare_ipv4.
 # The api ECS service already forwards /* on the ALB HTTPS listener.
@@ -379,7 +379,7 @@ module "dns_api" {
 
   enabled = local.cloudflare_zone_id != ""
   zone_id = local.cloudflare_zone_id
-  name    = "app-api-dev"
+  name    = "opshub-api-dev"
   type    = "CNAME"
   content = module.alb.dns_name
   proxied = true

@@ -27,7 +27,7 @@
 #     ECS_MIGRATOR_TASK_DEF    e.g. opshub-develop-migrator
 #     ECS_MIGRATOR_SUBNET      private subnet ID (comma-separated if multiple)
 #     ECS_MIGRATOR_SG          security group allowing outbound to RDS
-#     APP_URL                  e.g. https://api-dev.opshub.qnsc.vn/healthz
+#     APP_URL                  e.g. https://opshub-api-dev.qnsc.vn/healthz
 #
 #   Environment-scoped IAM roles (provisioned by opshub-infra):
 #     opshub-github-ecr-push        build-push job (ECR push + retag)

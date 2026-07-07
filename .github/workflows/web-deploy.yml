@@ -17,11 +17,11 @@
 #     AWS_REGION               e.g. ap-southeast-1
 #     S3_BUCKET                e.g. opshub-web-develop
 #     CLOUDFRONT_ID            CloudFront distribution ID
-#     VITE_API_URL             e.g. https://api-dev.opshub.qnsc.vn
+#     VITE_API_URL             e.g. https://opshub-api-dev.qnsc.vn
 #     VITE_APP_ENV             development | production
 #     VITE_ENTRA_TENANT_ID     Azure AD tenant ID (or empty to disable SSO)
 #     VITE_ENTRA_CLIENT_ID     Azure AD client ID (or empty to disable SSO)
-#     APP_URL                  e.g. https://app-dev.opshub.qnsc.vn (for health)
+#     APP_URL                  e.g. https://opshub-dev.qnsc.vn (for health)
 #
 #   Environment-scoped IAM roles (provisioned by opshub-infra):
 #     opshub-github-web-deploy-<env>   S3 sync + CloudFront invalidation

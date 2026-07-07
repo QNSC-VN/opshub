@@ -172,7 +172,7 @@ module "app_bucket" {
   cors_rules = [{
     allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["https://app.opshub.qnsc.vn"]
+    allowed_origins = ["https://opshub.qnsc.vn"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
   }]
@@ -292,8 +292,8 @@ module "api" {
     { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
-    { name = "CORS_ORIGINS", value = "https://app.opshub.qnsc.vn" },
-    { name = "APP_URL", value = "https://app.opshub.qnsc.vn" },
+    { name = "CORS_ORIGINS", value = "https://opshub.qnsc.vn" },
+    { name = "APP_URL", value = "https://opshub.qnsc.vn" },
   ]
 
   sqs_queue_arns     = values(module.messaging.queue_arns)
@@ -369,7 +369,7 @@ module "waf" {
 
 # ── Web SPA — Cloudflare Pages (zero-egress, native SPA routing) ─────────────
 # Consistent with rally + opshub develop: SPA on Cloudflare Pages
-# (app.opshub.qnsc.vn), API on its own Cloudflare-proxied subdomain → ALB.
+# (opshub.qnsc.vn), API on its own Cloudflare-proxied subdomain → ALB.
 # Replaces the deprecated CloudFront same-origin proxy. Gated on
 # cloudflare_account_id so the stack applies before the account is wired.
 module "web" {
@@ -379,18 +379,18 @@ module "web" {
   account_id  = var.cloudflare_account_id
   name        = "opshub-prod-web"
   zone_id     = local.cloudflare_zone_id
-  domain      = local.cloudflare_zone_id != "" ? "app.opshub.qnsc.vn" : ""
-  record_name = local.cloudflare_zone_id != "" ? "app" : ""
+  domain      = local.cloudflare_zone_id != "" ? "opshub.qnsc.vn" : ""
+  record_name = local.cloudflare_zone_id != "" ? "opshub" : ""
   comment     = "opshub-prod web SPA → Cloudflare Pages (managed by opshub-infra prod)"
 }
 
-# ── DNS — app-api.opshub.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────
+# ── DNS — opshub-api.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────────
 module "dns_api" {
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.0.0"
 
   enabled = local.cloudflare_zone_id != ""
   zone_id = local.cloudflare_zone_id
-  name    = "app-api"
+  name    = "opshub-api"
   type    = "CNAME"
   content = module.alb.dns_name
   proxied = true

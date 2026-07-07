@@ -59,7 +59,7 @@ const authMiddleware: Middleware = {
 /**
  * Typed API client. In dev, `API_BASE_URL` is empty and requests are proxied to
  * the API at `/v1` (see vite.config). In prod, the SPA is on Cloudflare Pages and
- * `API_BASE_URL` points at the API origin (e.g. https://app-api-dev.opshub.qnsc.vn).
+ * `API_BASE_URL` points at the API origin (e.g. https://opshub-api-dev.qnsc.vn).
  */
 export const api = createClient<paths>({ baseUrl: ENV.API_BASE_URL });
 api.use(authMiddleware);
