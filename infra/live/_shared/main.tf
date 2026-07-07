@@ -99,3 +99,40 @@ module "iam_oidc" {
 
   tags = { Scope = "shared" }
 }
+
+# ── RDS dev-cost-saver guard — develop deploy role only ──────────────────────
+# Allows the CI deploy job to detect + start a stopped RDS instance before
+# running migrations. Scoped to develop only; prod RDS is always-on and this
+# permission is intentionally absent from the production deploy role.
+#
+# The ARN is constructed directly (account_id + region + fixed identifier)
+# instead of via a `data "aws_db_instance"` lookup. A data-source lookup
+# fails hard whenever the instance doesn't exist yet or has been torn down
+# (e.g. a fresh deploy, or a full teardown+redeploy cycle) — this stack
+# would then be unable to apply/destroy independently of develop's RDS
+# lifecycle. An ARN string doesn't require the resource to exist.
+data "aws_caller_identity" "current" {}
+
+locals {
+  opshub_develop_rds_arn = "arn:aws:rds:ap-southeast-1:${data.aws_caller_identity.current.account_id}:db:opshub-develop"
+}
+
+resource "aws_iam_role_policy" "deploy_rds_dev_guard" {
+  name = "opshub-deploy-develop-rds-guard"
+  role = split("/", module.iam_oidc.deploy_role_arns["develop"])[1]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RDSDevGuard"
+        Effect = "Allow"
+        Action = [
+          "rds:DescribeDBInstances",
+          "rds:StartDBInstance",
+        ]
+        Resource = local.opshub_develop_rds_arn
+      }
+    ]
+  })
+}
