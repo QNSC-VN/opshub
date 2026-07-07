@@ -20,13 +20,6 @@ variable "cloudflare_api_token" {
   description = "Cloudflare API token (Zone DNS + Pages edit). Pass via TF_VAR_cloudflare_api_token in CI. Empty = skip Cloudflare provider auth."
 }
 
-# DEPRECATED: web now serves via Cloudflare Pages (no CloudFront ACM cert).
-# Retained only so existing CI env (TF_VAR_web_acm_cert_arn) doesn't error;
-# remove after the Pages migration is fully rolled out.
-variable "web_acm_cert_arn" {
-  type        = string
-  description = "ACM certificate ARN for CloudFront (must be in us-east-1)."
-}
 
 variable "image_tag" {
   type        = string
