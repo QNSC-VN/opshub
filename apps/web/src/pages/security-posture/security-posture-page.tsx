@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ENV } from '@/shared/config/env';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, ShieldCheck, ShieldAlert, TrendingUp, TrendingDown, Minus, RefreshCw, CheckCircle, XCircle, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,25 +45,25 @@ interface ScoreLatest {
 const headers = () => ({ Authorization: `Bearer ${getToken() ?? ''}`, 'Content-Type': 'application/json' });
 
 async function fetchSecureScore(): Promise<{ latest: ScoreLatest | null }> {
-  const res = await fetch('/v1/security-posture/score', { headers: headers() });
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/score`, { headers: headers() });
   if (!res.ok) throw new Error('Failed to load score');
   return res.json() as Promise<{ latest: ScoreLatest | null }>;
 }
 
 async function fetchScoreHistory(days: number): Promise<{ history: ScoreSnapshot[] }> {
-  const res = await fetch(`/v1/security-posture/score/history?days=${days}`, { headers: headers() });
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/score/history?days=${days}`, { headers: headers() });
   if (!res.ok) throw new Error('Failed to load history');
   return res.json() as Promise<{ history: ScoreSnapshot[] }>;
 }
 
 async function fetchBaseline(): Promise<{ checks: BaselineCheck[]; summary: Record<string, BaselineSummary> }> {
-  const res = await fetch('/v1/security-posture/baseline', { headers: headers() });
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/baseline`, { headers: headers() });
   if (!res.ok) throw new Error('Failed to load baseline');
   return res.json() as Promise<{ checks: BaselineCheck[]; summary: Record<string, BaselineSummary> }>;
 }
 
 async function triggerSync(): Promise<void> {
-  const res = await fetch('/v1/security-posture/sync', { method: 'POST', headers: headers() });
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/sync`, { method: 'POST', headers: headers() });
   if (!res.ok) throw new Error('Sync failed');
 }
 

@@ -11,6 +11,7 @@
  * badge is always accurate even if events were missed while disconnected.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ENV } from '@/shared/config/env';
 import { getToken } from '@/shared/api/auth-store';
 
 export interface SSENotificationPayload {
@@ -72,7 +73,7 @@ export function useSSENotifications(): UseSSENotificationsResult {
       abortRef.current = controller;
 
       try {
-        const res = await fetch('/v1/notifications/stream', {
+        const res = await fetch(`${ENV.API_BASE_URL}/v1/notifications/stream`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });

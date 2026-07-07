@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ENV } from '@/shared/config/env';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -90,7 +91,7 @@ function useLicenses(search: string, page: number) {
         offset: String(offset),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(`/v1/licenses?${params.toString()}`, {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/licenses?${params.toString()}`, {
         headers: { Authorization: `Bearer ${getToken() ?? ''}` },
       });
       if (!res.ok) {
@@ -107,7 +108,7 @@ function useUtilization() {
   return useQuery({
     queryKey: ['licenses', 'utilization'],
     queryFn: async () => {
-      const res = await fetch('/v1/licenses/utilization', {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/licenses/utilization`, {
         headers: {
           Authorization: `Bearer ${getToken() ?? ''}`,
         },
@@ -140,7 +141,7 @@ function AddLicenseModal({ onClose, onSuccess }: AddLicenseModalProps) {
   const mutation = useMutation({
     mutationFn: async () => {
       const token = getToken() ?? '';
-      const res = await fetch('/v1/licenses', {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/licenses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({

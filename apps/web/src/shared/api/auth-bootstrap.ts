@@ -1,6 +1,7 @@
 import { handleSsoRedirect, isSsoConfigured } from '@/app/auth/msal';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
+import { ENV } from '@/shared/config/env';
 
 /**
  * Called once before the router mounts (in AppProviders).
@@ -33,7 +34,7 @@ export function resetBootstrap(): void {
 async function _run(): Promise<void> {
   // 1. Silent restore from refresh cookie (fastest path — works on every reload)
   try {
-    const res = await fetch('/v1/auth/refresh', {
+    const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });

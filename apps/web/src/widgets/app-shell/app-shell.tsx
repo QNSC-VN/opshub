@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
+import { ENV } from '@/shared/config/env';
 import { Link, Outlet, useNavigate } from '@tanstack/react-router';
 import {
   LayoutDashboard,
@@ -207,7 +208,7 @@ export function AppShell() {
     }
 
     try {
-      await fetch('/v1/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetch(`${ENV.API_BASE_URL}/v1/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch {
       // best-effort
     }

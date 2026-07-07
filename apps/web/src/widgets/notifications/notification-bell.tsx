@@ -11,6 +11,7 @@
  * Click-outside detection via a useEffect listener on document.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { ENV } from '@/shared/config/env';
 import { Bell, Check, CheckCheck, X, Inbox } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
@@ -50,7 +51,7 @@ function useNotificationList(enabled: boolean) {
   return useQuery<NotificationListResult>({
     queryKey: ['notifications', 'list'],
     queryFn: async () => {
-      const res = await fetch('/v1/notifications?limit=20', {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/notifications?limit=20`, {
         headers: {
           Authorization: `Bearer ${getToken() ?? ''}`,
         },

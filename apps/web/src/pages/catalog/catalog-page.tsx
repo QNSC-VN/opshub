@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ENV } from '@/shared/config/env';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, X, Check, Clock, Package } from 'lucide-react';
 import { getToken } from '@/shared/api/auth-store';
@@ -28,7 +29,7 @@ function useCatalogItems() {
   return useQuery({
     queryKey: ['catalog', 'items'],
     queryFn: async () => {
-      const res = await fetch('/v1/catalog', { headers: authHeader() });
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/catalog`, { headers: authHeader() });
       if (!res.ok) throw new Error('Failed to load catalog');
       return res.json() as Promise<CatalogItem[]>;
     },
@@ -49,7 +50,7 @@ function RequestModal({ item, onClose, onSuccess }: RequestModalProps) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/v1/catalog/${item.id}/request`, {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/catalog/${item.id}/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify({ reason }),

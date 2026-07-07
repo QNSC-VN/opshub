@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ENV } from '@/shared/config/env';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,13 +24,13 @@ interface AttendanceStatus {
 const headers = () => ({ Authorization: `Bearer ${getToken() ?? ''}`, 'Content-Type': 'application/json' });
 
 async function fetchStatus(): Promise<AttendanceStatus> {
-  const res = await fetch('/v1/workforce/attendance/status', { headers: headers() });
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/status`, { headers: headers() });
   if (!res.ok) throw new Error('Failed to load attendance status');
   return res.json() as Promise<AttendanceStatus>;
 }
 
 async function clockIn(isRemote: boolean): Promise<void> {
-  const res = await fetch('/v1/workforce/attendance/clock-in', {
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/clock-in`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({ isRemote }),
@@ -38,7 +39,7 @@ async function clockIn(isRemote: boolean): Promise<void> {
 }
 
 async function clockOut(): Promise<void> {
-  const res = await fetch('/v1/workforce/attendance/clock-out', {
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/clock-out`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({}),

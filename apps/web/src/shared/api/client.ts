@@ -1,6 +1,7 @@
 import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './generated/api';
 import { getToken, useAuthStore } from './auth-store';
+import { ENV } from '@/shared/config/env';
 
 /** Whether a token refresh is already in flight — prevents concurrent refresh storms. */
 let refreshPromise: Promise<string | null> | null = null;
@@ -10,7 +11,7 @@ async function attemptRefresh(): Promise<string | null> {
 
   refreshPromise = (async () => {
     try {
-      const res = await fetch('/v1/auth/refresh', {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
         method: 'POST',
         credentials: 'include', // send the HttpOnly cookie
       });
@@ -55,7 +56,11 @@ const authMiddleware: Middleware = {
   },
 };
 
-/** Typed API client. Requests are proxied to the API at `/v1` (see vite.config). */
-export const api = createClient<paths>({ baseUrl: '' });
+/**
+ * Typed API client. In dev, `API_BASE_URL` is empty and requests are proxied to
+ * the API at `/v1` (see vite.config). In prod, the SPA is on Cloudflare Pages and
+ * `API_BASE_URL` points at the API origin (e.g. https://app-api-dev.opshub.qnsc.vn).
+ */
+export const api = createClient<paths>({ baseUrl: ENV.API_BASE_URL });
 api.use(authMiddleware);
 
