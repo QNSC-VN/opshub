@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { ENV } from '@/shared/config/env';
 import { getToken } from '@/shared/api/auth-store';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ export function useAiChat() {
     setIsPending(true);
 
     try {
-      const res = await fetch('/v1/ai/chat', {
+      const res = await fetch(`${ENV.API_BASE_URL}/v1/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

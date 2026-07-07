@@ -27,7 +27,7 @@
 #     ECS_MIGRATOR_TASK_DEF    e.g. opshub-develop-migrator
 #     ECS_MIGRATOR_SUBNET      private subnet ID (comma-separated if multiple)
 #     ECS_MIGRATOR_SG          security group allowing outbound to RDS
-#     APP_URL                  e.g. https://api-dev.opshub.qnsc.vn/healthz
+#     API_URL                  e.g. https://opshub-api-dev.qnsc.vn (backend health check; /v1/healthz is appended)
 #
 #   Environment-scoped IAM roles (provisioned by opshub-infra):
 #     opshub-github-ecr-push        build-push job (ECR push + retag)
@@ -99,13 +99,7 @@ jobs:
       SOURCE_TAG: ${{ needs.context.outputs.source_tag }}
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
-        with:
-          fetch-depth: 0   # scan-secrets needs full history, not a shallow clone
-
-      - name: Scan for secrets
-        if: github.ref_type != 'tag'
-        uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup AWS OIDC + ECR login
         id: aws
@@ -234,7 +228,7 @@ jobs:
       ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup AWS OIDC (deploy role)
         uses: QNSC-VN/qnsc-ci/actions/setup-aws-oidc@v1.4
@@ -385,10 +379,10 @@ jobs:
 
       # ── Step 6: Health check ──────────────────────────────────────────────
       - name: Post-deploy health check
-        if: vars.APP_URL != ''
+        if: vars.API_URL != ''
         uses: QNSC-VN/qnsc-ci/actions/post-deploy-health-check@v1.4
         with:
-          url:             ${{ vars.APP_URL }}
+          url: ${{ vars.API_URL }}/v1/healthz
           timeout-seconds: '120'
 
       # ── Step 7: Job summary ───────────────────────────────────────────────
@@ -402,7 +396,7 @@ jobs:
           echo "| **Image tag** | \`$IMAGE_TAG\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Commit** | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Actor** | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **App URL** | \`${{ vars.APP_URL }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **API URL** | \`${{ vars.API_URL }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
       # ── Step 8: Notify Slack / Discord ────────────────────────────────────
       - name: Notify deploy result

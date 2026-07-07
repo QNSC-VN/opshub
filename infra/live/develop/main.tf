@@ -1,7 +1,8 @@
 terraform {
   required_version = ">= 1.9"
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+    aws        = { source = "hashicorp/aws", version = "~> 5.0" }
+    cloudflare = { source = "cloudflare/cloudflare", version = "~> 4.0" }
   }
 
   backend "s3" {
@@ -25,6 +26,14 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+
+# Cloudflare provider — API token supplied out-of-band (TF_VAR_cloudflare_api_token
+# / CLOUDFLARE_API_TOKEN in CI). DNS + Pages resources are created only when the
+# zone id / account id are set, so the stack applies cleanly before Cloudflare is
+# wired. Same pattern as rally, keeping the two products consistent.
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : null
+}
 
 # ── Read shared layer outputs (ECR URLs, KMS ARN, artifacts bucket) ───────────
 data "terraform_remote_state" "shared" {
@@ -53,6 +62,10 @@ locals {
   # Matches opshub prod: the ALB is fronted by Cloudflare, so ingress is locked
   # to Cloudflare edge IPs (keeps dev/prod parity within opshub).
   cloudflare_ipv4 = data.terraform_remote_state.shared.outputs.cloudflare_ipv4
+
+  # Cloudflare zone id (qnsc.vn) from bootstrap via _shared. DNS + Pages custom
+  # domain are created only when this is set, so the stack applies before wiring.
+  cloudflare_zone_id = try(data.terraform_remote_state.shared.outputs.cloudflare_zone_id, "")
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -146,55 +159,29 @@ module "messaging" {
 }
 
 # ── S3 upload bucket ──────────────────────────────────────────────────────────
-resource "aws_s3_bucket" "uploads" {
-  bucket        = "opshub-${local.env}-uploads"
+module "app_bucket" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/app-bucket?ref=app-bucket-v1.0.0"
+
+  name          = "opshub-${local.env}-uploads"
+  kms_key_arn   = local.kms_key_arn
+  versioning    = true
   force_destroy = true
-  tags          = { Name = "opshub-${local.env}-uploads", Environment = local.env }
-}
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = local.kms_key_arn
-    }
-    bucket_key_enabled = true
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "uploads" {
-  bucket                  = aws_s3_bucket.uploads.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_versioning" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  versioning_configuration { status = "Enabled" }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  rule {
-    id     = "expire-unconfirmed-uploads"
-    status = "Enabled"
-    filter { prefix = "tmp/" }
-    expiration { days = 1 }
-  }
-}
-
-resource "aws_s3_bucket_cors_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  cors_rule {
+  cors_rules = [{
     allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["http://localhost:5174", "https://app-dev.opshub.qnsc.vn"]
+    allowed_origins = ["http://localhost:5174", "https://opshub-dev.qnsc.vn"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
-  }
+  }]
+
+  lifecycle_rules = [{
+    id              = "expire-unconfirmed-uploads"
+    prefix          = "tmp/"
+    expiration_days = 1
+  }]
+
+  tags = { Environment = local.env }
 }
 
 # ── ALB (shared module: LB + HTTPS/HTTP listener pair) ───────────────────────
@@ -289,16 +276,16 @@ module "api" {
     { name = "PORT", value = "3000" },
     { name = "AWS_REGION", value = local.region },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
-    { name = "CORS_ORIGINS", value = "https://app-dev.opshub.qnsc.vn" },
-    { name = "APP_URL", value = "https://app-dev.opshub.qnsc.vn" },
+    { name = "CORS_ORIGINS", value = "https://opshub-dev.qnsc.vn" },
+    { name = "APP_URL", value = "https://opshub-dev.qnsc.vn" },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
-  s3_bucket_arns = [aws_s3_bucket.uploads.arn]
+  s3_bucket_arns = [module.app_bucket.arn]
 
   tags = { Environment = local.env, Service = "api", AutoStop = "true" }
 }
@@ -342,14 +329,14 @@ module "worker" {
     { name = "NODE_ENV", value = "production" },
     { name = "AWS_REGION", value = local.region },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = aws_s3_bucket.uploads.id },
+    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
   ]
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
-  s3_bucket_arns = [aws_s3_bucket.uploads.arn]
+  s3_bucket_arns = [module.app_bucket.arn]
 
   tags = { Environment = local.env, Service = "worker", AutoStop = "true" }
 }
@@ -366,45 +353,44 @@ module "waf" {
   tags = { Environment = local.env }
 }
 
-# ── CloudFront → ALB HTTP forward rule for /v1/* ─────────────────────────────
-# CloudFront connects to the ALB on HTTP (port 80) to avoid TLS SNI mismatch
-# between the CloudFront origin request (raw ELB hostname) and the ACM cert
-# issued for the custom API domain. This rule accepts those HTTP requests and
-# forwards /v1/* to the API target group; all other paths remain HTTP→HTTPS redirect.
-resource "aws_lb_listener_rule" "http_api_forward" {
-  listener_arn = module.alb.http_listener_arn
-  priority     = 1
+# ── Web SPA — Cloudflare Pages (zero-egress, native SPA routing) ─────────────
+# Consistent with rally: SPA on Cloudflare Pages (opshub-dev.qnsc.vn), API
+# on its own Cloudflare-proxied subdomain → ALB. Replaces the deprecated
+# CloudFront same-origin proxy. Gated on cloudflare_account_id so the stack
+# still applies before the Cloudflare account is wired.
+module "web" {
+  count  = var.cloudflare_account_id != "" ? 1 : 0
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/pages-web?ref=pages-web-v1.0.0"
 
-  action {
-    type             = "forward"
-    target_group_arn = module.api.target_group_arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/v1/*"]
-    }
-  }
+  account_id  = var.cloudflare_account_id
+  name        = "opshub-develop-web"
+  zone_id     = local.cloudflare_zone_id
+  domain      = local.cloudflare_zone_id != "" ? "opshub-dev.qnsc.vn" : ""
+  record_name = local.cloudflare_zone_id != "" ? "opshub-dev" : ""
+  comment     = "opshub-develop web SPA → Cloudflare Pages (managed by opshub-infra develop)"
 }
 
-# ── CDN (S3 + CloudFront) — opshub-web SPA ────────────────────────────────────
-module "cdn" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cdn?ref=cdn-v1.0.3"
+# ── DNS — opshub-api-dev.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────
+# The API's public edge, matching rally. Cloudflare-proxied (orange cloud) so
+# the ALB is never directly reachable; the ALB SG is locked to cloudflare_ipv4.
+# The api ECS service already forwards /* on the ALB HTTPS listener.
+module "dns_api" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.0.0"
 
-  name                   = "opshub-web-develop"
-  acm_cert_arn           = var.web_acm_cert_arn
-  aliases                = []
-  price_class            = "PriceClass_100" # develop: US/EU PoPs only — cheaper than PriceClass_200
-  api_origin_domain_name = module.alb.dns_name
-
-  tags = { Environment = local.env, Service = "web" }
+  enabled = local.cloudflare_zone_id != ""
+  zone_id = local.cloudflare_zone_id
+  name    = "opshub-api-dev"
+  type    = "CNAME"
+  content = module.alb.dns_name
+  proxied = true
+  comment = "opshub-develop API → ALB via Cloudflare proxy (managed by opshub-infra develop)"
 }
 
 # ── Dev scheduler: stop RDS + scale ECS to 0 off-hours ───────────────────────
 # Tag-driven: acts on resources tagged AutoStop=true.
 # Stops at 8pm ICT, restarts at 8am ICT weekdays.
 module "dev_scheduler" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dev-scheduler?ref=dev-scheduler-v1.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dev-scheduler?ref=dev-scheduler-v1.1.0"
   name   = local.name
   tags   = { Environment = local.env }
 }

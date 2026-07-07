@@ -1,15 +1,27 @@
-# =============================================================================
-# OpenTofu Apply — applies after merge to main.
-# Shared → develop → prod (prod requires GitHub Environment approval).
-# =============================================================================
 name: OpenTofu Apply
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Infra apply, gated the same way as the app deploys (backend-deploy.yml):
+#   push to main       → apply _shared + develop  (auto)
+#   push a v*.*.* tag  → apply _shared + prod      (prod also gated by the
+#                        "production" GitHub Environment's required reviewer)
+#
+# Prod infra can NOT be applied by a normal merge to main — it only happens on
+# a deliberate semver tag, so an accidental push can never touch production.
+#
+# Structure is intentionally identical to rally/.github/workflows/infra-apply.yml
+# (shared composite actions + the same staged/gated jobs); only the values differ
+# (role prefix, TF_VARs). Keep the two products in lock-step.
+# ─────────────────────────────────────────────────────────────────────────────
 on:
   push:
     branches: [main]
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
     paths:
       - "infra/live/**"
       - ".github/workflows/infra-apply.yml"
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -20,18 +32,21 @@ env:
   AWS_REGION: ap-southeast-1
 
 jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Shared (ECR + OIDC roles) — always applies first (both branch and tag runs).
+  # ───────────────────────────────────────────────────────────────────────────
   apply-shared:
     runs-on: ubuntu-latest
     environment: shared
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
         with:
-          role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
-          aws-region:   ${{ env.AWS_REGION }}
+          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          aws-region: ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
       - name: tofu init
@@ -46,19 +61,23 @@ jobs:
         working-directory: infra/live/_shared
         run: tofu apply -input=false -auto-approve
 
+  # ───────────────────────────────────────────────────────────────────────────
+  # Develop — only on a branch push to main (NOT on tag pushes).
+  # ───────────────────────────────────────────────────────────────────────────
   apply-develop:
     needs: apply-shared
+    if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
-    environment: develop
+    environment: develop   # no approval gate
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
         with:
-          role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
-          aws-region:   ${{ env.AWS_REGION }}
+          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          aws-region: ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
       - name: tofu init
@@ -73,25 +92,66 @@ jobs:
         working-directory: infra/live/develop
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:       ${{ secrets.ACM_CERT_ARN_DEVELOP }}
-          TF_VAR_web_acm_cert_arn:   ${{ secrets.WEB_ACM_CERT_ARN_DEVELOP }}
-          TF_VAR_image_tag:          ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
-          TF_VAR_entra_tenant_id:    ${{ vars.ENTRA_TENANT_ID }}
-          TF_VAR_entra_client_id:    ${{ vars.ENTRA_CLIENT_ID }}
+          TF_VAR_acm_cert_arn:          ${{ vars.ACM_CERT_ARN_DEVELOP }}
+          TF_VAR_image_tag:             ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+          TF_VAR_entra_tenant_id:       ${{ vars.ENTRA_TENANT_ID }}
+          TF_VAR_entra_client_id:       ${{ vars.ENTRA_CLIENT_ID }}
+          TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      # Mint a short-lived installation token from the RELEASE_BOT GitHub App
+      # (same app release.yml uses) so we never need a long-lived user PAT.
+      # Requires the app to have "Variables: read and write" on this repo.
+      # Falls back to no token (publish step skipped) when the app isn't set.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        if: ${{ vars.RELEASE_BOT_APP_ID != '' }}
+        continue-on-error: true
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      # Sync the infra IDs the deploy workflows read (backend-deploy.yml,
+      # web-deploy.yml) straight from Terraform outputs, so a rebuild that
+      # changes subnet/SG/Pages IDs can never leave the vars stale. Skipped
+      # automatically when no app token could be minted. Tolerant of a missing
+      # "Variables: write" grant so it never blocks the infra apply.
+      - name: Publish infra IDs to develop environment variables
+        if: ${{ steps.app-token.outputs.token != '' }}
+        continue-on-error: true
+        working-directory: infra/live/develop
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          set_var() { echo "  set ${1}"; gh variable set "$1" --env develop --repo "$REPO" --body "$2"; }
+          set_var ECS_CLUSTER           "$(tofu output -raw ecs_cluster_name)"
+          set_var ECS_API_SERVICE       "$(tofu output -raw ecs_api_service)"
+          set_var ECS_WORKER_SERVICE    "$(tofu output -raw ecs_worker_service)"
+          set_var ECS_MIGRATOR_TASK_DEF "$(tofu output -raw ecs_migrator_task_def)"
+          set_var ECS_MIGRATOR_SUBNET   "$(tofu output -json private_subnet_ids | jq -r 'join(",")')"
+          set_var ECS_MIGRATOR_SG       "$(tofu output -raw sg_app_id)"
+          set_var PAGES_PROJECT         "$(tofu output -raw web_pages_project)"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Production — only on a v*.*.* tag push, AND requires manual approval via the
+  # "production" GitHub Environment (configure a required reviewer there).
+  # ───────────────────────────────────────────────────────────────────────────
   apply-prod:
-    needs: apply-develop
+    needs: apply-shared
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
-    environment: production   # requires manual approval in GitHub Settings
+    environment: production
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
         with:
-          role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
-          aws-region:   ${{ env.AWS_REGION }}
+          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          aws-region: ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
       - name: tofu init
@@ -106,8 +166,9 @@ jobs:
         working-directory: infra/live/prod
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:       ${{ secrets.ACM_CERT_ARN_PROD }}
-          TF_VAR_web_acm_cert_arn:   ${{ secrets.WEB_ACM_CERT_ARN_PROD }}
-          TF_VAR_image_tag:          ${{ vars.PINNED_IMAGE_TAG }}
-          TF_VAR_entra_tenant_id:    ${{ vars.ENTRA_TENANT_ID }}
-          TF_VAR_entra_client_id:    ${{ vars.ENTRA_CLIENT_ID }}
+          TF_VAR_acm_cert_arn:          ${{ secrets.ACM_CERT_ARN_PROD }}
+          TF_VAR_image_tag:             ${{ vars.PINNED_IMAGE_TAG }}
+          TF_VAR_entra_tenant_id:       ${{ vars.ENTRA_TENANT_ID }}
+          TF_VAR_entra_client_id:       ${{ vars.ENTRA_CLIENT_ID }}
+          TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

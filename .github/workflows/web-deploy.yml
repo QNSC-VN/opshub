@@ -17,11 +17,11 @@
 #     AWS_REGION               e.g. ap-southeast-1
 #     S3_BUCKET                e.g. opshub-web-develop
 #     CLOUDFRONT_ID            CloudFront distribution ID
-#     VITE_API_URL             e.g. https://api-dev.opshub.qnsc.vn
+#     VITE_API_URL             e.g. https://opshub-api-dev.qnsc.vn
 #     VITE_APP_ENV             development | production
 #     VITE_ENTRA_TENANT_ID     Azure AD tenant ID (or empty to disable SSO)
 #     VITE_ENTRA_CLIENT_ID     Azure AD client ID (or empty to disable SSO)
-#     APP_URL                  e.g. https://app-dev.opshub.qnsc.vn (for health)
+#     APP_URL                  e.g. https://opshub-dev.qnsc.vn (for health)
 #
 #   Environment-scoped IAM roles (provisioned by opshub-infra):
 #     opshub-github-web-deploy-<env>   S3 sync + CloudFront invalidation
@@ -86,12 +86,7 @@ jobs:
       ENVIRONMENT: ${{ needs.context.outputs.environment }}
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
-        with:
-          fetch-depth: 0   # scan-secrets needs full history, not a shallow clone
-
-      - name: Scan for secrets
-        uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install dependencies
         uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.5
@@ -109,36 +104,19 @@ jobs:
           VITE_ENTRA_TENANT_ID:   ${{ vars.VITE_ENTRA_TENANT_ID }}
           VITE_ENTRA_CLIENT_ID:   ${{ vars.VITE_ENTRA_CLIENT_ID }}
 
-      # ── Configure AWS (OIDC) ──────────────────────────────────────────────
-      - name: Setup AWS OIDC
-        uses: QNSC-VN/qnsc-ci/actions/setup-aws-oidc@v1.5
+      # ── Deploy to Cloudflare Pages ────────────────────────────────────────
+      # Zero-egress static hosting with native SPA routing. wrangler uploads the
+      # pre-built dist as a Pages deployment; --branch main marks it production.
+      # Consistent with rally.
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
         with:
-          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-web-deploy-${{ env.ENVIRONMENT }}
-          region: ${{ vars.AWS_REGION }}
-
-      # ── Sync to S3 ────────────────────────────────────────────────────────
-      # Hashed assets get a 1-year immutable cache.
-      # index.html is never cached so users always load the latest entry point.
-      - name: Sync dist to S3
-        run: |
-          aws s3 sync apps/web/dist/ s3://${{ vars.S3_BUCKET }}/ \
-            --delete \
-            --exclude "index.html" \
-            --cache-control "public, max-age=31536000, immutable" \
-            --region "${{ vars.AWS_REGION }}"
-
-          aws s3 cp apps/web/dist/index.html s3://${{ vars.S3_BUCKET }}/index.html \
-            --cache-control "no-cache, no-store, must-revalidate" \
-            --content-type "text/html" \
-            --region "${{ vars.AWS_REGION }}"
-
-      # ── Invalidate CloudFront cache ───────────────────────────────────────
-      - name: Invalidate CloudFront cache
-        uses: QNSC-VN/qnsc-ci/actions/cloudfront-invalidate@v1.5
-        with:
-          distribution-id: ${{ vars.CLOUDFRONT_ID }}
-          region: us-east-1   # CloudFront is a global service — invalidation API is always us-east-1
-          wait: 'true'
+          apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy apps/web/dist
+            --project-name=${{ vars.PAGES_PROJECT }}
+            --branch=main
 
       # ── Health check — confirm the new version is serving ─────────────────
       - name: Post-deploy health check

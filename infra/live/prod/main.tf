@@ -1,7 +1,8 @@
 terraform {
   required_version = ">= 1.9"
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+    aws        = { source = "hashicorp/aws", version = "~> 5.0" }
+    cloudflare = { source = "cloudflare/cloudflare", version = "~> 4.0" }
   }
 
   backend "s3" {
@@ -25,6 +26,13 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+
+# Cloudflare provider — API token supplied out-of-band (TF_VAR_cloudflare_api_token
+# / CLOUDFLARE_API_TOKEN in CI). DNS + Pages resources are created only when the
+# zone id / account id are set. Same pattern as rally, keeping products consistent.
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : null
+}
 
 # ── Read shared layer outputs (ECR URLs, KMS ARN, artifacts bucket) ───────────
 data "terraform_remote_state" "shared" {
@@ -51,6 +59,10 @@ locals {
   # Cloudflare IPv4 ranges — single source of truth in qnsc-infra bootstrap
   # (read via _shared remote state), so a CF range change is one edit there.
   cloudflare_ipv4 = data.terraform_remote_state.shared.outputs.cloudflare_ipv4
+
+  # Cloudflare zone id (qnsc.vn) from bootstrap via _shared. DNS + Pages custom
+  # domain are created only when this is set, so the stack applies before wiring.
+  cloudflare_zone_id = try(data.terraform_remote_state.shared.outputs.cloudflare_zone_id, "")
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -148,56 +160,30 @@ module "messaging" {
   tags = { Environment = local.env }
 }
 
-# ── S3 upload bucket ──────────────────────────────────────────────────────────
-resource "aws_s3_bucket" "uploads" {
-  bucket        = "opshub-${local.env}-uploads"
-  force_destroy = false
-  tags          = { Name = "opshub-${local.env}-uploads", Environment = local.env }
-}
+# ── S3 upload bucket (shared app-bucket module) ───────────────────────────────
+module "app_bucket" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/app-bucket?ref=app-bucket-v1.0.0"
 
-resource "aws_s3_bucket_versioning" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  versioning_configuration { status = "Enabled" }
-}
+  name        = "opshub-${local.env}-uploads"
+  kms_key_arn = local.kms_key_arn
+  versioning  = true
+  # prod: force_destroy stays false (default) — never auto-delete uploads.
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = local.kms_key_arn
-    }
-    bucket_key_enabled = true
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "uploads" {
-  bucket                  = aws_s3_bucket.uploads.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  rule {
-    id     = "expire-unconfirmed-uploads"
-    status = "Enabled"
-    filter { prefix = "tmp/" }
-    expiration { days = 1 }
-  }
-}
-
-resource "aws_s3_bucket_cors_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  cors_rule {
+  cors_rules = [{
     allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["https://app.opshub.qnsc.vn"]
+    allowed_origins = ["https://opshub.qnsc.vn"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
-  }
+  }]
+
+  lifecycle_rules = [{
+    id              = "expire-unconfirmed-uploads"
+    prefix          = "tmp/"
+    expiration_days = 1
+  }]
+
+  tags = { Environment = local.env }
 }
 
 # ── ALB ───────────────────────────────────────────────────────────────────────
@@ -238,11 +224,11 @@ module "ecs_cluster" {
 module "migrator" {
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/oneshot-task?ref=oneshot-task-v1.0.0"
 
-  name           = "${local.name}-migrator"
-  container_name = "migrator"
-  image          = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
-  cpu            = 512
-  memory         = 1024
+  name               = "${local.name}-migrator"
+  container_name     = "migrator"
+  image              = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
+  cpu                = 512
+  memory             = 1024
   execution_role_arn = module.api.execution_role_arn
   task_role_arn      = module.api.task_role_arn
   region             = local.region
@@ -291,28 +277,28 @@ module "api" {
   secret_arns = values(module.secrets.secret_arns)
   kms_key_arn = local.kms_key_arn
   secrets = [
-    { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY",     secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY",      secret_arn = module.secrets.secret_arns["jwt-public-key"] },
-    { name = "COOKIE_SECRET",       secret_arn = module.secrets.secret_arns["cookie-secret"] },
+    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
+    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
+    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+    { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
     { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
-    { name = "VALKEY_URL",          secret_arn = module.secrets.secret_arns["valkey-url"] },
+    { name = "VALKEY_URL", secret_arn = module.secrets.secret_arns["valkey-url"] },
   ]
   environment_vars = [
-    { name = "NODE_ENV",          value = "production" },
-    { name = "PORT",              value = "3000" },
-    { name = "AWS_REGION",        value = local.region },
-    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
-    { name = "ENTRA_TENANT_ID",   value = var.entra_tenant_id },
-    { name = "ENTRA_CLIENT_ID",   value = var.entra_client_id },
-    { name = "CORS_ORIGINS",      value = "https://app.opshub.qnsc.vn" },
-    { name = "APP_URL",           value = "https://app.opshub.qnsc.vn" },
+    { name = "NODE_ENV", value = "production" },
+    { name = "PORT", value = "3000" },
+    { name = "AWS_REGION", value = local.region },
+    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
+    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
+    { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
+    { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
+    { name = "CORS_ORIGINS", value = "https://opshub.qnsc.vn" },
+    { name = "APP_URL", value = "https://opshub.qnsc.vn" },
   ]
 
   sqs_queue_arns     = values(module.messaging.queue_arns)
   sns_topic_arns     = values(module.messaging.topic_arns)
-  s3_bucket_arns     = [aws_s3_bucket.uploads.arn]
+  s3_bucket_arns     = [module.app_bucket.arn]
   cpu_target_pct     = 60 # tighter target in prod — scales out earlier
   memory_target_pct  = 70
   log_retention_days = 90 # SOC 2 minimum for prod logs
@@ -346,25 +332,25 @@ module "worker" {
   secret_arns = values(module.secrets.secret_arns)
   kms_key_arn = local.kms_key_arn
   secrets = [
-    { name = "DATABASE_URL",        secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY",     secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY",      secret_arn = module.secrets.secret_arns["jwt-public-key"] },
-    { name = "COOKIE_SECRET",       secret_arn = module.secrets.secret_arns["cookie-secret"] },
+    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
+    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
+    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+    { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
     { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
-    { name = "VALKEY_URL",          secret_arn = module.secrets.secret_arns["valkey-url"] },
+    { name = "VALKEY_URL", secret_arn = module.secrets.secret_arns["valkey-url"] },
   ]
   environment_vars = [
-    { name = "NODE_ENV",          value = "production" },
-    { name = "AWS_REGION",        value = local.region },
-    { name = "SQS_OUTBOX_URL",    value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET",  value = aws_s3_bucket.uploads.id },
-    { name = "ENTRA_TENANT_ID",   value = var.entra_tenant_id },
-    { name = "ENTRA_CLIENT_ID",   value = var.entra_client_id },
+    { name = "NODE_ENV", value = "production" },
+    { name = "AWS_REGION", value = local.region },
+    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
+    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
+    { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
+    { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
   ]
 
   sqs_queue_arns     = values(module.messaging.queue_arns)
   sns_topic_arns     = values(module.messaging.topic_arns)
-  s3_bucket_arns     = [aws_s3_bucket.uploads.arn]
+  s3_bucket_arns     = [module.app_bucket.arn]
   log_retention_days = 90
 
   tags = { Environment = local.env, Service = "worker" }
@@ -381,32 +367,32 @@ module "waf" {
   tags = { Environment = local.env }
 }
 
-# ── CloudFront → ALB HTTP forward rule for /v1/* ─────────────────────────────
-resource "aws_lb_listener_rule" "http_api_forward" {
-  listener_arn = module.alb.http_listener_arn
-  priority     = 1
+# ── Web SPA — Cloudflare Pages (zero-egress, native SPA routing) ─────────────
+# Consistent with rally + opshub develop: SPA on Cloudflare Pages
+# (opshub.qnsc.vn), API on its own Cloudflare-proxied subdomain → ALB.
+# Replaces the deprecated CloudFront same-origin proxy. Gated on
+# cloudflare_account_id so the stack applies before the account is wired.
+module "web" {
+  count  = var.cloudflare_account_id != "" ? 1 : 0
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/pages-web?ref=pages-web-v1.0.0"
 
-  action {
-    type             = "forward"
-    target_group_arn = module.api.target_group_arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/v1/*"]
-    }
-  }
+  account_id  = var.cloudflare_account_id
+  name        = "opshub-prod-web"
+  zone_id     = local.cloudflare_zone_id
+  domain      = local.cloudflare_zone_id != "" ? "opshub.qnsc.vn" : ""
+  record_name = local.cloudflare_zone_id != "" ? "opshub" : ""
+  comment     = "opshub-prod web SPA → Cloudflare Pages (managed by opshub-infra prod)"
 }
 
-# ── CDN (S3 + CloudFront) — opshub-web SPA ────────────────────────────────────
-module "cdn" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cdn?ref=cdn-v1.0.3"
+# ── DNS — opshub-api.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────────
+module "dns_api" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.0.0"
 
-  name                   = "opshub-web-prod"
-  acm_cert_arn           = var.web_acm_cert_arn
-  aliases                = [] # set to ["app.opshub.qnsc.vn"] once DNS is configured
-  price_class            = "PriceClass_All"
-  api_origin_domain_name = module.alb.dns_name
-
-  tags = { Environment = local.env, Service = "web" }
+  enabled = local.cloudflare_zone_id != ""
+  zone_id = local.cloudflare_zone_id
+  name    = "opshub-api"
+  type    = "CNAME"
+  content = module.alb.dns_name
+  proxied = true
+  comment = "opshub-prod API → ALB via Cloudflare proxy (managed by opshub-infra prod)"
 }

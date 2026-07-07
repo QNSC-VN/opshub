@@ -3,10 +3,19 @@ variable "acm_cert_arn" {
   description = "ACM certificate ARN for the ALB HTTPS listener."
 }
 
-variable "web_acm_cert_arn" {
+variable "cloudflare_account_id" {
   type        = string
-  description = "ACM certificate ARN for CloudFront (must be in us-east-1)."
+  default     = ""
+  description = "Cloudflare account ID that owns the Pages project (account-level input, not a secret). Pass via TF_VAR_cloudflare_account_id in CI."
 }
+
+variable "cloudflare_api_token" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Cloudflare API token (Zone DNS + Pages edit). Pass via TF_VAR_cloudflare_api_token in CI. Empty = skip Cloudflare provider auth."
+}
+
 
 variable "image_tag" {
   type        = string

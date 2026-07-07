@@ -47,7 +47,9 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
     exposedHeaders: ['X-Correlation-Id', 'RateLimit-Limit', 'RateLimit-Remaining', 'Retry-After'],
   });
 
-  app.setGlobalPrefix('v1', { exclude: ['healthz', 'readyz'] });
+  // Health probes are served at /v1/healthz and /v1/readyz to match the ALB
+  // target-group health check, the Docker HEALTHCHECK, and the deploy smoke test.
+  app.setGlobalPrefix('v1');
   app.enableShutdownHooks();
 
   // Expose OpenAPI only outside production — avoids leaking endpoint inventory
