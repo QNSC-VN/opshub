@@ -38,11 +38,12 @@ data "terraform_remote_state" "platform" {
 
 # ── Container registries ──────────────────────────────────────────────────────
 module "ecr" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecr?ref=ecr-v1.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecr?ref=ecr-v1.1.0"
 
-  repository_names = ["opshub-api", "opshub-worker", "opshub-migrator"]
-  kms_key_arn      = data.terraform_remote_state.platform.outputs.kms_key_arn
-  tags             = { Scope = "shared" }
+  repository_names     = ["opshub-api", "opshub-worker", "opshub-migrator"]
+  image_tag_mutability = "MUTABLE" # allows re-tagging :latest
+  kms_key_arn          = data.terraform_remote_state.platform.outputs.kms_key_arn
+  tags                 = { Scope = "shared" }
 }
 
 # ── GitHub Actions OIDC roles (ECS deploy + ECR push + infra CI) ─────────────
