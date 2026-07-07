@@ -46,3 +46,7 @@ junit.xml
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.plan
+# Local var files may hold environment-specific values — never commit
+**/terraform.tfvars
+**/*.auto.tfvars
