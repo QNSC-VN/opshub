@@ -1,6 +1,8 @@
 # =============================================================================
-# OpenTofu Plan — dry-run on every PR targeting main.
-# Posts a plan comment per changed workspace directly on the PR.
+# OpenTofu Plan — thin caller over the shared reusable tofu-plan workflow.
+# Logic (detect changed workspaces → matrix plan → PR comment) lives in
+# QNSC-VN/qnsc-ci/.github/workflows/tofu-plan.yml. Read-only; assumes the
+# opshub-github-infra-plan role. Product-specific TF_VARs are passed below.
 # =============================================================================
 name: OpenTofu Plan
 
@@ -12,91 +14,16 @@ on:
       - ".github/workflows/infra-plan.yml"
 
 permissions:
-  id-token: write
+  id-token: write # OIDC
   contents: read
-  pull-requests: write
-
-env:
-  TOFU_VERSION: "1.9.1"
-  AWS_REGION: ap-southeast-1
+  pull-requests: write # post plan comment
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      workspaces: ${{ steps.set.outputs.workspaces }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
-        with: { fetch-depth: 0 }
-
-      - id: set
-        run: |
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            | grep '^infra/live/' \
-            | cut -d/ -f1-3 \
-            | sort -u \
-            | jq -Rc '[.,inputs]' \
-            | jq -sc 'add // []')
-          echo "workspaces=$CHANGED" >> $GITHUB_OUTPUT
-
   plan:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.workspaces != '[]' }}
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        workspace: ${{ fromJson(needs.detect-changes.outputs.workspaces) }}
-
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
-
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
-        with:
-          role-arn:     arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-plan
-          aws-region:   ${{ env.AWS_REGION }}
-          tofu-version: ${{ env.TOFU_VERSION }}
-
-      - name: tofu init
-        working-directory: ${{ matrix.workspace }}
-        run: tofu init -input=false
-
-      - name: tofu validate
-        working-directory: ${{ matrix.workspace }}
-        run: tofu validate
-
-      - name: tofu plan
-        id: plan
-        working-directory: ${{ matrix.workspace }}
-        run: |
-          tofu plan -input=false -no-color -out=tfplan 2>&1 | tee plan.txt
-          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
-        env:
-          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN }}
-          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN }}
-          TF_VAR_image_tag:        ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
-        continue-on-error: true   # allow comment step to run; real failure gate below
-
-      - name: Post plan comment
-        if: always()   # post even when plan fails so PR shows the error
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea   # v7.0.1
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('${{ matrix.workspace }}/plan.txt', 'utf8');
-            const workspace = '${{ matrix.workspace }}';
-            const truncated = plan.length > 60000
-              ? plan.substring(0, 60000) + '\n\n... (truncated)'
-              : plan;
-            const body = `### OpenTofu Plan — \`${workspace}\`\n\`\`\`hcl\n${truncated}\n\`\`\``;
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body,
-            });
-
-      - name: Fail if plan errored
-        if: steps.plan.outputs.exitcode != '0' && steps.plan.outputs.exitcode != '2'
-        run: exit 1
+    uses: QNSC-VN/qnsc-ci/.github/workflows/tofu-plan.yml@v1
+    with:
+      product: opshub
+      tf_vars_json: '{"image_tag": "${{ vars.DEFAULT_IMAGE_TAG || ''latest'' }}"}'
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      tf_secret_vars_json: '{"acm_cert_arn": "${{ secrets.ACM_CERT_ARN }}", "web_acm_cert_arn": "${{ secrets.WEB_ACM_CERT_ARN }}"}'

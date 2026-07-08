@@ -8,7 +8,7 @@ Internal IT/HR operations platform (**Zone B2 — internal**, not internet-expos
 
 ```
 opshub/
-├── apps/{api,worker,web}/   # NestJS api + worker (ECS Fargate); Vite SPA (S3+CloudFront)
+├── apps/{api,worker,web}/   # NestJS api + worker (ECS Fargate); Vite SPA (Cloudflare Pages)
 ├── libs/                    # shared backend libs (== design's "packages/", NestJS convention)
 ├── db/                      # Drizzle schema + migrations
 ├── deploy/ecs/              # deploy-descriptor notes (task-def is infra-owned)
