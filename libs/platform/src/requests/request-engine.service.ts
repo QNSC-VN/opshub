@@ -62,9 +62,7 @@ export class RequestEngine {
 
     const expiresAt =
       opts?.expiresAt ??
-      (def.defaultExpiryHours
-        ? new Date(Date.now() + def.defaultExpiryHours * 3_600_000)
-        : null);
+      (def.defaultExpiryHours ? new Date(Date.now() + def.defaultExpiryHours * 3_600_000) : null);
 
     // SLA deadline — stored for breach cron; separate from expiry
     const slaHours = def.slaHours ?? null;
@@ -97,8 +95,18 @@ export class RequestEngine {
         })
         .returning();
 
-      const submitPayload = { requestId: row.id, type, requesterId: actor.sub, priority: row.priority };
-      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: row.id, eventType: 'request.submitted', payload: submitPayload });
+      const submitPayload = {
+        requestId: row.id,
+        type,
+        requesterId: actor.sub,
+        priority: row.priority,
+      };
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'request',
+        aggregateId: row.id,
+        eventType: 'request.submitted',
+        payload: submitPayload,
+      });
       await this.webhookEnqueue.fanout(tx, 'request.submitted', submitPayload);
 
       // Notify the initial assignee (if any) that a new request awaits review.
@@ -238,8 +246,20 @@ export class RequestEngine {
       }
 
       const approvalEventType = isFinalStep ? 'request.approved' : 'request.step_approved';
-      const approvalPayload = { requestId, type: request.type, approverId: actor.sub, step: currentStep, isFinalStep, totalSteps: maxStep };
-      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: approvalEventType, payload: approvalPayload });
+      const approvalPayload = {
+        requestId,
+        type: request.type,
+        approverId: actor.sub,
+        step: currentStep,
+        isFinalStep,
+        totalSteps: maxStep,
+      };
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'request',
+        aggregateId: requestId,
+        eventType: approvalEventType,
+        payload: approvalPayload,
+      });
       await this.webhookEnqueue.fanout(tx, approvalEventType, approvalPayload);
 
       return row;
@@ -329,7 +349,12 @@ export class RequestEngine {
       });
 
       const rejectedPayload = { requestId, type: request.type, approverId: actor.sub, note };
-      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.rejected', payload: rejectedPayload });
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'request',
+        aggregateId: requestId,
+        eventType: 'request.rejected',
+        payload: rejectedPayload,
+      });
       await this.webhookEnqueue.fanout(tx, 'request.rejected', rejectedPayload);
 
       return row;
@@ -372,7 +397,12 @@ export class RequestEngine {
       }
 
       const cancelledPayload = { requestId, type: request.type, cancelledBy: actor.sub };
-      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.cancelled', payload: cancelledPayload });
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'request',
+        aggregateId: requestId,
+        eventType: 'request.cancelled',
+        payload: cancelledPayload,
+      });
       await this.webhookEnqueue.fanout(tx, 'request.cancelled', cancelledPayload);
 
       return row;
@@ -401,7 +431,12 @@ export class RequestEngine {
       }
 
       const expiredPayload = { requestId, type: request.type };
-      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.expired', payload: expiredPayload });
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'request',
+        aggregateId: requestId,
+        eventType: 'request.expired',
+        payload: expiredPayload,
+      });
       await this.webhookEnqueue.fanout(tx, 'request.expired', expiredPayload);
     });
 
@@ -411,11 +446,7 @@ export class RequestEngine {
   // ── Query ──────────────────────────────────────────────────────────────────
 
   async getById(id: string): Promise<RequestItemWithApprovals | null> {
-    const [row] = await this.db
-      .select()
-      .from(requestItems)
-      .where(eq(requestItems.id, id))
-      .limit(1);
+    const [row] = await this.db.select().from(requestItems).where(eq(requestItems.id, id)).limit(1);
     if (!row) return null;
 
     const approvalRows = await this.db
@@ -424,7 +455,7 @@ export class RequestEngine {
       .where(eq(requestApprovals.requestId, id))
       .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt));
 
-    return { ...(row), approvals: approvalRows as RequestItemWithApprovals['approvals'] };
+    return { ...row, approvals: approvalRows };
   }
 
   async list(
@@ -476,14 +507,12 @@ export class RequestEngine {
     const approvalMap = new Map<string, RequestItemWithApprovals['approvals']>();
     for (const a of allApprovals) {
       const key = (a as { requestId: string }).requestId;
-      (approvalMap.get(key) ?? approvalMap.set(key, []).get(key)!).push(
-        a as RequestItemWithApprovals['approvals'][number],
-      );
+      (approvalMap.get(key) ?? approvalMap.set(key, []).get(key)!).push(a);
     }
 
     return {
       rows: rows.map((r) => ({
-        ...(r),
+        ...r,
         approvals: approvalMap.get(r.id) ?? [],
       })),
       total: count,
