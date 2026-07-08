@@ -71,6 +71,13 @@
       "when": 1783000003000,
       "tag": "0009_fk_constraints_duration_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783000004000,
+      "tag": "0010_outbox_status_delivered",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-output "alb_dns_name" { value = module.alb.dns_name }
+output "alb_dns_name" { value = data.terraform_remote_state.runtime.outputs.alb_dns_name }
 output "ecs_cluster_name" { value = module.ecs_cluster.cluster_name }
 output "ecs_api_service" { value = module.api.service_name }
 output "ecs_worker_service" { value = module.worker.service_name }
@@ -8,13 +8,14 @@ output "ecs_migrator_task_def" {
 }
 output "rds_endpoint" { value = module.rds.endpoint }
 output "rds_master_secret_arn" { value = module.rds.master_secret_arn }
-output "cache_endpoint" { value = module.cache.endpoint }
+output "cache_endpoint" { value = local.cache_endpoint }
 output "outbox_queue_url" { value = module.messaging.queue_urls["outbox"] }
 output "secret_arns" { value = module.secrets.secret_arns }
 
-# Networking — needed for ECS run-task (migrator) and GitHub env vars
-output "private_subnet_ids" { value = module.network.private_subnet_ids }
-output "sg_app_id" { value = module.network.sg_app_id }
+# Networking — needed for ECS run-task (migrator) and GitHub env vars.
+# Sourced from the shared runtime layer (runtime-prod) so the CI output-sync stays correct.
+output "private_subnet_ids" { value = data.terraform_remote_state.runtime.outputs.private_subnet_ids }
+output "sg_app_id" { value = data.terraform_remote_state.runtime.outputs.sg_app_id }
 
 # Web (Cloudflare Pages) outputs — PAGES_PROJECT is published to GitHub env vars
 # for the opshub-web CI (wrangler --project-name).
