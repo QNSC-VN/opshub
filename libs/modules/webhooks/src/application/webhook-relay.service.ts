@@ -106,7 +106,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
   protected async markSent(tx: DrizzleTx, rowId: string): Promise<void> {
     await tx
       .update(webhookDeliveries)
-      .set({ status: 'sent', deliveredAt: new Date() })
+      .set({ status: 'delivered', deliveredAt: new Date() })
       .where(eq(webhookDeliveries.id, rowId));
   }
 
@@ -117,7 +117,8 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
     newStatus: 'pending' | 'failed',
     error: string,
   ): Promise<void> {
-    const delaySeconds = RETRY_DELAYS_SECONDS[Math.min(newAttempts - 1, RETRY_DELAYS_SECONDS.length - 1)] ?? 3600;
+    const delaySeconds =
+      RETRY_DELAYS_SECONDS[Math.min(newAttempts - 1, RETRY_DELAYS_SECONDS.length - 1)] ?? 3600;
     const nextAttemptAt = new Date(Date.now() + delaySeconds * 1000);
     await tx
       .update(webhookDeliveries)

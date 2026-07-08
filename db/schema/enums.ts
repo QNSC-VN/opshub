@@ -61,7 +61,12 @@ export const findingStatusEnum = pgEnum('finding_status', [
   'resolved',
   'risk_accepted',
 ]);
-export const findingSeverityEnum = pgEnum('finding_severity', ['low', 'medium', 'high', 'critical']);
+export const findingSeverityEnum = pgEnum('finding_severity', [
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
 export const softwareListingEnum = pgEnum('software_listing', [
   'whitelisted',
   'blacklisted',
@@ -92,7 +97,11 @@ export const overtimeStatusEnum = pgEnum('overtime_status', ['pending', 'approve
 export const shiftTypeEnum = pgEnum('shift_type', ['night', 'on_call', 'weekend']);
 
 // ── Storage ──────────────────────────────────────────────────────────────────
-export const storedFileStatusEnum = pgEnum('stored_file_status', ['pending', 'completed', 'deleted']);
+export const storedFileStatusEnum = pgEnum('stored_file_status', [
+  'pending',
+  'completed',
+  'deleted',
+]);
 
 // ── License ───────────────────────────────────────────────────────────────────
 // Value sets taken from the existing DTO Zod enums (the code-authoritative
@@ -114,7 +123,7 @@ export const licenseStatusEnum = pgEnum('license_status', [
   'cancelled',
 ]);
 
-export const outboxStatusEnum = pgEnum('outbox_status', ['pending', 'sent', 'failed']);
+export const outboxStatusEnum = pgEnum('outbox_status', ['pending', 'sent', 'failed', 'delivered']);
 
 export const requestDecisionEnum = pgEnum('request_decision', [
   'approved',
