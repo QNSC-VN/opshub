@@ -76,9 +76,10 @@ jobs:
           tofu plan -input=false -lock=false -no-color -out=tfplan 2>&1 | tee plan.txt
           echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
         env:
-          TF_VAR_acm_cert_arn:     ${{ secrets.ACM_CERT_ARN }}
-          TF_VAR_web_acm_cert_arn: ${{ secrets.WEB_ACM_CERT_ARN }}
-          TF_VAR_image_tag:        ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+          TF_VAR_acm_cert_arn:         ${{ secrets.ACM_CERT_ARN }}
+          TF_VAR_web_acm_cert_arn:     ${{ secrets.WEB_ACM_CERT_ARN }}
+          TF_VAR_image_tag:            ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         continue-on-error: true   # allow comment step to run; real failure gate below
 
       - name: Post plan comment
