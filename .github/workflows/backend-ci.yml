@@ -318,14 +318,17 @@ jobs:
           types: |
             feat
             fix
+            chore
+            docs
+            style
             refactor
             perf
             security
-            chore
+            test
+            build
             ci
             deps
-            docs
-            test
+            revert
           requireScope: false
           subjectPattern: ^(?![A-Z]).+$
           subjectPatternError: |
