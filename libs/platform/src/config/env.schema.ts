@@ -47,9 +47,7 @@ export const EnvSchema = z
     // Entra ID SSO — required in production, optional in dev (enables entra-login endpoint).
     ENTRA_TENANT_ID: emptyToUndefined(z.string().uuid().optional()),
     ENTRA_CLIENT_ID: emptyToUndefined(z.string().uuid().optional()),
-    /** Client secret for Entra app — used for Graph API calls (MSAL confidential client). */
-    ENTRA_CLIENT_SECRET: z.string().min(1).optional(),
-    /** Microsoft Graph client secret — may differ from Entra client secret in some setups. */
+    /** Microsoft Graph app client secret — client-credentials flow for Graph sync jobs (compliance, security-posture, workforce). Optional; features self-disable when unset. */
     GRAPH_CLIENT_SECRET: z.string().min(1).optional(),
     // Used to sign fastify-cookie (required for CSRF signed cookies).
     COOKIE_SECRET: z.string().min(32),
