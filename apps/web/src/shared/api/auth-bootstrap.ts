@@ -1,7 +1,6 @@
 import { handleSsoRedirect, isSsoConfigured } from '@/app/auth/msal';
-import { api } from './client';
+import { api, attemptRefresh } from './client';
 import { useAuthStore } from './auth-store';
-import { ENV } from '@/shared/config/env';
 
 /**
  * Called once before the router mounts (in AppProviders).
@@ -32,20 +31,12 @@ export function resetBootstrap(): void {
 }
 
 async function _run(): Promise<void> {
-  // 1. Silent restore from refresh cookie (fastest path — works on every reload)
-  try {
-    const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { accessToken: string };
-      useAuthStore.getState().setToken(data.accessToken);
-      return;
-    }
-  } catch {
-    // API down or no cookie — fall through
-  }
+  // 1. Silent restore from refresh cookie (fastest path — works on every reload).
+  //    Delegate to the shared, single-flight + cross-tab-locked refresh so cold
+  //    start never races the 401-retry path with the same single-use cookie
+  //    (which the server would treat as token theft).
+  const token = await attemptRefresh();
+  if (token) return;
 
   // 2. If SSO is configured, check if we're returning from a Microsoft redirect.
   //    handleSsoRedirect() uses navigateToLoginRequestUrl: false, so MSAL stays

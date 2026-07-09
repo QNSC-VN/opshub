@@ -6,21 +6,49 @@ import { ENV } from '@/shared/config/env';
 /** Whether a token refresh is already in flight — prevents concurrent refresh storms. */
 let refreshPromise: Promise<string | null> | null = null;
 
-async function attemptRefresh(): Promise<string | null> {
+/**
+ * Serialize refresh across ALL tabs of this origin via the Web Locks API. Two
+ * tabs racing to refresh would each POST the same single-use cookie; the second
+ * hits an already-rotated token, which the server would otherwise treat as theft
+ * and revoke the whole family. Holding an exclusive lock makes tabs refresh one
+ * at a time so later tabs reuse the freshly-rotated cookie. Falls back to a bare
+ * call where Web Locks is unavailable (older browsers / non-secure contexts).
+ */
+function withRefreshLock(fn: () => Promise<string | null>): Promise<string | null> {
+  const locks = (globalThis.navigator as Navigator | undefined)?.locks;
+  if (locks?.request) {
+    return locks.request('opshub-auth-refresh', { mode: 'exclusive' }, fn);
+  }
+  return fn();
+}
+
+async function doRefreshOnce(): Promise<string | null> {
+  try {
+    const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include', // send the HttpOnly cookie
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { accessToken: string };
+    useAuthStore.getState().setToken(data.accessToken);
+    return data.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Silent access-token refresh. Single-flight within this tab (`refreshPromise`)
+ * and serialized across tabs (`withRefreshLock`). Exported so cold-start
+ * bootstrap reuses the exact same coordinated path instead of racing its own
+ * uncoordinated fetch with the same single-use cookie.
+ */
+export async function attemptRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
     try {
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include', // send the HttpOnly cookie
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { accessToken: string };
-      useAuthStore.getState().setToken(data.accessToken);
-      return data.accessToken;
-    } catch {
-      return null;
+      return await withRefreshLock(doRefreshOnce);
     } finally {
       refreshPromise = null;
     }
@@ -63,4 +91,3 @@ const authMiddleware: Middleware = {
  */
 export const api = createClient<paths>({ baseUrl: ENV.API_BASE_URL });
 api.use(authMiddleware);
-

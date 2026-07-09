@@ -13,7 +13,18 @@ import {
   type IRefreshTokenRepository,
 } from '../domain/ports/refresh-token.repository';
 import type { Employee } from '../domain/employee.types';
-import type { AuthMethod } from '../domain/refresh-token.types';
+import type { AuthMethod, RefreshToken } from '../domain/refresh-token.types';
+
+/**
+ * How long a successful refresh-token rotation result is cached (keyed by the
+ * consumed token's hash) so a benign concurrent/retried reuse — multiple tabs, a
+ * retried request after a lost response, React StrictMode — replays the same
+ * successor tokens instead of tripping single-use theft detection. Kept short so
+ * a genuinely stolen, long-dormant token is still caught.
+ */
+const REFRESH_ROTATION_GRACE_SECONDS = 30;
+const REFRESH_GRACE_PREFIX = 'refresh:grace:';
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Shape returned by all login / refresh methods. */
 export interface TokenResult {
@@ -144,7 +155,11 @@ export class AuthService {
       email: employee.email,
     });
 
-    const result = await this.#mintTokens({ ...employee, roles: effectiveRoles }, randomUUID(), 'sso');
+    const result = await this.#mintTokens(
+      { ...employee, roles: effectiveRoles },
+      randomUUID(),
+      'sso',
+    );
 
     void this.audit.record({
       actorId: employee.id,
@@ -172,27 +187,26 @@ export class AuthService {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid refresh token');
     }
 
+    // Already rotated. Not automatically theft — multiple tabs, a retried request
+    // after a lost response, or React StrictMode can all legitimately replay a
+    // single-use token. Replay the cached successor within the grace window;
+    // escalate to family revocation only when we are confident it is malicious.
     if (stored.revoked) {
-      // Token reuse detected — revoke the entire family
-      await this.refreshTokenRepo.revokeFamily(stored.familyId);
-      void this.audit.record({
-        actorId: stored.employeeId,
-        action: 'auth.token_theft_detected',
-        resourceType: 'session',
-        resourceId: stored.familyId,
-        metadata: { familyId: stored.familyId },
-      });
-      throw new UnauthorizedException(
-        ErrorCodes.AUTH_INVALID_CREDENTIALS,
-        'Refresh token reuse detected',
-      );
+      return this.#replayOrDetectTheft(hash, stored, { concurrentLoss: false });
     }
 
     if (stored.expiresAt < new Date()) {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Refresh token expired');
     }
 
-    await this.refreshTokenRepo.revokeById(stored.id);
+    // Atomic single-use rotation (compare-and-swap): only one concurrent request
+    // may flip revoked false→true for this token. The loser replays the winner's
+    // cached result instead of minting a competing session (which would defeat
+    // single-use).
+    const won = await this.refreshTokenRepo.revokeByIdIfActive(stored.id);
+    if (!won) {
+      return this.#replayOrDetectTheft(hash, stored, { concurrentLoss: true });
+    }
 
     const employee = await this.employeeRepo.findById(stored.employeeId);
     if (!employee) {
@@ -200,7 +214,95 @@ export class AuthService {
     }
     this.#assertActive(employee);
 
-    return this.#mintTokens(employee, stored.familyId, stored.authMethod);
+    const result = await this.#mintTokens(employee, stored.familyId, stored.authMethod);
+
+    // Cache the rotation result under the consumed token's hash so a benign
+    // concurrent/retried reuse replays these exact tokens. Best-effort: a cache
+    // write failure must not fail the refresh itself.
+    try {
+      await this.cache.setJson(
+        `${REFRESH_GRACE_PREFIX}${hash}`,
+        result,
+        REFRESH_ROTATION_GRACE_SECONDS,
+      );
+    } catch {
+      // ignore — grace caching is an optimization, not a correctness requirement
+    }
+
+    return result;
+  }
+
+  /**
+   * Handle a refresh whose token has already been rotated. Returns the cached
+   * successor tokens when the reuse is benign (within the grace window), or
+   * escalates to family revocation (theft) only when we are confident the reuse
+   * is malicious.
+   *
+   * @param concurrentLoss `true` when we lost the atomic rotation CAS (a sibling
+   *   request definitely rotated first — never theft); `false` when the token was
+   *   already revoked when we read it (benign replay *or* theft).
+   */
+  async #replayOrDetectTheft(
+    hash: string,
+    stored: RefreshToken,
+    { concurrentLoss }: { concurrentLoss: boolean },
+  ): Promise<TokenResult> {
+    let cached: TokenResult | null;
+    try {
+      // A concurrent winner may not have written its grace entry yet, so poll
+      // briefly on the CAS-loss path. A sequential replay needs no polling.
+      cached = await this.#waitForGrace(hash, concurrentLoss ? 6 : 1);
+    } catch {
+      // Cache unavailable — we cannot prove theft, so fail safe WITHOUT revoking
+      // the family (a cache blip must never mass-logout every session).
+      throw new UnauthorizedException(
+        ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        'Session refresh unavailable, retry',
+      );
+    }
+
+    if (cached) return cached;
+
+    if (concurrentLoss) {
+      // We KNOW a sibling request rotated this token (we lost the CAS), so this
+      // is not theft even though the grace entry is missing/expired. Ask the
+      // client to retry with the freshly-set cookie instead of revoking.
+      throw new UnauthorizedException(
+        ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        'Refresh rotated concurrently, retry',
+      );
+    }
+
+    // Genuine reuse of a token rotated outside the grace window → theft.
+    await this.refreshTokenRepo.revokeFamily(stored.familyId);
+    void this.audit.record({
+      actorId: stored.employeeId,
+      action: 'auth.token_theft_detected',
+      resourceType: 'session',
+      resourceId: stored.familyId,
+      metadata: { familyId: stored.familyId },
+    });
+    throw new UnauthorizedException(
+      ErrorCodes.AUTH_INVALID_CREDENTIALS,
+      'Refresh token reuse detected',
+    );
+  }
+
+  /**
+   * Poll the rotation grace cache up to `tries` times (25ms apart). Throws when
+   * the cache is unavailable so the caller can fail safe without revoking.
+   */
+  async #waitForGrace(hash: string, tries: number): Promise<TokenResult | null> {
+    if (!this.cache.isAvailable) {
+      throw new Error('cache unavailable');
+    }
+    const key = `${REFRESH_GRACE_PREFIX}${hash}`;
+    for (let attempt = 0; attempt < tries; attempt++) {
+      const value = await this.cache.getJson<TokenResult>(key);
+      if (value) return value;
+      if (attempt < tries - 1) await sleep(25);
+    }
+    return null;
   }
 
   /** Revoke the session — also fast-revokes the matching access token via cache. */
@@ -236,7 +338,11 @@ export class AuthService {
     }
   }
 
-  async #mintTokens(employee: Employee, familyId: string, authMethod: AuthMethod): Promise<TokenResult> {
+  async #mintTokens(
+    employee: Employee,
+    familyId: string,
+    authMethod: AuthMethod,
+  ): Promise<TokenResult> {
     const sessionId = randomUUID();
     const rawRefreshToken = randomBytes(32).toString('base64url');
     const tokenHash = this.#hash(rawRefreshToken);
