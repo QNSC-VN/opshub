@@ -120,7 +120,7 @@ jobs:
           CORS_ORIGINS: http://localhost:5173
           VALKEY_URL: redis://localhost:6379
           COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
-          LOG_LEVEL: silent
+          LOG_LEVEL: fatal
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api-test
 
@@ -138,7 +138,7 @@ jobs:
           CORS_ORIGINS: http://localhost:5173
           VALKEY_URL: redis://localhost:6379
           COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
-          LOG_LEVEL: silent
+          LOG_LEVEL: fatal
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api-test
 
@@ -270,7 +270,7 @@ jobs:
           VALKEY_URL: redis://localhost:6379
           COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
           JWT_REFRESH_EXPIRY_DAYS: '7'
-          LOG_LEVEL: silent
+          LOG_LEVEL: fatal
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api
 
