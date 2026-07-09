@@ -61,10 +61,8 @@ export const EnvSchema = z
     // ── AWS (optional in dev) ──────────────────────────────────────────────────
     AWS_REGION: z.string().default('ap-southeast-1'),
     SQS_OUTBOX_URL: z.string().optional(),
-    /** S3 bucket for all stored files. Optional in dev — uploads will be stubbed. */
+    /** S3 bucket for all stored files — injected by infra as S3_FILES_BUCKET. Optional in dev (uploads stubbed when unset). */
     S3_FILES_BUCKET: z.string().optional(),
-    /** S3 bucket for transient uploads (leave docs, photos) — injected by infra as S3_UPLOAD_BUCKET. */
-    S3_UPLOAD_BUCKET: z.string().optional(),
     /** CloudFront base URL for file downloads. When set, overrides presigned S3 GET URLs. */
     CDN_FILES_BASE_URL: z.string().optional(),
 

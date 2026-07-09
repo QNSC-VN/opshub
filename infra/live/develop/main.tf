@@ -268,7 +268,7 @@ module "api" {
     { name = "VALKEY_URL", value = "redis://localhost:6379" }, # dev: Valkey sidecar
     { name = "AWS_REGION", value = local.region },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
+    { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
     { name = "CORS_ORIGINS", value = "https://opshub-dev.qnsc.vn" },
@@ -324,7 +324,7 @@ module "worker" {
     { name = "VALKEY_URL", value = "redis://localhost:6379" }, # dev: Valkey sidecar
     { name = "AWS_REGION", value = local.region },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_UPLOAD_BUCKET", value = module.app_bucket.bucket },
+    { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
   ]
