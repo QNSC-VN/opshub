@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.0.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.0.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -221,7 +221,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.0.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -294,7 +294,7 @@ jobs:
 
       - name: Check for breaking API changes (PR only)
         if: github.event_name == 'pull_request'
-        uses: QNSC-VN/qnsc-ci/actions/validate-openapi-contract@v1.0.0
+        uses: QNSC-VN/qnsc-ci/actions/validate-openapi-contract@v1
         with:
           current-spec-path: openapi.json
           base-spec-path: base-spec/openapi.json
