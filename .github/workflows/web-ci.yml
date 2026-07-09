@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
         with:
@@ -52,7 +52,7 @@ jobs:
     outputs:
       has_tests: ${{ steps.detect.outputs.has_tests }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
         with:
@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload coverage
         if: always() && steps.detect.outputs.has_tests == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: coverage
           path: coverage/
@@ -91,7 +91,7 @@ jobs:
     needs: [quality, test]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
         with:
@@ -104,7 +104,7 @@ jobs:
           VITE_API_BASE_URL: http://localhost:3000
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: dist-${{ github.sha }}
           path: apps/web/dist/
@@ -120,7 +120,7 @@ jobs:
     if: github.event_name == 'pull_request'
     timeout-minutes: 5
     steps:
-      - uses: amannn/action-semantic-pull-request@v6
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50  # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
