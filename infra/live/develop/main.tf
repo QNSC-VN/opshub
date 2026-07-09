@@ -108,7 +108,11 @@ module "secrets" {
     "jwt-private-key"     = "JWT ES256 private key (PEM or base64-encoded PEM)"
     "jwt-public-key"      = "JWT ES256 public key (PEM or base64-encoded PEM)"
     "cookie-secret"       = "Fastify cookie signing secret (min 32 chars)"
-    "entra-client-secret" = "Azure Entra app client secret (JWKS + Graph API)"
+    "graph-client-secret" = "Microsoft Graph app client secret (client-credentials flow for Graph sync jobs)"
+    # DEPRECATED: replaced by graph-client-secret. Retained (unwired from ECS) for a
+    # zero-downtime rename so running tasks that still reference it can restart.
+    # Remove once the GRAPH_CLIENT_SECRET task-def revision is live on all services.
+    "entra-client-secret" = "DEPRECATED — superseded by graph-client-secret; safe to remove post-deploy"
   }
 
   tags = { Environment = local.env }
@@ -256,7 +260,7 @@ module "api" {
     { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
     { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
     { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
-    { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
+    { name = "GRAPH_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["graph-client-secret"] },
   ]
   environment_vars = [
     { name = "NODE_ENV", value = "production" },
@@ -313,7 +317,7 @@ module "worker" {
     { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
     { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
     { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
-    { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
+    { name = "GRAPH_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["graph-client-secret"] },
   ]
   environment_vars = [
     { name = "NODE_ENV", value = "production" },
