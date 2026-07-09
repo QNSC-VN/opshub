@@ -22,15 +22,20 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // NB: lazyConnect MUST be false. With lazyConnect the client stays in the
+    // `wait` state until the first command is issued, but the RateLimitGuard
+    // (and other callers) short-circuit on `isAvailable` (status === 'ready')
+    // and never issue a command — so the connection is never established and
+    // Redis is permanently reported "unavailable". Eager connect avoids this.
     this.client = new Redis(url, {
       keyPrefix: this.config.get('REDIS_KEY_PREFIX'),
-      lazyConnect: true,
+      lazyConnect: false,
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
     });
 
     this.client.on('error', (err) => this.logger.error('Redis error', err));
-    this.client.on('connect', () => this.logger.log('Redis connected'));
+    this.client.on('ready', () => this.logger.log('Redis connected'));
   }
 
   async onModuleDestroy(): Promise<void> {
