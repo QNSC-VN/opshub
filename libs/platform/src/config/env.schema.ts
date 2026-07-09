@@ -30,7 +30,7 @@ export const EnvSchema = z
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(20),
 
     // ── Auth ───────────────────────────────────────────────────────────────────
-    // JWT — ES256 asymmetric signing (Ed25519-class security, forward-secrecy capable)
+    // JWT — ES256 asymmetric signing (ECDSA over NIST P-256 / prime256v1).
     // Keys must be PEM-encoded EC P-256 keypair. Accepted as raw PEM or base64-encoded PEM.
     // Generate: openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt
     JWT_PRIVATE_KEY: z
