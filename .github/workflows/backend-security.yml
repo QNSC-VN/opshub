@@ -105,7 +105,7 @@ jobs:
           languages: javascript-typescript
           queries: security-and-quality
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.0.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.2.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -135,7 +135,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.6
+      - uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1.2.0
         with:
           fail-on-leak: "true"
 
