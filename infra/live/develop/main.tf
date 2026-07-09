@@ -217,7 +217,7 @@ module "migrator" {
 
 # ── API service ───────────────────────────────────────────────────────────────
 module "api" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.2.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.3.0"
 
   service_name = "api"
   cluster_name = module.ecs_cluster.cluster_name
@@ -280,7 +280,7 @@ module "api" {
 
 # ── Worker service ────────────────────────────────────────────────────────────
 module "worker" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.2.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.3.0"
 
   service_name = "worker"
   cluster_name = module.ecs_cluster.cluster_name
