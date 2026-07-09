@@ -14,5 +14,6 @@ ALTER TABLE "security_posture"."baseline_checks"
   USING "category"::"public"."baseline_check_category";
 
 ALTER TABLE "security_posture"."baseline_checks"
-  ALTER COLUMN "status" TYPE "public"."baseline_check_status"
-  USING "status"::"public"."baseline_check_status";
+  ALTER COLUMN "status" DROP DEFAULT,
+  ALTER COLUMN "status" TYPE "public"."baseline_check_status" USING "status"::"public"."baseline_check_status",
+  ALTER COLUMN "status" SET DEFAULT 'not_applicable';

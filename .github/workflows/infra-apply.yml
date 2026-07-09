@@ -9,6 +9,13 @@ name: OpenTofu Apply
 # Prod infra can NOT be applied by a normal merge to main — it only happens on
 # a deliberate semver tag, so an accidental push can never touch production.
 #
+# PREREQUISITE (Option A shared runtime): the platform shared-runtime stacks in
+# qnsc-infra — runtime-dev (for develop) and runtime-prod (for prod) — own the
+# shared VPC/NAT/ALB (+ prod cache/WAF) and MUST be applied before this product
+# stack. develop/prod consume them via terraform_remote_state, so a product
+# apply fails if the runtime state doesn't exist yet. The platform pipeline
+# applies runtime first.
+#
 # Structure is intentionally identical to rally/.github/workflows/infra-apply.yml
 # (shared composite actions + the same staged/gated jobs); only the values differ
 # (role prefix, TF_VARs). Keep the two products in lock-step.
@@ -43,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
@@ -74,7 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
@@ -103,7 +110,7 @@ jobs:
       # (same app release.yml uses) so we never need a long-lived user PAT.
       # Requires the app to have "Variables: read and write" on this repo.
       # Falls back to no token (publish step skipped) when the app isn't set.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1
         id: app-token
         if: ${{ vars.RELEASE_BOT_APP_ID != '' }}
         continue-on-error: true
@@ -148,7 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.5
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}

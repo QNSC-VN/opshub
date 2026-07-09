@@ -21,10 +21,15 @@ interface AttendanceStatus {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
-const headers = () => ({ Authorization: `Bearer ${getToken() ?? ''}`, 'Content-Type': 'application/json' });
+const headers = () => ({
+  Authorization: `Bearer ${getToken() ?? ''}`,
+  'Content-Type': 'application/json',
+});
 
 async function fetchStatus(): Promise<AttendanceStatus> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/status`, { headers: headers() });
+  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/status`, {
+    headers: headers(),
+  });
   if (!res.ok) throw new Error('Failed to load attendance status');
   return res.json() as Promise<AttendanceStatus>;
 }
@@ -50,19 +55,17 @@ async function clockOut(): Promise<void> {
 // ── Elapsed timer ─────────────────────────────────────────────────────────────
 
 function useElapsed(clockedInAt: string | null) {
-  const [elapsed, setElapsed] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!clockedInAt) { setElapsed(0); return; }
-    const start = new Date(clockedInAt).getTime();
-
-    function tick() {
-      setElapsed(Math.floor((Date.now() - start) / 1000));
-    }
-    tick();
-    const id = setInterval(tick, 1000);
+    if (!clockedInAt) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [clockedInAt]);
+
+  const elapsed = clockedInAt
+    ? Math.max(0, Math.floor((now - new Date(clockedInAt).getTime()) / 1000))
+    : 0;
 
   const h = Math.floor(elapsed / 3600);
   const m = Math.floor((elapsed % 3600) / 60);
@@ -84,7 +87,7 @@ export function AttendanceClock() {
 
   const isClockedIn = statusQ.data?.isClockedIn ?? false;
   const current = statusQ.data?.current ?? null;
-  const elapsed = useElapsed(isClockedIn ? current?.clockedInAt ?? null : null);
+  const elapsed = useElapsed(isClockedIn ? (current?.clockedInAt ?? null) : null);
 
   const clockInMut = useMutation({
     mutationFn: () => clockIn(isRemote),
@@ -107,17 +110,24 @@ export function AttendanceClock() {
   const isPending = clockInMut.isPending || clockOutMut.isPending;
 
   return (
-    <div className={cn(
-      'flex flex-col gap-3 rounded-xl border p-4 transition-colors',
-      isClockedIn
-        ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
-        : 'border-border bg-surface',
-    )}>
+    <div
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border p-4 transition-colors',
+        isClockedIn
+          ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
+          : 'border-border bg-surface',
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Clock className={cn('h-4 w-4', isClockedIn ? 'text-emerald-600' : 'text-fg-subtle')} strokeWidth={1.75} />
-          <span className="text-xs font-medium uppercase tracking-wider text-fg-subtle">Attendance</span>
+          <Clock
+            className={cn('h-4 w-4', isClockedIn ? 'text-emerald-600' : 'text-fg-subtle')}
+            strokeWidth={1.75}
+          />
+          <span className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
+            Attendance
+          </span>
         </div>
         {isClockedIn && current?.isRemote && (
           <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
@@ -131,9 +141,17 @@ export function AttendanceClock() {
         <div className="h-8 animate-pulse rounded bg-surface-muted" />
       ) : isClockedIn ? (
         <div className="flex flex-col gap-0.5">
-          <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{elapsed}</p>
+          <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+            {elapsed}
+          </p>
           <p className="text-xs text-fg-subtle">
-            Clocked in at {current ? new Date(current.clockedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+            Clocked in at{' '}
+            {current
+              ? new Date(current.clockedInAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '—'}
           </p>
         </div>
       ) : (
@@ -149,7 +167,11 @@ export function AttendanceClock() {
             onChange={(e) => setIsRemote(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-border accent-accent"
           />
-          {isRemote ? <Wifi className="h-3 w-3 text-blue-500" /> : <WifiOff className="h-3 w-3 text-fg-subtle" />}
+          {isRemote ? (
+            <Wifi className="h-3 w-3 text-blue-500" />
+          ) : (
+            <WifiOff className="h-3 w-3 text-fg-subtle" />
+          )}
           Working remotely
         </label>
       )}
@@ -165,9 +187,13 @@ export function AttendanceClock() {
         )}
       >
         {isClockedIn ? (
-          <><LogOut className="h-4 w-4" /> Clock out</>
+          <>
+            <LogOut className="h-4 w-4" /> Clock out
+          </>
         ) : (
-          <><LogIn className="h-4 w-4" /> Clock in</>
+          <>
+            <LogIn className="h-4 w-4" /> Clock in
+          </>
         )}
       </button>
     </div>
