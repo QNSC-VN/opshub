@@ -116,7 +116,7 @@ module "secrets" {
 
 # ── RDS PostgreSQL ─────────────────────────────────────────────────────────────
 module "rds" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/rds?ref=rds-v1.0.1"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/rds?ref=rds-v1.1.0"
 
   identifier        = local.name
   subnet_ids        = data.terraform_remote_state.runtime.outputs.data_subnet_ids

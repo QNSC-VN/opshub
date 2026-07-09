@@ -109,7 +109,7 @@ module "secrets" {
 
 # ── RDS PostgreSQL (Multi-AZ, protected) ─────────────────────────────────────
 module "rds" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/rds?ref=rds-v1.0.1"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/rds?ref=rds-v1.1.0"
 
   identifier        = local.name
   subnet_ids        = data.terraform_remote_state.runtime.outputs.data_subnet_ids
@@ -346,7 +346,7 @@ module "web" {
   account_id  = var.cloudflare_account_id
   name        = "opshub-prod-web"
   zone_id     = local.cloudflare_zone_id
-  domain      = local.cloudflare_zone_id != "" ? "opshub.qnsc.vn" : ""
+  domain      = local.cloudflare_zone_id != "" ? var.web_domain : ""
   record_name = local.cloudflare_zone_id != "" ? "opshub" : ""
   comment     = "opshub-prod web SPA → Cloudflare Pages (managed by opshub-infra prod)"
 }

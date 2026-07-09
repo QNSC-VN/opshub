@@ -38,6 +38,12 @@ variable "image_tag" {
   description = "Container image tag to deploy for api & worker (pin in prod)."
 }
 
+variable "web_domain" {
+  type        = string
+  default     = "opshub.qnsc.vn"
+  description = "Public hostname for the prod web SPA. Used for the Cloudflare Pages custom domain + DNS record (skipped while the Cloudflare zone/account are unset)."
+}
+
 variable "entra_tenant_id" {
   type        = string
   description = "Azure Entra tenant ID."
