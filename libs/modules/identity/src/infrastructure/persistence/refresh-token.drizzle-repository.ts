@@ -30,10 +30,19 @@ export class RefreshTokenDrizzleRepository implements IRefreshTokenRepository {
   }
 
   async revokeById(id: string): Promise<void> {
-    await this.db
+    await this.db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.id, id));
+  }
+
+  async revokeByIdIfActive(id: string): Promise<boolean> {
+    // Conditional update = optimistic compare-and-swap. Only the request that
+    // observes revoked=false flips it and gets a row back; concurrent racers get
+    // zero rows and must not mint a competing token.
+    const rows = await this.db
       .update(refreshTokens)
       .set({ revoked: true })
-      .where(eq(refreshTokens.id, id));
+      .where(and(eq(refreshTokens.id, id), eq(refreshTokens.revoked, false)))
+      .returning({ id: refreshTokens.id });
+    return rows.length > 0;
   }
 
   async revokeFamily(familyId: string): Promise<void> {
