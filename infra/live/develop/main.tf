@@ -131,7 +131,7 @@ module "rds" {
   backup_retention_days    = 3
   monitoring_interval      = 0 # disable Enhanced Monitoring in develop (saves CloudWatch cost)
 
-  tags = { Environment = local.env, AutoStop = "true" }
+  tags = { Environment = local.env }
 }
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ module "api" {
   sns_topic_arns = values(module.messaging.topic_arns)
   s3_bucket_arns = [module.app_bucket.arn]
 
-  tags = { Environment = local.env, Service = "api", AutoStop = "true" }
+  tags = { Environment = local.env, Service = "api" }
 }
 
 # ── Worker service ────────────────────────────────────────────────────────────
@@ -329,7 +329,7 @@ module "worker" {
   sns_topic_arns = values(module.messaging.topic_arns)
   s3_bucket_arns = [module.app_bucket.arn]
 
-  tags = { Environment = local.env, Service = "worker", AutoStop = "true" }
+  tags = { Environment = local.env, Service = "worker" }
 }
 
 # ── WAF: not used in dev. In prod the WebACL lives in runtime-prod and is
@@ -366,13 +366,4 @@ module "dns_api" {
   content = data.terraform_remote_state.runtime.outputs.alb_dns_name
   proxied = true
   comment = "opshub-develop API → ALB via Cloudflare proxy (managed by opshub-infra develop)"
-}
-
-# ── Dev scheduler: stop RDS + scale ECS to 0 off-hours ───────────────────────
-# Tag-driven: acts on resources tagged AutoStop=true.
-# Stops at 8pm ICT, restarts at 8am ICT weekdays.
-module "dev_scheduler" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dev-scheduler?ref=dev-scheduler-v1.1.0"
-  name   = local.name
-  tags   = { Environment = local.env }
 }
