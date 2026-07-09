@@ -353,7 +353,7 @@ module "web" {
 
 # ── DNS — opshub-api.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────────
 module "dns_api" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.1.0"
 
   enabled = local.cloudflare_zone_id != ""
   zone_id = local.cloudflare_zone_id
