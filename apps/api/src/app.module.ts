@@ -7,6 +7,7 @@ import {
   PlatformModule,
   AppConfigService,
   GlobalExceptionFilter,
+  REQUEST_CONTEXT,
   HttpLoggingInterceptor,
   IdempotencyInterceptor,
   AsyncLocalStorageMiddleware,
@@ -80,11 +81,13 @@ import { SecurityPostureModule } from '@modules/security-posture';
     SecurityPostureModule,
   ],
   providers: [
+    // Bind the shared filter's request-context port to opshub's ALS-backed service.
+    { provide: REQUEST_CONTEXT, useExisting: RequestContextService },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: HttpLoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
-    { provide: APP_PIPE, useClass: SanitizationPipe },  // strip XSS before validation
+    { provide: APP_PIPE, useClass: SanitizationPipe }, // strip XSS before validation
     { provide: APP_PIPE, useClass: ZodValidationPipe },
   ],
 })

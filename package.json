@@ -42,9 +42,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "@qnsc-vn/identity": "^3.0.0",
+    "@qnsc-vn/identity": "^4.0.0",
     "@qnsc-vn/platform-cache": "^1.0.0",
-    "@qnsc-vn/platform-http": "^1.0.1",
+    "@qnsc-vn/platform-http": "^2.0.0",
     "@aws-sdk/client-s3": "^3.1079.0",
     "@aws-sdk/client-secrets-manager": "^3.1079.0",
     "@aws-sdk/client-sqs": "^3.1079.0",
@@ -125,12 +125,5 @@
     "unplugin-swc": "^1.5.9",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10"
-  },
-  "pnpm": {
-    "overrides": {
-      "@qnsc-vn/identity": "file:../.local-pkgs/qnsc-vn-identity-3.0.0.tgz",
-      "@qnsc-vn/platform-cache": "file:../.local-pkgs/qnsc-vn-platform-cache-1.0.0.tgz",
-      "@qnsc-vn/platform-http": "file:../.local-pkgs/qnsc-vn-platform-http-1.0.1.tgz"
-    }
   }
 }
