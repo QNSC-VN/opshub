@@ -13,7 +13,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import path from 'path';
-import { seed } from './seed';
+import { seed, seedRbacCatalog } from './seed';
 import { pgOptions } from './pg-ssl';
 
 const url = process.env['DATABASE_MIGRATION_URL'] ?? process.env['DATABASE_URL'];
@@ -32,13 +32,19 @@ async function run() {
     await migrate(db, { migrationsFolder: path.join(__dirname, 'migrations') });
     console.log('✅  Migrations applied');
 
-    // In develop/staging, seed fixture data on every deploy so the breakglass
-    // account and system roles always exist with the configured credentials.
-    // Never set SEED_ON_DEPLOY=true in production.
+    // Seed uses DATABASE_URL (app role), not the migration URL (admin role).
+    const seedUrl = process.env['DATABASE_URL'] ?? url;
+
+    // The RBAC reference catalogue (permissions + roles + grants) is prod-safe
+    // reference data the app depends on to authorize anything — ensure it in
+    // EVERY environment, independent of SEED_ON_DEPLOY.
+    await seedRbacCatalog(seedUrl);
+    console.log('✅  RBAC catalogue ensured');
+
+    // In develop/staging, also seed demo fixtures (login-able employees) on
+    // every deploy. Never set SEED_ON_DEPLOY=true in production.
     if (process.env['SEED_ON_DEPLOY'] === 'true') {
-      console.log('SEED_ON_DEPLOY=true — running seed...');
-      // Seed uses DATABASE_URL (app role), not the migration URL (admin role).
-      const seedUrl = process.env['DATABASE_URL'] ?? url;
+      console.log('SEED_ON_DEPLOY=true — seeding demo fixtures...');
       await seed(seedUrl);
     }
   } catch (err) {
