@@ -1,6 +1,7 @@
 import { ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
+import { ValkeyService } from '@qnsc-vn/platform-cache';
 import { IS_PUBLIC_KEY } from './decorators';
 import { CacheService } from '../cache/cache.service';
 import { RequestContextService } from '../context/request-context';
@@ -22,6 +23,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     private readonly reflector: Reflector,
     private readonly cache: CacheService,
     private readonly ctx: RequestContextService,
+    private readonly valkey: ValkeyService,
   ) {
     super();
   }
@@ -46,13 +48,16 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const req = context.switchToHttp().getRequest<{ user: JwtPayload }>();
     try {
       // Two fast-revocation checks (OWASP JWT Cheat Sheet, §No Built-In Token Revocation):
-      //   1. Session-level  — explicit logout or rotation-theft detection
+      //   1. Session-level  — explicit logout or rotation-theft detection. The
+      //      shared identity AuthService denylists the access-token `jti` in
+      //      Valkey on logout, so this reads the package's denylist.
       //   2. Employee-level — offboarding revokes all outstanding access tokens
-      const [sessionRevoked, employeeRevoked] = await Promise.all([
-        this.cache.get(`revoked:session:${req.user.jti}`),
+      //      via opshub's own CacheService key scheme.
+      const [sessionDenied, employeeRevoked] = await Promise.all([
+        this.valkey.isTokenDenied(req.user.jti),
         this.cache.get(`revoked:employee:${req.user.sub}`),
       ]);
-      if (sessionRevoked || employeeRevoked) {
+      if (sessionDenied || employeeRevoked) {
         throw new UnauthorizedException('Session has been revoked');
       }
     } catch (err) {

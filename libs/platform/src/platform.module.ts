@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { TerminusModule } from '@nestjs/terminus';
+import { CacheModule } from '@qnsc-vn/platform-cache';
 import { AppConfigModule } from './config/config.module';
 import { AppConfigService } from './config/app-config.service';
 import { DatabaseModule } from './database/database.module';
@@ -57,6 +58,16 @@ import { StorageService } from './storage/storage.service';
           issuer: config.get('JWT_ISSUER'),
           audience: config.get('JWT_AUDIENCE'),
         },
+      }),
+    }),
+    // Shared Valkey/Redis client (@qnsc-vn/platform-cache) used by the shared
+    // identity AuthService for the access-token denylist and refresh-rotation
+    // grace window. Registered globally so JwtAuthGuard can read the denylist.
+    CacheModule.forRootAsync({
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) => ({
+        url: config.get('REDIS_URL') ?? 'redis://localhost:6379',
+        keyPrefix: config.get('REDIS_KEY_PREFIX'),
       }),
     }),
     TerminusModule,

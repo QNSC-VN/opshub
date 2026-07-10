@@ -78,6 +78,13 @@
       "when": 1783000004000,
       "tag": "0010_outbox_status_delivered",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783000005000,
+      "tag": "0011_shared_identity_adopt",
+      "breakpoints": true
     }
   ]
 }

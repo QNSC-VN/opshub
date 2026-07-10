@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
 import { ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -12,50 +12,61 @@ import {
   RateLimit,
 } from '@platform';
 import type { JwtPayload } from '@platform';
+import { AuthService } from '@qnsc-vn/identity';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import '@fastify/cookie';
-import { randomBytes } from 'node:crypto';
-import { AuthService } from '../../application/auth.service';
 import { EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
 
 const REFRESH_COOKIE = 'refresh_token';
 const CSRF_COOKIE = 'csrf_token';
 
-/** Path-scoped cookie options — ensures the refresh token is only sent to the auth path. */
-function refreshCookieOptions(maxAge: number, isProd: boolean) {
-  return {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax' as const,
-    path: '/v1/auth',
-    maxAge,
-  };
-}
-
-/** JS-readable CSRF cookie — set on login, validated on refresh via X-CSRF-Token header. */
-function csrfCookieOptions(maxAge: number, isProd: boolean) {
-  return {
-    httpOnly: false,
-    secure: isProd,
-    sameSite: 'lax' as const,
-    path: '/',
-    maxAge,
-  };
-}
-
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  readonly #isProd: boolean;
   readonly #refreshMaxAge: number;
 
   constructor(
-    private readonly authService: AuthService,
+    @Inject(AuthService) private readonly authService: AuthService,
     private readonly config: AppConfigService,
     private readonly authz: AuthzService,
   ) {
-    this.#isProd = config.get('NODE_ENV') === 'production';
     this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * 24 * 60 * 60;
+  }
+
+  /**
+   * Adaptive cookie attributes. Same-site requests (the common SPA case) use
+   * `SameSite=Lax`; genuine cross-site requests (different origin) fall back to
+   * `SameSite=None; Secure` so the refresh cookie survives the redirect. `Secure`
+   * is set whenever the request arrived over HTTPS (directly or via a proxy) or
+   * whenever `SameSite=None` is required.
+   */
+  #buildRefreshCookieOptions(req: FastifyRequest, maxAge: number) {
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const isSecureRequest =
+      req.protocol === 'https' ||
+      (typeof forwardedProto === 'string' &&
+        forwardedProto.split(',').some((v) => v.trim() === 'https'));
+
+    const originHeader = req.headers.origin;
+    let isCrossSite = false;
+    if (typeof originHeader === 'string' && req.headers.host) {
+      try {
+        isCrossSite = new URL(originHeader).host !== req.headers.host;
+      } catch {
+        isCrossSite = false;
+      }
+    }
+
+    const sameSite = isCrossSite ? ('none' as const) : ('lax' as const);
+    const secure = isSecureRequest || sameSite === 'none';
+
+    return { httpOnly: true, secure, sameSite, path: '/v1/auth', maxAge };
+  }
+
+  /** JS-readable CSRF cookie — same security attrs as the refresh cookie but site-wide and readable. */
+  #buildCsrfCookieOptions(req: FastifyRequest, maxAge: number) {
+    const opts = this.#buildRefreshCookieOptions(req, maxAge);
+    return { ...opts, httpOnly: false, path: '/' };
   }
 
   /** Brute-force / credential-stuffing protection: 5 attempts per 15 min per IP. */
@@ -70,19 +81,21 @@ export class AuthController {
   @ApiCommonErrors(401)
   async entraLogin(
     @Body() dto: EntraLoginDto,
+    @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponseDto> {
-    const { accessToken, expiresIn, rawRefreshToken } = await this.authService.entraLogin(
-      dto.idToken,
-    );
+    const result = await this.authService.ssoLogin(dto.idToken, request.ip);
     reply.setCookie(
       REFRESH_COOKIE,
-      rawRefreshToken,
-      refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
+      result.refreshToken,
+      this.#buildRefreshCookieOptions(request, this.#refreshMaxAge),
     );
-    const csrfToken = randomBytes(32).toString('hex');
-    reply.setCookie(CSRF_COOKIE, csrfToken, csrfCookieOptions(this.#refreshMaxAge, this.#isProd));
-    return { accessToken, expiresIn };
+    reply.setCookie(
+      CSRF_COOKIE,
+      result.csrfToken,
+      this.#buildCsrfCookieOptions(request, this.#refreshMaxAge),
+    );
+    return { accessToken: result.accessToken, expiresIn: result.expiresIn };
   }
 
   @Post('refresh')
@@ -101,21 +114,22 @@ export class AuthController {
       reply.clearCookie(REFRESH_COOKIE, { path: '/v1/auth' });
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'No refresh token');
     }
-    // Double-submit CSRF check: client must echo the csrf_token cookie value in X-CSRF-Token header.
-    const cookieCsrf = request.cookies?.[CSRF_COOKIE];
-    const headerCsrf = request.headers['x-csrf-token'];
-    if (!cookieCsrf || !headerCsrf || cookieCsrf !== headerCsrf) {
-      throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'CSRF token mismatch');
-    }
-    const { accessToken, expiresIn, rawRefreshToken } = await this.authService.refresh(rawToken);
-    const csrfToken = randomBytes(32).toString('hex');
+    // Double-submit CSRF: the client echoes the csrf_token cookie value in the
+    // X-CSRF-Token header. The shared AuthService validates it against the value
+    // bound to the session at login, then rotates both cookies.
+    const csrfHeader = (request.headers['x-csrf-token'] as string | undefined) ?? null;
+    const result = await this.authService.refresh(rawToken, csrfHeader, request.ip);
     reply.setCookie(
       REFRESH_COOKIE,
-      rawRefreshToken,
-      refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
+      result.refreshToken,
+      this.#buildRefreshCookieOptions(request, this.#refreshMaxAge),
     );
-    reply.setCookie(CSRF_COOKIE, csrfToken, csrfCookieOptions(this.#refreshMaxAge, this.#isProd));
-    return { accessToken, expiresIn };
+    reply.setCookie(
+      CSRF_COOKIE,
+      result.csrfToken,
+      this.#buildCsrfCookieOptions(request, this.#refreshMaxAge),
+    );
+    return { accessToken: result.accessToken, expiresIn: result.expiresIn };
   }
 
   @Post('logout')
@@ -128,15 +142,11 @@ export class AuthController {
   @ApiNoContentResponse()
   async logout(
     @CurrentUser() user: JwtPayload,
-    @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    const rawToken = request.cookies?.[REFRESH_COOKIE];
-    if (rawToken) {
-      // Pass access token exp so the revocation cache entry expires exactly when
-      // the JWT would have anyway — no over- or under-blocking.
-      await this.authService.logout(rawToken, user.exp);
-    }
+    // The shared AuthService denylists the access-token jti (until its natural
+    // expiry) and revokes the session row identified by sessionId.
+    await this.authService.logout(user);
     reply.clearCookie(REFRESH_COOKIE, { path: '/v1/auth' });
     reply.clearCookie(CSRF_COOKIE, { path: '/' });
   }
