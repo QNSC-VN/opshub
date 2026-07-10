@@ -7,6 +7,12 @@ export const EntraLoginSchema = z.object({
 });
 export class EntraLoginDto extends createZodDto(EntraLoginSchema) {}
 
+export const DevLoginSchema = z.object({
+  /** Email of an existing active employee. Non-production only. */
+  email: z.string().email(),
+});
+export class DevLoginDto extends createZodDto(DevLoginSchema) {}
+
 /**
  * Response for all auth login + refresh endpoints.
  * The refresh token is delivered via HttpOnly cookie — never in the response body.

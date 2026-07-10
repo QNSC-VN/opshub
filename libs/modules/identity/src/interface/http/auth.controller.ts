@@ -15,7 +15,7 @@ import type { JwtPayload } from '@platform';
 import { AuthService } from '@qnsc-vn/identity';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import '@fastify/cookie';
-import { EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
+import { EntraLoginDto, DevLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
 
 const REFRESH_COOKIE = 'refresh_token';
 const CSRF_COOKIE = 'csrf_token';
@@ -85,6 +85,36 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponseDto> {
     const result = await this.authService.ssoLogin(dto.idToken, request.ip);
+    reply.setCookie(
+      REFRESH_COOKIE,
+      result.refreshToken,
+      this.#buildRefreshCookieOptions(request, this.#refreshMaxAge),
+    );
+    reply.setCookie(
+      CSRF_COOKIE,
+      result.csrfToken,
+      this.#buildCsrfCookieOptions(request, this.#refreshMaxAge),
+    );
+    return { accessToken: result.accessToken, expiresIn: result.expiresIn };
+  }
+
+  /**
+   * Local-only password-less login for an existing active employee. The shared
+   * AuthService rejects this whenever NODE_ENV === 'production'.
+   */
+  @Post('dev-login')
+  @Public()
+  @RateLimit('AUTH_LOGIN')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Dev login (non-production) — mint a session for an active employee' })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @ApiCommonErrors(401)
+  async devLogin(
+    @Body() dto: DevLoginDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<AuthResponseDto> {
+    const result = await this.authService.devLogin(dto.email, request.ip);
     reply.setCookie(
       REFRESH_COOKIE,
       result.refreshToken,

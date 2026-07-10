@@ -8,23 +8,35 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
+import { DomainException as SharedDomainException } from '@qnsc-vn/platform-http';
 import { DomainException } from '../errors/exceptions';
 import { ErrorCodes } from '../errors/error-codes';
 import { RequestContextService } from '../context/request-context';
 
 function httpStatusToErrorCode(status: number): string {
   switch (status) {
-    case 400: return ErrorCodes.BAD_REQUEST;
-    case 401: return ErrorCodes.UNAUTHORIZED;
-    case 403: return ErrorCodes.FORBIDDEN;
-    case 404: return ErrorCodes.NOT_FOUND;
-    case 405: return ErrorCodes.METHOD_NOT_ALLOWED;
-    case 409: return ErrorCodes.CONFLICT;
-    case 413: return ErrorCodes.PAYLOAD_TOO_LARGE;
-    case 415: return ErrorCodes.UNSUPPORTED_MEDIA_TYPE;
-    case 422: return ErrorCodes.VALIDATION_FAILED;
-    case 429: return ErrorCodes.RATE_LIMITED;
-    default:  return ErrorCodes.INTERNAL_ERROR;
+    case 400:
+      return ErrorCodes.BAD_REQUEST;
+    case 401:
+      return ErrorCodes.UNAUTHORIZED;
+    case 403:
+      return ErrorCodes.FORBIDDEN;
+    case 404:
+      return ErrorCodes.NOT_FOUND;
+    case 405:
+      return ErrorCodes.METHOD_NOT_ALLOWED;
+    case 409:
+      return ErrorCodes.CONFLICT;
+    case 413:
+      return ErrorCodes.PAYLOAD_TOO_LARGE;
+    case 415:
+      return ErrorCodes.UNSUPPORTED_MEDIA_TYPE;
+    case 422:
+      return ErrorCodes.VALIDATION_FAILED;
+    case 429:
+      return ErrorCodes.RATE_LIMITED;
+    default:
+      return ErrorCodes.INTERNAL_ERROR;
   }
 }
 
@@ -60,9 +72,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    if (exception instanceof DomainException) {
+    // Both opshub's own DomainException and the shared @qnsc-vn/platform-http
+    // DomainException (thrown by the shared AuthService) carry the same shape:
+    // { code, httpStatus, message, details }. Handle them together so shared-
+    // package errors map to their intended status instead of falling through to 500.
+    if (exception instanceof DomainException || exception instanceof SharedDomainException) {
       // Log security-relevant failures so anomaly detection tooling can alert.
-      if (exception.httpStatus === 401 || exception.httpStatus === 403 || exception.httpStatus === 429) {
+      if (
+        exception.httpStatus === 401 ||
+        exception.httpStatus === 403 ||
+        exception.httpStatus === 429
+      ) {
         this.logger.warn(
           { correlationId, code: exception.code, userId: this.ctx.getUserId() },
           `Security event [${exception.httpStatus}]: ${exception.message}`,
