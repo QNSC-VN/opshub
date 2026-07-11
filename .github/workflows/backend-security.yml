@@ -1,12 +1,12 @@
 # =============================================================================
-# Security — container CVE scan + SAST
+# Security · Scan — thin caller of the shared reusable suite (qnsc-ci).
 #
-# Runs on every PR and every push to main, plus a weekly scheduled scan
-# to catch newly disclosed CVEs even without a code push.
-#
-# Both jobs report findings to GitHub Security → Code Scanning dashboard.
+# One org-wide security standard: Trivy (container CVEs, CRITICAL blocks),
+# Semgrep (SAST — replaces CodeQL, no GHAS needed), Gitleaks (secrets) and
+# osv-scanner (dependency CVEs — replaces dependency-review). Runs on every PR,
+# every push to main, and weekly to catch newly disclosed CVEs between pushes.
 # =============================================================================
-name: Security
+name: Security · Scan
 
 on:
   push:
@@ -14,7 +14,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 4 * * 1'   # weekly Monday 04:00 UTC
+    - cron: "0 4 * * 1" # weekly Monday 04:00 UTC — catch new CVEs between pushes
 
 concurrency:
   group: security-${{ github.ref }}
@@ -22,136 +22,12 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  NODE_VERSION: '22'
-  PNPM_VERSION: '10.33.2'
+  security-events: write # SARIF upload (no-op on free plan, lights up after GHAS)
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────
-  # 1. Trivy — scan the built Docker image for OS + library CVEs.
-  # ─────────────────────────────────────────────────────────────────────────
-  trivy:
-    name: Container security scan (Trivy)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      security-events: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4
-
-      - name: Build API image for scanning
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
-        with:
-          context: .
-          target: api
-          push: false
-          load: true
-          tags: opshub-api:scan
-          cache-from: type=gha,scope=api
-
-      # Two-pass scan: CRITICAL blocks the build; HIGH is reported only.
-      # ignore-unfixed: true — skip CVEs with no upstream fix (supply chain noise).
-      - name: Scan image (CRITICAL — blocks build)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
-        with:
-          image-ref: opshub-api:scan
-          format: table
-          severity: CRITICAL
-          exit-code: '1'
-          ignore-unfixed: true
-
-      - name: Scan image (HIGH — report only)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
-        with:
-          image-ref: opshub-api:scan
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH
-          exit-code: '0'
-          ignore-unfixed: true
-
-      - name: Upload Trivy SARIF to GitHub Security
-        if: always()
-        continue-on-error: true   # requires GitHub Advanced Security (free plan: no-op)
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-container
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 2. CodeQL — SAST for TypeScript source.
-  #    Scans for injection, path traversal, prototype pollution, OWASP Top 10.
-  # ─────────────────────────────────────────────────────────────────────────
-  codeql:
-    name: CodeQL SAST
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-      - name: Initialise CodeQL
-        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4
-        with:
-          languages: javascript-typescript
-          queries: security-and-quality
-
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-
-      - name: Build for CodeQL
-        run: pnpm build:api
-
-      - name: Perform CodeQL analysis
-        continue-on-error: true   # requires GitHub Advanced Security (free plan: no-op)
-        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4
-        with:
-          category: codeql-typescript
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 3. Secret scanning — detect accidentally committed credentials.
-  # ─────────────────────────────────────────────────────────────────────────
-  secrets:
-    name: Secret scan (Gitleaks)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      security-events: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-        with:
-          fetch-depth: 0
-
-      - uses: QNSC-VN/qnsc-ci/actions/scan-secrets@v1
-        with:
-          fail-on-leak: "true"
-
-  dependency-review:
-    name: Dependency review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5
-        with:
-          fail-on-severity: critical
+  security:
+    uses: QNSC-VN/qnsc-ci/.github/workflows/security.yml@v1
+    with:
+      product: opshub
+      image_target: api
+    secrets: inherit
