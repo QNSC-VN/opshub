@@ -24,7 +24,7 @@ import { UserDrizzleRepository } from './user.drizzle-repository';
 /**
  * Wires opshub's concrete adapters onto the shared `@qnsc-vn/identity`
  * AuthService's collaborator ports, plus the two option factories and the
- * package's `EntraTokenVerifier` / `AuthService`. `ValkeyService` and
+ * package's `EntraTokenVerifier` / `AuthService`. `AuthTokenCache` and
  * `JwtService` are provided globally (CacheModule / PlatformModule) and are not
  * repeated here. opshub is single-tenant, so the workspace-only ports
  * (`SSO_CONNECTION_REPOSITORY`, `ACCESS_SERVICE`, `WORKSPACE_SERVICE`) are left

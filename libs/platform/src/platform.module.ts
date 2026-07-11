@@ -3,6 +3,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { TerminusModule } from '@nestjs/terminus';
 import { CacheModule } from '@qnsc-vn/platform-cache';
+import { AuthTokenCache } from '@qnsc-vn/identity';
 import { AppConfigModule } from './config/config.module';
 import { AppConfigService } from './config/app-config.service';
 import { DatabaseModule } from './database/database.module';
@@ -18,7 +19,6 @@ import { RequestEngine } from './requests/request-engine.service';
 import { OutboxService } from './outbox/outbox.service';
 import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
-import { CacheService } from './cache/cache.service';
 import { ResilienceService } from './resilience/resilience.service';
 import { EMAIL_PROVIDER } from './email/email.provider';
 import { DevEmailProvider } from './email/providers/dev.provider';
@@ -60,14 +60,17 @@ import { StorageService } from './storage/storage.service';
         },
       }),
     }),
-    // Shared Valkey/Redis client (@qnsc-vn/platform-cache) used by the shared
-    // identity AuthService for the access-token denylist and refresh-rotation
-    // grace window. Registered globally so JwtAuthGuard can read the denylist.
+    // Single shared Valkey/Redis client (@qnsc-vn/platform-cache), registered
+    // globally so every consumer (rate-limit, idempotency, health, pub/sub) and
+    // the shared identity AuthService/AuthTokenCache share one connection.
+    // Optional mode: when REDIS_URL is unset the cache is disabled and all
+    // consumers fail open (opshub runs without a hard Redis dependency).
     CacheModule.forRootAsync({
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) => ({
-        url: config.get('REDIS_URL') ?? 'redis://localhost:6379',
+        url: config.get('REDIS_URL'),
         keyPrefix: config.get('REDIS_KEY_PREFIX'),
+        mode: 'optional' as const,
       }),
     }),
     TerminusModule,
@@ -85,7 +88,7 @@ import { StorageService } from './storage/storage.service';
     RequestEngine,
     OutboxService,
     HttpLoggingInterceptor,
-    CacheService,
+    AuthTokenCache,
     ResilienceService,
     {
       provide: EMAIL_PROVIDER,
@@ -123,7 +126,7 @@ import { StorageService } from './storage/storage.service';
     RequestEngine,
     OutboxService,
     HttpLoggingInterceptor,
-    CacheService,
+    AuthTokenCache,
     ResilienceService,
     EmailService,
     EmailSchedulerService,

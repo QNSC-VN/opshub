@@ -4,13 +4,13 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { sql } from 'drizzle-orm';
 import { Public } from '../auth/decorators';
 import { SkipRateLimit } from '../rate-limit/rate-limit.decorator';
-import { CacheService } from '../cache/cache.service';
+import { CacheService } from '@qnsc-vn/platform-cache';
 import { InjectDrizzle } from '../database/drizzle.provider';
 import type { DrizzleDB } from '../database/drizzle.provider';
 
 @ApiTags('health')
 @Controller()
-@SkipRateLimit()  // K8s probes fire every 10-30 s — must not consume rate-limit quota
+@SkipRateLimit() // K8s probes fire every 10-30 s — must not consume rate-limit quota
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,

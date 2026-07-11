@@ -1,9 +1,8 @@
 import { ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import { ValkeyService } from '@qnsc-vn/platform-cache';
+import { AuthTokenCache } from '@qnsc-vn/identity';
 import { IS_PUBLIC_KEY } from './decorators';
-import { CacheService } from '../cache/cache.service';
 import { RequestContextService } from '../context/request-context';
 import type { JwtPayload } from './jwt.strategy';
 
@@ -21,9 +20,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
   constructor(
     private readonly reflector: Reflector,
-    private readonly cache: CacheService,
+    private readonly authCache: AuthTokenCache,
     private readonly ctx: RequestContextService,
-    private readonly valkey: ValkeyService,
   ) {
     super();
   }
@@ -47,17 +45,17 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     const req = context.switchToHttp().getRequest<{ user: JwtPayload }>();
     try {
-      // Two fast-revocation checks (OWASP JWT Cheat Sheet, §No Built-In Token Revocation):
-      //   1. Session-level  — explicit logout or rotation-theft detection. The
-      //      shared identity AuthService denylists the access-token `jti` in
-      //      Valkey on logout, so this reads the package's denylist.
-      //   2. Employee-level — offboarding revokes all outstanding access tokens
-      //      via opshub's own CacheService key scheme.
-      const [sessionDenied, employeeRevoked] = await Promise.all([
-        this.valkey.isTokenDenied(req.user.jti),
-        this.cache.get(`revoked:employee:${req.user.sub}`),
+      // Two fast-revocation checks (OWASP JWT Cheat Sheet, §No Built-In Token Revocation),
+      // both served by the shared identity AuthTokenCache (Redis denylist):
+      //   1. Session-level  — explicit logout or rotation-theft detection denylists
+      //      the access-token `jti`.
+      //   2. User-level     — offboarding revokes all outstanding access tokens for
+      //      the employee via the `denylist:user:*` scheme.
+      const [sessionDenied, userRevoked] = await Promise.all([
+        this.authCache.isTokenDenied(req.user.jti),
+        this.authCache.isUserRevoked(req.user.sub),
       ]);
-      if (sessionDenied || employeeRevoked) {
+      if (sessionDenied || userRevoked) {
         throw new UnauthorizedException('Session has been revoked');
       }
     } catch (err) {
