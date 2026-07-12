@@ -47,10 +47,10 @@ module "ecr" {
 }
 
 # ── GitHub Actions OIDC roles (ECS deploy + ECR push + infra CI) ─────────────
-# Owns ALL opshub deploy roles: API (per-env), ECR push, infra plan/apply, AND
-# web (SPA) deploy roles (previously hand-rolled below — now the module's
-# web_deploy_environments input). opshub is a monorepo; subjects use the
-# "opshub" repo (the archived "opshub-api"/"opshub-web" split repos are dead).
+# Owns ALL opshub deploy roles: API (per-env), ECR push, infra plan/apply.
+# opshub is a monorepo; subjects use the "opshub" repo (the archived
+# "opshub-api"/"opshub-web" split repos are dead). Web (SPA) deploys to
+# Cloudflare Pages with Cloudflare creds — no AWS role.
 module "iam_oidc" {
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v1.2.0"
 
@@ -71,24 +71,6 @@ module "iam_oidc" {
         "repo:${var.github_org}/opshub:ref:refs/tags/v*",
         "repo:${var.github_org}/opshub:environment:production",
       ]
-    }
-  }
-
-  web_deploy_environments = {
-    develop = {
-      allowed_subjects = [
-        "repo:${var.github_org}/opshub:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub:environment:develop",
-      ]
-      s3_bucket = "opshub-web-develop"
-    }
-    production = {
-      allowed_subjects = [
-        "repo:${var.github_org}/opshub:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub:ref:refs/tags/v*",
-        "repo:${var.github_org}/opshub:environment:production",
-      ]
-      s3_bucket = "opshub-web-prod"
     }
   }
 
