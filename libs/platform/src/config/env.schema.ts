@@ -66,6 +66,17 @@ export const EnvSchema = z
     /** CloudFront base URL for file downloads. When set, overrides presigned S3 GET URLs. */
     CDN_FILES_BASE_URL: z.string().optional(),
 
+    // ── Object storage backend selector (AWS S3 by default; R2/MinIO when set) ──
+    // Unset → AWS S3 via the task role (default). STORAGE_ENDPOINT set →
+    // S3-compatible backend (Cloudflare R2, MinIO) with static credentials +
+    // path-style addressing. R2 requires STORAGE_ENDPOINT + STORAGE_ACCESS_KEY_ID
+    // + STORAGE_SECRET_ACCESS_KEY + STORAGE_FORCE_PATH_STYLE=true. The bucket name
+    // still travels as S3_FILES_BUCKET.
+    STORAGE_ENDPOINT: z.string().url().optional(),
+    STORAGE_ACCESS_KEY_ID: z.string().optional(),
+    STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
+    STORAGE_FORCE_PATH_STYLE: booleanish(false),
+
     // ── Observability ──────────────────────────────────────────────────────────
     SERVICE_VERSION: z.string().default('dev'),
     LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),

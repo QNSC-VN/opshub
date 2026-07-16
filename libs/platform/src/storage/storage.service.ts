@@ -56,8 +56,16 @@ export class StorageService {
     this.bucket = config.get('S3_FILES_BUCKET') ?? '';
     this.cdnBaseUrl = (config.get('CDN_FILES_BASE_URL') ?? '').replace(/\/$/, '') || null;
 
+    // endpoint set → S3-compatible backend (Cloudflare R2, MinIO) with static
+    // credentials and path-style addressing. Same SDK, selected by config.
+    const endpoint = config.get('STORAGE_ENDPOINT');
+    const accessKeyId = config.get('STORAGE_ACCESS_KEY_ID');
+    const secretAccessKey = config.get('STORAGE_SECRET_ACCESS_KEY');
+
     this.s3 = new S3Client({
-      region: config.get('AWS_REGION'),
+      region: endpoint ? 'auto' : config.get('AWS_REGION'),
+      ...(endpoint ? { endpoint, forcePathStyle: config.get('STORAGE_FORCE_PATH_STYLE') } : {}),
+      ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
     });
   }
 
@@ -67,13 +75,13 @@ export class StorageService {
    * UPLOAD_URL_TTL_SECONDS (5 min).
    */
   @Span('storage.presignUpload')
-  async presignUpload(
-    input: PresignUploadInput,
-    uploaderId: string,
-  ): Promise<PresignUploadResult> {
+  async presignUpload(input: PresignUploadInput, uploaderId: string): Promise<PresignUploadResult> {
     const rules = RESOURCE_RULES[input.resourceType];
     if (!rules) {
-      throw new ValidationException(ErrorCodes.FILE_TYPE_NOT_ALLOWED, `Unknown resource type: ${input.resourceType}`);
+      throw new ValidationException(
+        ErrorCodes.FILE_TYPE_NOT_ALLOWED,
+        `Unknown resource type: ${input.resourceType}`,
+      );
     }
 
     if (!(rules.allowedMimeTypes as readonly string[]).includes(input.mimeType)) {
@@ -90,7 +98,9 @@ export class StorageService {
       );
     }
 
-    const ext = input.fileName.includes('.') ? `.${input.fileName.split('.').pop()!.toLowerCase()}` : '';
+    const ext = input.fileName.includes('.')
+      ? `.${input.fileName.split('.').pop()!.toLowerCase()}`
+      : '';
     const key = `${input.resourceType}/${uploaderId}/${newId()}${ext}`;
 
     const [file] = await this.db
@@ -109,20 +119,17 @@ export class StorageService {
       })
       .returning();
 
-    const uploadUrl = await this.resilience.execute(
-      's3.presignPut',
-      this.resilience.external,
-      () =>
-        getSignedUrl(
-          this.s3,
-          new PutObjectCommand({
-            Bucket: this.bucket,
-            Key: key,
-            ContentType: input.mimeType,
-            ContentLength: input.sizeBytes,
-          }),
-          { expiresIn: UPLOAD_URL_TTL_SECONDS },
-        ),
+    const uploadUrl = await this.resilience.execute('s3.presignPut', this.resilience.external, () =>
+      getSignedUrl(
+        this.s3,
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ContentType: input.mimeType,
+          ContentLength: input.sizeBytes,
+        }),
+        { expiresIn: UPLOAD_URL_TTL_SECONDS },
+      ),
     );
 
     return { fileId: file.id, uploadUrl, key };
@@ -163,7 +170,10 @@ export class StorageService {
 
     if (head.contentLength !== file.sizeBytes) {
       // Size mismatch — mark deleted so the orphan cron can purge the S3 object
-      await this.db.update(storedFiles).set({ status: 'deleted' }).where(eq(storedFiles.id, fileId));
+      await this.db
+        .update(storedFiles)
+        .set({ status: 'deleted' })
+        .where(eq(storedFiles.id, fileId));
       throw new ValidationException(
         ErrorCodes.FILE_SIZE_MISMATCH,
         `Uploaded size (${head.contentLength}) does not match declared size (${file.sizeBytes})`,
@@ -218,7 +228,9 @@ export class StorageService {
 
     void this.s3
       .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: file.key }))
-      .catch((err: unknown) => this.logger.error({ key: file.key, err }, 'S3 delete failed — manual cleanup needed'));
+      .catch((err: unknown) =>
+        this.logger.error({ key: file.key, err }, 'S3 delete failed — manual cleanup needed'),
+      );
   }
 
   /**
@@ -239,19 +251,16 @@ export class StorageService {
       rows.map((r) =>
         this.s3
           .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: r.key }))
-          .catch((err: unknown) => this.logger.warn({ key: r.key, err }, 'Orphan S3 delete failed')),
+          .catch((err: unknown) =>
+            this.logger.warn({ key: r.key, err }, 'Orphan S3 delete failed'),
+          ),
       ),
     );
 
     await this.db
       .update(storedFiles)
       .set({ status: 'deleted' })
-      .where(
-        and(
-          eq(storedFiles.status, 'pending'),
-          lt(storedFiles.createdAt, cutoff),
-        ),
-      );
+      .where(and(eq(storedFiles.status, 'pending'), lt(storedFiles.createdAt, cutoff)));
 
     return rows.length;
   }
@@ -260,10 +269,8 @@ export class StorageService {
 
   private async headObject(key: string): Promise<{ contentLength: number } | null> {
     try {
-      const result = await this.resilience.execute(
-        's3.headObject',
-        this.resilience.external,
-        () => this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key })),
+      const result = await this.resilience.execute('s3.headObject', this.resilience.external, () =>
+        this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key })),
       );
       return { contentLength: result.ContentLength ?? 0 };
     } catch {
@@ -278,26 +285,19 @@ export class StorageService {
     // Presigned GET — generated lazily; in dev we return a placeholder path
     // since S3_FILES_BUCKET may not be configured.
     if (!this.bucket) return `/dev/files/${key}`;
-    return getSignedUrl(
-      this.s3,
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      { expiresIn: DOWNLOAD_URL_TTL_SECONDS },
-    ) as unknown as string;
+    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+      expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+    }) as unknown as string;
   }
 
   /** Presigned GET URL for a known key — used by domain services that already hold the key. */
   async presignGet(key: string): Promise<string> {
     if (this.cdnBaseUrl) return `${this.cdnBaseUrl}/${key}`;
     if (!this.bucket) return `/dev/files/${key}`;
-    return this.resilience.execute(
-      's3.presignGet',
-      this.resilience.external,
-      () =>
-        getSignedUrl(
-          this.s3,
-          new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-          { expiresIn: DOWNLOAD_URL_TTL_SECONDS },
-        ),
+    return this.resilience.execute('s3.presignGet', this.resilience.external, () =>
+      getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+        expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+      }),
     );
   }
 
@@ -308,6 +308,6 @@ export class StorageService {
       .from(storedFiles)
       .where(eq(storedFiles.id, fileId))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 }
