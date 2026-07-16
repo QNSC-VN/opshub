@@ -1,30 +1,27 @@
 # =============================================================================
-# Deploy — Build Vite bundle, sync to S3, invalidate CloudFront
+# Deploy — Build Vite bundle, publish to Cloudflare Pages
 #
 # Triggers:
 #   develop → push to main (auto)
 #   prod    → push a semver tag  v*.*.*  (requires "production" environment
 #             approval in GitHub Settings → Environments → production)
 #
-# Authentication: GitHub OIDC → AWS IAM (no stored AWS keys).
+# Authentication: Cloudflare API token (no AWS credentials — the web SPA is
+# hosted on Cloudflare Pages, not S3/CloudFront).
 #
 # Prerequisites (GitHub environments "develop" and "production"):
 #   Repository secrets:
-#     AWS_ACCOUNT_ID           12-digit, no hyphens
+#     CLOUDFLARE_API_TOKEN     Pages:Edit token
+#     CLOUDFLARE_ACCOUNT_ID    Cloudflare account ID
 #     SLACK_DEPLOY_WEBHOOK     Slack / Discord incoming webhook (optional)
 #
 #   Environment variables:
-#     AWS_REGION               e.g. ap-southeast-1
-#     S3_BUCKET                e.g. opshub-web-develop
-#     CLOUDFRONT_ID            CloudFront distribution ID
+#     PAGES_PROJECT            Cloudflare Pages project name
 #     VITE_API_URL             e.g. https://opshub-api-dev.qnsc.vn
 #     VITE_APP_ENV             development | production
 #     VITE_ENTRA_TENANT_ID     Azure AD tenant ID (or empty to disable SSO)
 #     VITE_ENTRA_CLIENT_ID     Azure AD client ID (or empty to disable SSO)
 #     APP_URL                  e.g. https://opshub-dev.qnsc.vn (for health)
-#
-#   Environment-scoped IAM roles (provisioned by opshub-infra):
-#     opshub-github-web-deploy-<env>   S3 sync + CloudFront invalidation
 # =============================================================================
 name: Deploy — Web
 
@@ -69,8 +66,8 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Build and deploy to S3 + CloudFront.
-  # ─────────────────────────────────────────────────────────────────────────
+  # Build and publish to Cloudflare Pages.
+  # ──────────────────────────────────────────────────────────
   deploy:
     name: Deploy to ${{ needs.context.outputs.environment }}
     runs-on: ubuntu-latest
@@ -78,7 +75,6 @@ jobs:
     environment: ${{ needs.context.outputs.environment }}
     timeout-minutes: 20
     permissions:
-      id-token: write   # OIDC
       contents: read
 
     env:
