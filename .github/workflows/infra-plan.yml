@@ -80,6 +80,14 @@ jobs:
           TF_VAR_web_acm_cert_arn:     ${{ secrets.WEB_ACM_CERT_ARN }}
           TF_VAR_image_tag:            ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
           TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Mirror the apply-time TF_VARs so plan ≈ apply. Without
+          # cloudflare_account_id the count-gated Cloudflare Pages module
+          # (module.web) resolves to 0, so every plan shows a phantom
+          # `module.web[0]` destroy; the entra_* ids likewise avoid spurious
+          # api/worker task-def env diffs.
+          TF_VAR_entra_tenant_id:       ${{ vars.ENTRA_TENANT_ID }}
+          TF_VAR_entra_client_id:       ${{ vars.ENTRA_CLIENT_ID }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         continue-on-error: true   # allow comment step to run; real failure gate below
 
       - name: Post plan comment
