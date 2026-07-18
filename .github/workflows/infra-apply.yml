@@ -1,4 +1,4 @@
-name: OpenTofu Apply
+name: Infrastructure · Apply
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Infra apply, gated the same way as the app deploys (backend-deploy.yml):
@@ -30,6 +30,12 @@ on:
       - ".github/workflows/infra-apply.yml"
   workflow_dispatch:
 
+# Serialize applies on the same ref so two quick merges can't race the tofu
+# state lock. Never cancel a running apply mid-flight.
+concurrency:
+  group: infra-apply-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
@@ -52,7 +58,7 @@ jobs:
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.4.0
         with:
-          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
@@ -83,7 +89,7 @@ jobs:
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.4.0
         with:
-          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
@@ -110,7 +116,7 @@ jobs:
       # (same app release.yml uses) so we never need a long-lived user PAT.
       # Requires the app to have "Variables: read and write" on this repo.
       # Falls back to no token (publish step skipped) when the app isn't set.
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1
         id: app-token
         if: ${{ vars.RELEASE_BOT_APP_ID != '' }}
         continue-on-error: true
@@ -157,7 +163,7 @@ jobs:
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.4.0
         with:
-          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
+          role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
           tofu-version: ${{ env.TOFU_VERSION }}
 
@@ -173,7 +179,7 @@ jobs:
         working-directory: infra/live/prod
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:          ${{ vars.ACM_CERT_ARN_PROD }}
+          TF_VAR_acm_cert_arn:          ${{ secrets.ACM_CERT_ARN_PROD }}
           TF_VAR_image_tag:             ${{ vars.PINNED_IMAGE_TAG }}
           TF_VAR_entra_tenant_id:       ${{ vars.ENTRA_TENANT_ID }}
           TF_VAR_entra_client_id:       ${{ vars.ENTRA_CLIENT_ID }}

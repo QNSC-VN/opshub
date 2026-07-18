@@ -47,12 +47,12 @@ module "ecr" {
 }
 
 # ── GitHub Actions OIDC roles (ECS deploy + ECR push + infra CI) ─────────────
-# Owns ALL opshub deploy roles: API (per-env), ECR push, infra plan/apply, AND
-# web (SPA) deploy roles (previously hand-rolled below — now the module's
-# web_deploy_environments input). opshub is a monorepo; subjects use the
+# Owns ALL opshub AWS deploy roles: API (per-env), ECR push, infra plan/apply.
+# The web SPA deploys to Cloudflare Pages (see web-deploy.yml → wrangler pages
+# deploy), so it needs no AWS deploy role. opshub is a monorepo; subjects use the
 # "opshub" repo (the archived "opshub-api"/"opshub-web" split repos are dead).
 module "iam_oidc" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v1.2.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v2.0.1"
 
   product           = "opshub"
   github_org        = var.github_org
@@ -74,30 +74,27 @@ module "iam_oidc" {
     }
   }
 
-  web_deploy_environments = {
-    develop = {
-      allowed_subjects = [
-        "repo:${var.github_org}/opshub:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub:environment:develop",
-      ]
-      s3_bucket = "opshub-web-develop"
-    }
-    production = {
-      allowed_subjects = [
-        "repo:${var.github_org}/opshub:ref:refs/heads/main",
-        "repo:${var.github_org}/opshub:ref:refs/tags/v*",
-        "repo:${var.github_org}/opshub:environment:production",
-      ]
-      s3_bucket = "opshub-web-prod"
-    }
-  }
-
   app_repo_names         = ["opshub"]
   infra_repo_name        = "opshub"
   ecr_repository_pattern = "opshub-*"
   ecs_passrole_pattern   = "opshub-*"
 
   tags = { Scope = "shared" }
+
+  # infra_plan_subjects / infra_apply_subjects: opshub's infra-apply jobs run in
+  # the shared/develop/production GitHub Environments (see infra-apply.yml), which
+  # exactly match the module defaults — so no override is needed.
+
+  # Blast-radius guardrail: explicit-Deny on the opshub infra-apply role so a buggy
+  # opshub apply cannot destroy the platform's own foundations (state bucket, lock
+  # table, OIDC provider, CMK) or mint IAM users — all owned by qnsc-infra bootstrap.
+  infra_apply_guardrail = {
+    state_bucket_arn     = "arn:aws:s3:::qnsc-tofu-state"
+    lock_table_arn       = "arn:aws:dynamodb:ap-southeast-1:${data.aws_caller_identity.current.account_id}:table/qnsc-tofu-locks"
+    oidc_provider_arn    = data.terraform_remote_state.platform.outputs.oidc_provider_arn
+    kms_key_arn          = data.terraform_remote_state.platform.outputs.kms_key_arn
+    artifacts_bucket_arn = data.terraform_remote_state.platform.outputs.artifacts_bucket_arn
+  }
 }
 
 # ── RDS dev-cost-saver guard — develop deploy role only ──────────────────────
@@ -137,28 +134,7 @@ resource "aws_iam_role_policy" "deploy_rds_dev_guard" {
   })
 }
 
-# ── ECS deploy verification — both deploy roles ────────────────────────────
-# verify-ecs-deploy enumerates running tasks (aws ecs list-tasks) to confirm the
-# new image tag is live after a deploy. Without ecs:ListTasks the call is denied,
-# the action swallows the error, and verification always times out. The baseline
-# iam-oidc module (main / next release) grants this, but this stack still pins
-# iam-oidc-v1.2.0 — adopting the newer module also changes the infra-apply OIDC
-# trust, so we grant it here (both envs) until that bump is done deliberately.
-resource "aws_iam_role_policy" "deploy_ecs_verify" {
-  for_each = toset(["develop", "production"])
+# NOTE: the former inline patch `deploy_ecs_verify` (ecs:ListTasks on both deploy
+# roles) was removed when this stack adopted iam-oidc-v2.0.1 — the module now grants
+# ecs:ListTasks on the deploy role, so it is once again the single source of truth.
 
-  name = "opshub-deploy-${each.key}-ecs-verify"
-  role = split("/", module.iam_oidc.deploy_role_arns[each.key])[1]
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "ECSVerifyListTasks"
-        Effect   = "Allow"
-        Action   = ["ecs:ListTasks"]
-        Resource = "*"
-      }
-    ]
-  })
-}
