@@ -33,7 +33,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { AppConfigService } from '../config/app-config.service';
-import { CacheService } from '../cache/cache.service';
+import { CacheService } from '@qnsc-vn/platform-cache';
 
 export interface NotificationPubSubPayload {
   notificationId: string;
@@ -139,10 +139,7 @@ export class NotificationPubSubService implements OnModuleInit, OnModuleDestroy 
    * the new event to the browser without any client-side polling.
    */
   async notifyUser(payload: NotificationPubSubPayload): Promise<void> {
-    await this.cache.redis?.publish(
-      this.userChannel(payload.recipientId),
-      JSON.stringify(payload),
-    );
+    await this.cache.redis?.publish(this.userChannel(payload.recipientId), JSON.stringify(payload));
   }
 
   // ── Subscriber ────────────────────────────────────────────────────────────

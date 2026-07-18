@@ -2,10 +2,10 @@ import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } fr
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { Observable, from, of } from 'rxjs';
 import { switchMap, tap } from 'rxjs/operators';
-import { CacheService } from '../cache/cache.service';
+import { CacheService } from '@qnsc-vn/platform-cache';
 import type { JwtPayload } from '../auth/jwt.strategy';
 
-const IDEMPOTENCY_TTL_SECONDS = 24 * 3600;  // 24 h
+const IDEMPOTENCY_TTL_SECONDS = 24 * 3600; // 24 h
 const IDEMPOTENT_METHODS = new Set(['POST', 'PUT', 'PATCH']);
 
 /**

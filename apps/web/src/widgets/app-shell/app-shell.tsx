@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { AiChatPanel } from '@/widgets/ai-chat/ai-chat-panel';
 import { useAuthStore, getToken } from '@/shared/api/auth-store';
+import { attemptRefresh } from '@/shared/api/client';
+import { resetBootstrap } from '@/shared/api/auth-bootstrap';
 import { msalLogoutRedirect } from '@/app/auth/msal';
 import { cn } from '@/shared/lib/utils';
 import { NotificationBell } from '@/widgets/notifications/notification-bell';
@@ -204,15 +206,34 @@ export function AppShell() {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]!)) as { authMethod?: string };
         wasSSO = payload.authMethod === 'sso';
-      } catch { /* malformed token — treat as non-SSO */ }
+      } catch {
+        /* malformed token — treat as non-SSO */
+      }
     }
 
+    // The logout endpoint is @Auth-protected: it identifies the session from the
+    // access token, revokes the session row and clears the refresh cookie. A bare
+    // fetch without the Authorization header (or with an expired token) 401s, so
+    // the server never revokes the session and the HttpOnly refresh cookie
+    // survives — the next navigation would then silently re-authenticate. Attach
+    // the token and, on 401, refresh once and retry so logout truly revokes.
+    const postLogout = (bearer: string | null) =>
+      fetch(`${ENV.API_BASE_URL}/v1/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
+      });
     try {
-      await fetch(`${ENV.API_BASE_URL}/v1/auth/logout`, { method: 'POST', credentials: 'include' });
+      let res = await postLogout(token);
+      if (res.status === 401) {
+        const fresh = await attemptRefresh();
+        if (fresh) res = await postLogout(fresh);
+      }
     } catch {
       // best-effort
     }
     clear();
+    resetBootstrap();
 
     if (wasSSO) {
       await msalLogoutRedirect(window.location.origin);

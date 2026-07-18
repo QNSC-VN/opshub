@@ -1,7 +1,16 @@
 /**
  * identity schema — employees (single-tenant directory, synced from Entra ID).
  */
-import { pgSchema, uuid, varchar, jsonb, timestamp, index, uniqueIndex, boolean } from 'drizzle-orm/pg-core';
+import {
+  pgSchema,
+  uuid,
+  varchar,
+  jsonb,
+  timestamp,
+  index,
+  uniqueIndex,
+  boolean,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { employeeStatusEnum } from './enums';
 
@@ -57,6 +66,16 @@ export const refreshTokens = identitySchema.table(
     familyId: uuid('family_id').notNull(),
     /** Always 'sso' — session established via Entra ID OIDC. Kept as varchar for forward compatibility. */
     authMethod: varchar('auth_method', { length: 10 }).notNull().default('sso'),
+    /**
+     * Authorization context scope for the session. Single-tenant (opshub) always
+     * `null`; the column exists so the shared `@qnsc-vn/identity` AuthService can
+     * treat opshub and multi-tenant products uniformly.
+     */
+    contextId: varchar('context_id', { length: 120 }),
+    /** SSO provider that established the session ('entra'); null for non-SSO. */
+    ssoProvider: varchar('sso_provider', { length: 32 }),
+    /** CSRF token for double-submit cookie protection; null for pre-migration sessions. */
+    csrfToken: varchar('csrf_token', { length: 64 }),
     /** True once the token has been rotated or explicitly revoked. */
     revoked: boolean('revoked').notNull().default(false),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -67,5 +86,32 @@ export const refreshTokens = identitySchema.table(
     employeeIdx: index('ix_refresh_token_employee').on(t.employeeId),
     familyIdx: index('ix_refresh_token_family').on(t.familyId),
     expiryIdx: index('ix_refresh_token_expiry').on(t.expiresAt),
+  }),
+);
+
+/**
+ * SSO identity links — maps an external IdP subject (Entra `oid`) to an
+ * employee. The shared `@qnsc-vn/identity` AuthService resolves and JIT-provisions
+ * users through this table (`findSsoIdentity` / `upsertBySsoIdentity`) instead of
+ * reading `entra_oid` off the employee directly, so multiple providers can link
+ * to one account. `employees.entra_oid` is kept in sync for existing RBAC queries.
+ */
+export const ssoIdentities = identitySchema.table(
+  'sso_identities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    /** IdP discriminator, e.g. 'entra'. */
+    provider: varchar('provider', { length: 32 }).notNull(),
+    /** Stable IdP subject id (Entra `oid`). */
+    providerSub: varchar('provider_sub', { length: 255 }).notNull(),
+    /** Email as asserted by the IdP at last login. */
+    providerEmail: varchar('provider_email', { length: 255 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    providerSubIdx: uniqueIndex('uq_sso_identity_provider_sub').on(t.provider, t.providerSub),
+    userIdx: index('ix_sso_identity_user').on(t.userId),
   }),
 );
