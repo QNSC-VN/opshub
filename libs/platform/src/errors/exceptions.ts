@@ -1,22 +1,22 @@
+import { DomainException as SharedDomainException } from '@qnsc-vn/platform-http';
 import type { ErrorCategory, ErrorCode } from './error-codes';
-import { CATEGORY_HTTP_STATUS } from './error-codes';
 
 /**
  * Base exception for all domain/application errors.
  * The global exception filter maps this to the wire envelope.
+ *
+ * Extends the shared `@qnsc-vn/platform-http` DomainException so that errors
+ * thrown by shared packages (e.g. `@qnsc-vn/identity`'s AuthService) and errors
+ * thrown by opshub's own use-cases share ONE class identity. The global
+ * exception filter then maps both through a single `instanceof` branch instead
+ * of letting shared-package errors fall through to a generic 500. opshub keeps
+ * its strict `ErrorCode` catalog typing on the constructor (the shared base
+ * intentionally accepts an open `string`); the shared base derives `httpStatus`
+ * from the (identical) category table.
  */
-export class DomainException extends Error {
-  readonly code: ErrorCode;
-  readonly httpStatus: number;
-  readonly details?: unknown[];
-
+export class DomainException extends SharedDomainException {
   constructor(code: ErrorCode, message: string, category: ErrorCategory, details?: unknown[]) {
-    super(message);
-    this.name = 'DomainException';
-    this.code = code;
-    this.httpStatus = CATEGORY_HTTP_STATUS[category];
-    this.details = details;
-    Object.setPrototypeOf(this, new.target.prototype);
+    super(code, message, category, details);
   }
 }
 

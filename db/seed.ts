@@ -1,20 +1,37 @@
 /**
- * RBAC catalog seed — bootstraps permissions and system roles.
+ * Seed script — two tiers (mirrors rally's seed architecture):
  *
- * Design goals:
- *  - Idempotent: safe to run multiple times (ON CONFLICT DO NOTHING).
- *  - Catalog only: employees are JIT-provisioned on first Entra SSO login.
- *    Roles are assigned via Entra App Roles → syncUserRolesByKeys() at login time.
+ *   1. RBAC reference catalogue (permissions + roles + grants) — PROD-SAFE.
+ *      Reference data the PolicyGuard and JIT SSO provisioning depend on; it
+ *      must exist in EVERY environment (dev, staging AND production). Exported
+ *      as `seedRbacCatalog` so db/migrate.ts runs it unconditionally. Idempotent
+ *      and authoritative: descriptions/names reconcile via onConflictDoUpdate and
+ *      each system role's permission set is rebuilt so catalogue edits take effect
+ *      on re-run (unlike the previous onConflictDoNothing, which silently ignored
+ *      edits).
  *
- * Run with:  tsx db/seed.ts
+ *   2. Demo fixtures (login-able employees, one per system role) — DEV/E2E ONLY.
+ *      Exported as `seed`, gated behind SEED_ON_DEPLOY and refused on a real
+ *      production deploy. Lets `POST /v1/auth/dev-login` mint a session without
+ *      hand-inserting employees. Idempotent via fixed UUIDs + onConflictDoNothing.
+ *
+ * Run standalone : pnpm db:seed          (catalogue + demo fixtures)
+ * Called by      : db/migrate.ts — seedRbacCatalog always; seed when SEED_ON_DEPLOY=true
  */
-try { process.loadEnvFile('.env'); } catch { /* no .env in CI */ }
+try {
+  process.loadEnvFile('.env');
+} catch {
+  /* no .env in CI */
+}
 
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { inArray } from 'drizzle-orm';
+import { inArray, eq, sql } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { pgOptions } from './pg-ssl';
-import { permissions, roles, rolePermissions } from './schema/authz';
+import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
+import { employees } from './schema/identity';
+
+type SeedDb = ReturnType<typeof drizzle>;
 
 // ── Permission catalog ────────────────────────────────────────────────────────
 const PERMISSIONS: Array<{ key: string; description: string }> = [
@@ -188,48 +205,217 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
   },
 ];
 
-export async function seed(connectionUrl?: string): Promise<void> {
+// ── Demo employees — one per system role, for RBAC + dev-login testing ───────
+// Fixed UUIDs keep re-seeds idempotent. Each employee gets the matching legacy
+// `employees.roles` jsonb (drives the JWT claims) AND a global
+// `user_role_assignments` row (drives effective permissions via authz.resolve).
+// Sign in locally with any of these via `POST /v1/auth/dev-login`.
+const ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000001';
+const DEMO_EMPLOYEES: Array<{
+  id: string;
+  email: string;
+  displayName: string;
+  roleKey: string;
+}> = [
+  {
+    id: ADMIN_EMPLOYEE_ID,
+    email: 'admin@opshub.local',
+    displayName: 'Admin User',
+    roleKey: 'admin',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000002',
+    email: 'it.admin@opshub.local',
+    displayName: 'IT Administrator',
+    roleKey: 'it-admin',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000003',
+    email: 'security@opshub.local',
+    displayName: 'Security Officer',
+    roleKey: 'security',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000004',
+    email: 'hr@opshub.local',
+    displayName: 'HR Manager',
+    roleKey: 'hr',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000005',
+    email: 'manager@opshub.local',
+    displayName: 'People Manager',
+    roleKey: 'manager',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000006',
+    email: 'helpdesk@opshub.local',
+    displayName: 'Help Desk',
+    roleKey: 'helpdesk',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000007',
+    email: 'auditor@opshub.local',
+    displayName: 'Auditor',
+    roleKey: 'auditor',
+  },
+  {
+    id: '00000000-0000-7000-8000-000000000008',
+    email: 'employee@opshub.local',
+    displayName: 'Regular Employee',
+    roleKey: 'employee',
+  },
+];
+
+// ── Tier 1: RBAC reference catalogue (prod-safe) ─────────────────────────────
+/**
+ * Seed the permission catalogue, system roles and their permission grants.
+ * PROD-SAFE reference data — no demo fixtures. Authoritative: role→permission
+ * membership is rebuilt per role so removed/added grants reconcile on re-run.
+ */
+async function seedRbacCatalogInto(db: SeedDb): Promise<void> {
+  await db.transaction(async (tx) => {
+    // 1. Permission catalog — upsert so descriptions reconcile on re-run.
+    await tx
+      .insert(permissions)
+      .values(PERMISSIONS)
+      .onConflictDoUpdate({
+        target: permissions.key,
+        set: { description: sql`excluded.description` },
+      });
+
+    // 2. System roles — upsert so display names reconcile on re-run.
+    await tx
+      .insert(roles)
+      .values(ROLES.map((r) => ({ key: r.key, name: r.name, system: true })))
+      .onConflictDoUpdate({
+        target: roles.key,
+        set: { name: sql`excluded.name`, system: sql`excluded.system` },
+      });
+
+    const roleRows = await tx
+      .select({ id: roles.id, key: roles.key })
+      .from(roles)
+      .where(
+        inArray(
+          roles.key,
+          ROLES.map((r) => r.key),
+        ),
+      );
+    const roleIdByKey = new Map(roleRows.map((r) => [r.key, r.id]));
+
+    // 3. Role → permission membership — rebuild each system role's grants so the
+    //    join table is authoritative (edits to a role's permission list apply).
+    for (const r of ROLES) {
+      const roleId = roleIdByKey.get(r.key);
+      if (!roleId) continue;
+      await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
+      if (r.permissions.length > 0) {
+        await tx
+          .insert(rolePermissions)
+          .values(r.permissions.map((permissionKey) => ({ roleId, permissionKey })))
+          .onConflictDoNothing();
+      }
+    }
+  });
+
+  console.log(
+    `✅ RBAC catalogue seeded: ${PERMISSIONS.length} permissions | ${ROLES.length} roles`,
+  );
+}
+
+/**
+ * Standalone entrypoint that seeds ONLY the RBAC reference catalogue. Safe on
+ * every deploy in every environment — including real production — because it
+ * contains no demo fixtures. Exported so db/migrate.ts runs it unconditionally.
+ */
+export async function seedRbacCatalog(connectionUrl?: string): Promise<void> {
   const url = connectionUrl ?? process.env['DATABASE_URL'];
   if (!url) throw new Error('DATABASE_URL or connectionUrl required');
 
   const pool = new Pool({ ...pgOptions(url), max: 1 });
   const db = drizzle(pool);
+  try {
+    await seedRbacCatalogInto(db);
+  } finally {
+    await pool.end();
+  }
+}
 
-  // 1. Permission catalog
-  await db.insert(permissions).values(PERMISSIONS).onConflictDoNothing({ target: permissions.key });
+// ── Tier 2: demo fixtures (dev/E2E only) ─────────────────────────────────────
+/**
+ * Seed login-able demo employees (one per system role) plus their global role
+ * assignments. DEV/E2E fixtures only. The primary admin email is overridable via
+ * ADMIN_EMAIL (default admin@opshub.local).
+ */
+async function seedDemoEmployeesInto(db: SeedDb): Promise<void> {
+  const adminEmail = process.env['ADMIN_EMAIL'] ?? 'admin@opshub.local';
 
-  // 2. System roles
+  // 1. Employees — legacy roles jsonb drives the JWT claims (RolesClaimsProvider).
   await db
-    .insert(roles)
-    .values(ROLES.map((r) => ({ key: r.key, name: r.name, system: true })))
-    .onConflictDoNothing({ target: roles.key });
+    .insert(employees)
+    .values(
+      DEMO_EMPLOYEES.map((e) => ({
+        id: e.id,
+        email: e.roleKey === 'admin' ? adminEmail : e.email,
+        displayName: e.displayName,
+        roles: [e.roleKey],
+        status: 'active' as const,
+      })),
+    )
+    .onConflictDoNothing();
 
+  // 2. Global role assignments — drive effective permissions via authz.resolve.
   const roleRows = await db
     .select({ id: roles.id, key: roles.key })
     .from(roles)
     .where(
       inArray(
         roles.key,
-        ROLES.map((r) => r.key),
+        DEMO_EMPLOYEES.map((e) => e.roleKey),
       ),
     );
   const roleIdByKey = new Map(roleRows.map((r) => [r.key, r.id]));
 
-  // 3. Role → permission membership
-  const rolePermValues = ROLES.flatMap((r) => {
-    const roleId = roleIdByKey.get(r.key);
-    if (!roleId) return [];
-    return r.permissions.map((permissionKey) => ({ roleId, permissionKey }));
-  });
-  if (rolePermValues.length > 0) {
+  for (const e of DEMO_EMPLOYEES) {
+    const roleId = roleIdByKey.get(e.roleKey);
+    if (!roleId) continue;
     await db
-      .insert(rolePermissions)
-      .values(rolePermValues)
-      .onConflictDoNothing({ target: [rolePermissions.roleId, rolePermissions.permissionKey] });
+      .insert(userRoleAssignments)
+      .values({
+        userId: e.id,
+        roleId,
+        scopeType: 'global',
+        grantedBy: ADMIN_EMPLOYEE_ID,
+      })
+      .onConflictDoNothing();
   }
 
-  console.log(`✅ Seeded: ${PERMISSIONS.length} permissions | ${ROLES.length} roles`);
-  await pool.end();
+  console.log(`✅ Demo employees seeded: ${DEMO_EMPLOYEES.length} (one per role)`);
+}
+
+/**
+ * Full dev/E2E seed: RBAC catalogue + demo fixtures. Refused on a real production
+ * deploy (NODE_ENV=production) unless SEED_ON_DEPLOY=true opts in (develop runs
+ * NODE_ENV=production but seeds intentionally). Idempotent.
+ */
+export async function seed(connectionUrl?: string): Promise<void> {
+  if (process.env['NODE_ENV'] === 'production' && process.env['SEED_ON_DEPLOY'] !== 'true') {
+    throw new Error('Seed (demo fixtures) must not run in production (NODE_ENV=production).');
+  }
+
+  const url = connectionUrl ?? process.env['DATABASE_URL'];
+  if (!url) throw new Error('DATABASE_URL or connectionUrl required');
+
+  const pool = new Pool({ ...pgOptions(url), max: 1 });
+  const db = drizzle(pool);
+  try {
+    // Reference catalogue first so role assignments below resolve.
+    await seedRbacCatalogInto(db);
+    await seedDemoEmployeesInto(db);
+  } finally {
+    await pool.end();
+  }
 }
 
 // Run directly: pnpm db:seed

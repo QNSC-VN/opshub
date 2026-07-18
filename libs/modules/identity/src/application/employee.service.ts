@@ -1,12 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { NotFoundException, ConflictException, ErrorCodes, CacheService, StorageService } from '@platform';
+import { NotFoundException, ConflictException, ErrorCodes, StorageService } from '@platform';
+import { AuthTokenCache } from '@qnsc-vn/identity';
 import type { PresignUploadResult } from '@platform';
 import { SEC_PER_DAY } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
-import {
-  EMPLOYEE_REPOSITORY,
-  type IEmployeeRepository,
-} from '../domain/ports/employee.repository';
+import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../domain/ports/employee.repository';
 import {
   REFRESH_TOKEN_REPOSITORY,
   type IRefreshTokenRepository,
@@ -30,7 +28,7 @@ export class EmployeeService {
   constructor(
     @Inject(EMPLOYEE_REPOSITORY) private readonly employeeRepo: IEmployeeRepository,
     @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokenRepo: IRefreshTokenRepository,
-    private readonly cache: CacheService,
+    private readonly authCache: AuthTokenCache,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
   ) {}
@@ -81,8 +79,9 @@ export class EmployeeService {
   /**
    * Change employee status.
    * - Offboarding: immediately revokes all active refresh token sessions AND
-   *   fast-revokes outstanding access tokens via Redis cache.
-   * - Re-activating: clears the Redis revocation key so the employee can log in again.
+   *   fast-revokes outstanding access tokens via the shared AuthTokenCache
+   *   user-revocation denylist.
+   * - Re-activating: clears the revocation entry so the employee can log in again.
    */
   async updateStatus(id: string, status: EmployeeStatus, actor: Actor): Promise<Employee> {
     const employee = await this.employeeRepo.findById(id);
@@ -96,10 +95,10 @@ export class EmployeeService {
       await this.refreshTokenRepo.revokeAllForEmployee(id);
       // Fast-revoke any live access tokens — blocks them within milliseconds
       // TTL = 24h to cover any edge cases (access tokens expire in 15 min anyway)
-      await this.cache.set(`revoked:employee:${id}`, '1', SEC_PER_DAY);
+      await this.authCache.revokeUser(id, SEC_PER_DAY);
     } else if (status === 'active') {
       // Clear revocation if re-activating an offboarded employee
-      await this.cache.del(`revoked:employee:${id}`);
+      await this.authCache.unrevokeUser(id);
     }
 
     void this.audit.record({

@@ -8,16 +8,26 @@ import { ConflictException, NotFoundException } from '@platform';
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 const mockEmployeeRepo = {
-  findByEmail:  vi.fn(),
-  findById:     vi.fn(),
-  create:       vi.fn(),
-  update:       vi.fn(),
+  findByEmail: vi.fn(),
+  findById: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
   updateStatus: vi.fn(),
-  list:         vi.fn(),
+  list: vi.fn(),
 };
 const mockRefreshTokenRepo = { revokeAllForEmployee: vi.fn() };
-const mockCache = { del: vi.fn(), get: vi.fn(), set: vi.fn() };
-const mockStorage = { presignUpload: vi.fn(), confirmUpload: vi.fn(), getDownloadUrl: vi.fn(), deleteFile: vi.fn() };
+const mockAuthCache = {
+  revokeUser: vi.fn(),
+  unrevokeUser: vi.fn(),
+  isUserRevoked: vi.fn(),
+  isTokenDenied: vi.fn(),
+};
+const mockStorage = {
+  presignUpload: vi.fn(),
+  confirmUpload: vi.fn(),
+  getDownloadUrl: vi.fn(),
+  deleteFile: vi.fn(),
+};
 const mockAudit = { record: vi.fn() };
 
 const ACTOR = { sub: 'admin-1', email: 'admin@acme.com' };
@@ -39,7 +49,7 @@ function makeService() {
   return new EmployeeService(
     mockEmployeeRepo as never,
     mockRefreshTokenRepo as never,
-    mockCache as never,
+    mockAuthCache as never,
     mockStorage as never,
     mockAudit as never,
   );
@@ -59,7 +69,9 @@ describe('EmployeeService.create()', () => {
       ACTOR,
     );
     expect(result.email).toBe('jane@acme.com');
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'employee.created' }));
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'employee.created' }),
+    );
   });
 
   it('lowercases email before checking uniqueness', async () => {
@@ -102,14 +114,22 @@ describe('EmployeeService.update()', () => {
     mockEmployeeRepo.findById.mockResolvedValue(EMPLOYEE);
     mockEmployeeRepo.update.mockResolvedValue(updated);
 
-    const result = await makeService().update('emp-1', { displayName: 'Jane Smith', jobTitle: 'Lead' }, ACTOR);
+    const result = await makeService().update(
+      'emp-1',
+      { displayName: 'Jane Smith', jobTitle: 'Lead' },
+      ACTOR,
+    );
     expect(result.displayName).toBe('Jane Smith');
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'employee.updated' }));
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'employee.updated' }),
+    );
   });
 
   it('throws NotFoundException when employee does not exist', async () => {
     mockEmployeeRepo.findById.mockResolvedValue(null);
-    await expect(makeService().update('ghost', { displayName: 'X' }, ACTOR)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(makeService().update('ghost', { displayName: 'X' }, ACTOR)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -122,7 +142,9 @@ describe('EmployeeService.updateStatus()', () => {
 
     const result = await makeService().updateStatus('emp-1', 'on_leave', ACTOR);
     expect(result.status).toBe('on_leave');
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'employee.status_changed' }));
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'employee.status_changed' }),
+    );
   });
 
   it('returns existing employee without DB call when status unchanged', async () => {
@@ -139,5 +161,6 @@ describe('EmployeeService.updateStatus()', () => {
 
     await makeService().updateStatus('emp-1', 'offboarded', ACTOR);
     expect(mockRefreshTokenRepo.revokeAllForEmployee).toHaveBeenCalledWith('emp-1');
+    expect(mockAuthCache.revokeUser).toHaveBeenCalledWith('emp-1', expect.any(Number));
   });
 });

@@ -22,11 +22,22 @@ function withRefreshLock(fn: () => Promise<string | null>): Promise<string | nul
   return fn();
 }
 
+/** Read a non-HttpOnly cookie value by name (returns null when absent). */
+function readCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function doRefreshOnce(): Promise<string | null> {
   try {
+    // Double-submit CSRF: echo the JS-readable csrf_token cookie in the
+    // X-CSRF-Token header. The server validates it against the value bound to
+    // the session at login before rotating the refresh cookie.
+    const csrf = readCookie('csrf_token');
     const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
       method: 'POST',
       credentials: 'include', // send the HttpOnly cookie
+      headers: csrf ? { 'X-CSRF-Token': csrf } : undefined,
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { accessToken: string };

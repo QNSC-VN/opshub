@@ -1,1 +1,1 @@
-export * from './cache.service';
+export * from '@qnsc-vn/platform-cache';

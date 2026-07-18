@@ -19,6 +19,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: read  # required by amannn/action-semantic-pull-request
+  packages: read       # pull @qnsc-vn/* from GitHub Packages
 
 env:
   NODE_VERSION: '22'
@@ -39,6 +40,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # pull @qnsc-vn/* from GitHub Packages
 
       - name: Lint
         run: pnpm lint
@@ -84,6 +87,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # pull @qnsc-vn/* from GitHub Packages
 
       - name: Run migrations
         run: pnpm db:migrate
@@ -226,6 +231,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # pull @qnsc-vn/* from GitHub Packages
 
       - name: Run migrations
         run: pnpm db:migrate

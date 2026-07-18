@@ -1,4 +1,5 @@
 import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } from '@nestjs/common';
+import { DomainException as SharedDomainException } from '@qnsc-vn/platform-http';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
@@ -8,12 +9,35 @@ import { RequestContextService } from '../context/request-context';
 const SILENT_PREFIXES = ['/v1/healthz', '/v1/readyz', '/favicon.ico'];
 
 /**
+ * Resolve the status code for the access log from the THROWN error rather than
+ * the reply, which the global exception filter has not written yet when this
+ * interceptor's error tap fires. DomainException (opshub's own or any shared
+ * `@qnsc-vn/*` package's — all extend the shared base) exposes `httpStatus`;
+ * Nest HttpExceptions expose `getStatus()`. This keeps 4xx domain failures (e.g.
+ * a 401 bad login thrown by the shared AuthService) out of the 5xx alert stream.
+ */
+function resolveErrorStatus(err: unknown, res: FastifyReply): number {
+  if (err instanceof SharedDomainException) return err.httpStatus;
+  const getStatus = (err as { getStatus?: () => number }).getStatus;
+  if (typeof getStatus === 'function') return getStatus.call(err);
+  return res.statusCode || 500;
+}
+
+/**
  * Field names that must never appear in log output (e.g. Splunk, Datadog).
  * Compared case-insensitively against request body keys.
  */
 const REDACTED_BODY_FIELDS = new Set([
-  'password', 'token', 'secret', 'authorization', 'cookie',
-  'access_token', 'refresh_token', 'api_key', 'apikey', 'x-api-key',
+  'password',
+  'token',
+  'secret',
+  'authorization',
+  'cookie',
+  'access_token',
+  'refresh_token',
+  'api_key',
+  'apikey',
+  'x-api-key',
 ]);
 
 function redactBody(body: unknown): unknown {
@@ -62,7 +86,7 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: () => this.emit(req, res.statusCode, start, ip),
-        error: () => this.emit(req, res.statusCode || 500, start, ip),
+        error: (err: unknown) => this.emit(req, resolveErrorStatus(err, res), start, ip),
       }),
     );
   }
