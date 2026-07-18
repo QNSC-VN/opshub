@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install dependencies
-        uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.3.0
+        uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -121,7 +121,7 @@ jobs:
       # ── Health check — confirm the new version is serving ─────────────────
       - name: Post-deploy health check
         if: vars.APP_URL != ''
-        uses: QNSC-VN/qnsc-ci/actions/post-deploy-health-check@v1.3.0
+        uses: QNSC-VN/qnsc-ci/actions/post-deploy-health-check@v1.4.0
         with:
           url:             ${{ vars.APP_URL }}
           expected-status: '200'
@@ -143,7 +143,7 @@ jobs:
       # ── Notify Slack / Discord (always — even on failure) ─────────────────
       - name: Notify deploy result
         if: always()
-        uses: QNSC-VN/qnsc-ci/actions/notify-deploy@v1.3.0
+        uses: QNSC-VN/qnsc-ci/actions/notify-deploy@v1.4.0
         with:
           webhook-url: ${{ secrets.SLACK_DEPLOY_WEBHOOK }}
           status:      ${{ job.status == 'success' && 'success' || 'failure' }}
