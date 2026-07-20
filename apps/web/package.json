@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "pnpm": {
+    "overrides": {
+      "js-yaml@<4.2.0": ">=4.2.0"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

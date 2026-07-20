@@ -8,6 +8,13 @@
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
   },
+  "pnpm": {
+    "overrides": {
+      "fastify": "5.10.0",
+      "esbuild@<0.25.0": ">=0.25.0",
+      "js-yaml@<4.2.0": ">=4.2.0"
+    }
+  },
   "scripts": {
     "build:api": "nest build api",
     "build:worker": "nest build worker",

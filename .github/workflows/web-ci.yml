@@ -28,6 +28,8 @@ env:
 jobs:
   quality:
     name: Lint & typecheck
+    # Skip the heavy gates on PR title/body edits; build cascade-skips via `needs`.
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -51,6 +53,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────
   test:
     name: Unit tests
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
