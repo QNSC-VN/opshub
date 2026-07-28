@@ -27,13 +27,19 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
     paths:
       - "infra/live/**"
+      # Included ahead of the stack extraction: once the environments call a LOCAL
+      # path module, a module-only commit changes both plans, and a filter on
+      # live/** alone would merge it with no plan reviewed and never apply it.
+      - "infra/modules/**"
       - ".github/workflows/infra-apply.yml"
   workflow_dispatch:
 
-# Serialize applies on the same ref so two quick merges can't race the tofu
-# state lock. Never cancel a running apply mid-flight.
+# Serialize applies REPO-WIDE, not per ref. Merging a release PR pushes `main` AND
+# creates the vX.Y.Z tag near-simultaneously; keyed on github.ref those are two
+# different groups, so two `tofu apply` runs hit the same `_shared` state at once
+# and one dies on the state lock — on every release. Never cancel a running apply.
 concurrency:
-  group: infra-apply-${{ github.ref }}
+  group: infra-apply-${{ github.repository }}
   cancel-in-progress: false
 
 permissions:
@@ -56,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.4.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.6.2
         with:
           role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
@@ -87,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.4.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.6.2
         with:
           role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}
@@ -161,7 +167,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.4.0
+      - uses: QNSC-VN/qnsc-ci/actions/setup-tofu-aws@v1.6.2
         with:
           role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opshub-github-infra-apply
           aws-region: ${{ env.AWS_REGION }}

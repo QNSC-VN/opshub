@@ -17,15 +17,31 @@ on:
   push:
     branches: [main]
     # Skip the develop build+deploy when a merge touches ONLY paths this service
-    # doesn't ship: docs, infra (own apply flow), and the web app. paths-ignore
-    # fires only if EVERY changed file matches — a shared change (libs, db, root
-    # lockfile) still deploys, so under-deploy is impossible. Release tags always
-    # change package.json + manifest (root, never ignored) → prod never skipped.
+    # doesn't ship: docs and the web app. paths-ignore fires only if EVERY changed
+    # file matches — a shared change (libs, db, root lockfile) still deploys, so
+    # under-deploy is impossible. Release tags always change package.json +
+    # manifest (root, never ignored) → prod never skipped.
+    #
+    # `infra/**` is deliberately NOT ignored, though it once was. Terraform owns
+    # the task definition's environment (VALKEY_URL, DATABASE_*, CORS_ORIGINS, …),
+    # but the ecs-service module sets `ignore_changes = [task_definition]` so the
+    # SERVICE is never moved onto the revision Terraform registers — this pipeline
+    # owns that. With infra ignored here, an infra-only merge registered a new task
+    # definition that nothing ever rolled onto, and the change silently did not
+    # take effect. Rally hit exactly that: its develop ran against a DELETED cache
+    # endpoint (`valkey: down` on /v1/readyz) after a cache migration, because the
+    # apply succeeded, the new definition was correct, and no deploy ran.
+    #
+    # Rolling the service from infra-apply instead would be worse: Terraform's
+    # newest revision carries a new IMAGE, so rolling there would ship app code
+    # ahead of the migration step. `wait-for-infra` below sequences it instead.
+    #
+    # Cost: a Terraform-only merge now rebuilds an image it does not strictly need.
+    # Minutes of CI in exchange for removing a class of silent drift.
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
       - '.claude/**'
-      - 'infra/**'
       - 'apps/web/**'
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'   # semver only — no -rc suffix
@@ -38,8 +54,132 @@ concurrency:
   cancel-in-progress: false   # never cancel a running deploy
 
 jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Ordering gate — never roll the app ahead of its own infrastructure.
+  #
+  # Backend·Deploy and Infrastructure·Apply both fire on the same push, as
+  # independent workflows. Nothing sequenced them, so a commit that changes BOTH
+  # infra and app code races: the deploy runs the migrator against the OLD task
+  # definition while the new one is still being applied — which is how a secret
+  # or DATABASE_* rename fails with a confusing auth error rather than a clear one.
+  #
+  # Deterministic by design:
+  #   - commit does NOT touch infra/** → no infra run exists, proceed at once
+  #   - commit DOES touch infra/**     → wait for that run on THIS sha
+  # Keyed on the commit sha, so it can never wait on an unrelated run.
+  # ───────────────────────────────────────────────────────────────────────────
+  wait-for-infra:
+    name: Wait for infrastructure
+    runs-on: ubuntu-latest
+    # Generous: on a tag this waits for apply-prod, which sits behind the
+    # `production` environment's required reviewer. Timing out here is safe — the
+    # deploy is re-runnable — but it should not fire because an approver stepped away.
+    timeout-minutes: 120
+    # Least-privilege: read the commit and query sibling runs, nothing else.
+    # Explicit so an org-level default change cannot silently break the gate.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 2
+
+      - name: Does this commit change infrastructure?
+        id: touched
+        run: |
+          # Tags ALWAYS gate. infra-apply's apply-prod job is `if: ref_type ==
+          # 'tag'`, so a tag is the ONLY thing that applies prod infra — and the
+          # prod deploy fires on the same tag. Path filters are not applied to tag
+          # pushes either, so infra-apply always runs for a tag regardless of what
+          # the commit touched.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "infra=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # infra/modules/** is included ahead of the stack extraction: once the
+          # environments call a LOCAL path module, a module-only commit changes both
+          # plans, and matching only infra/live/ would let the deploy race the apply.
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^infra/(live|modules)/'; then
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wait for Infrastructure · Apply on this commit
+        if: steps.touched.outputs.infra == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The sibling run may not be registered the instant this job starts, so
+          # allow a grace period before concluding there is none.
+          #
+          # `|| ID=""` is not cosmetic: these runners use `set -e`, and an
+          # assignment takes its command substitution's exit status, so a
+          # rate-limited `gh run list` would skip the retry loop entirely and turn
+          # a recoverable blip into a failed gate.
+          for _ in $(seq 1 12); do
+            ID=$(gh run list --workflow=infra-apply.yml --commit "$GITHUB_SHA" \
+                   --limit 1 --json databaseId --jq '.[0].databaseId // empty') || ID=""
+            [ -n "$ID" ] && break
+            sleep 10
+          done
+
+          if [ -z "${ID:-}" ]; then
+            echo "::warning::infra changed but no Infrastructure · Apply run found for $GITHUB_SHA — proceeding."
+            exit 0
+          fi
+
+          echo "Waiting on infra-apply run $ID …"
+          gh run watch "$ID" --exit-status
+          echo "Infrastructure applied; deploy may proceed."
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # CI gate — a red main must not deploy.
+  #
+  #   - tag push → CI does not run on tags, and prod is gated by the "production"
+  #     Environment reviewer inside the reusable → nothing to await, proceed.
+  #   - push to main → wait for Backend · CI on this sha; `gh run watch
+  #     --exit-status` propagates its conclusion, so a failed CI blocks deploy.
+  #
+  # Fails CLOSED: if no CI run is found for the sha, block rather than ship blind.
+  # ───────────────────────────────────────────────────────────────────────────
+  wait-for-ci:
+    name: Wait for Backend · CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Wait for Backend · CI on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "Tag deploy — Backend · CI gate not applicable."; exit 0
+          fi
+          # This job does not check out the repo, so `gh` cannot infer it from a
+          # local remote — pass it explicitly.
+          for _ in $(seq 1 12); do
+            ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow backend-ci.yml \
+                   --branch main --commit "$GITHUB_SHA" \
+                   --limit 1 --json databaseId --jq '.[0].databaseId // empty') || ID=""
+            [ -n "$ID" ] && break
+            sleep 10
+          done
+          if [ -z "${ID:-}" ]; then
+            echo "::error::No Backend · CI run found for $GITHUB_SHA — blocking deploy (fail closed)."
+            exit 1
+          fi
+          echo "Waiting on Backend · CI run $ID …"
+          gh run watch --repo "$GITHUB_REPOSITORY" "$ID" --exit-status
+          echo "Backend · CI succeeded; deploy may proceed."
+
   deploy:
-    uses: QNSC-VN/qnsc-ci/.github/workflows/backend-deploy.yml@v1.4.0
+    needs: [wait-for-infra, wait-for-ci]
+    uses: QNSC-VN/qnsc-ci/.github/workflows/backend-deploy.yml@v1.6.2
     with:
       product: opshub
       has_worker: true
