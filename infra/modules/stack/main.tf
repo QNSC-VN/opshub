@@ -366,7 +366,7 @@ module "web" {
   zone_id     = local.cloudflare_zone_id
   domain      = local.cloudflare_zone_id != "" ? var.app_domain : ""
   record_name = local.cloudflare_zone_id != "" ? var.web_record : ""
-  comment     = "${local.name} web SPA → Cloudflare Pages (managed by opshub infra ${var.env})"
+  comment     = "${local.name} web SPA → Cloudflare Pages (managed by ${var.product}-infra ${var.env})"
 }
 
 # ── DNS — the API's public edge ───────────────────────────────────────────────
@@ -381,5 +381,5 @@ module "dns_api" {
   type    = "CNAME"
   content = data.terraform_remote_state.runtime.outputs.alb_dns_name
   proxied = true
-  comment = "${local.name} API → ALB via Cloudflare proxy (managed by opshub infra ${var.env})"
+  comment = "${local.name} API → ALB via Cloudflare proxy (managed by ${var.product}-infra ${var.env})"
 }
