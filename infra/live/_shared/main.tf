@@ -38,7 +38,19 @@ data "terraform_remote_state" "platform" {
 
 # ── Container registries ──────────────────────────────────────────────────────
 module "ecr" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecr?ref=ecr-v1.1.0"
+  # ecr-v2.0.0 splits the keep-count lifecycle rule by tag prefix. The single rule it
+  # replaces was provably dead: `tagPrefixList` is AND, not OR, so one rule listing
+  # ["sha-", "v"] only ever selected images carrying BOTH prefixes and never fired.
+  # rally verified that on live repositories (105 `sha-` images under a policy claiming
+  # to keep 30).
+  #
+  # No argument change is needed here: this call never set `keep_tagged_count` or
+  # `tag_prefix_list`, so it simply adopts the new defaults — keep 30 releases (v*) and
+  # 20 builds (sha-*). These repositories do not exist yet, so unlike rally there is
+  # nothing to preview: the policy applies from the first pushed image. Run
+  # `aws ecr start-lifecycle-policy-preview` before changing the counts later — it is a
+  # dry run and the only way to see what a policy will delete.
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecr?ref=ecr-v2.0.0"
 
   repository_names     = ["opshub-api", "opshub-worker", "opshub-migrator"]
   image_tag_mutability = "MUTABLE" # allows re-tagging :latest
@@ -52,7 +64,11 @@ module "ecr" {
 # deploy), so it needs no AWS deploy role. opshub is a monorepo; subjects use the
 # "opshub" repo (the archived "opshub-api"/"opshub-web" split repos are dead).
 module "iam_oidc" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v2.0.1"
+  # iam-oidc-v3.0.0: the major came from a batched cost-posture release across several
+  # modules, not from a change to this one — its variables and role names are identical
+  # to v2.0.1 (verified by diffing both). Taking it now rather than later because these
+  # roles do not exist yet, so there is no trust-policy replacement to sequence.
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v3.0.0"
 
   product           = "opshub"
   github_org        = var.github_org
