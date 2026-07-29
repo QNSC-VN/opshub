@@ -37,6 +37,14 @@ export class RoleAssignmentDrizzleRepository implements IRoleAssignmentRepositor
     return rows.map((r) => this.toDomain(r));
   }
 
+  async listUserIdsForRole(roleId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectDistinct({ userId: userRoleAssignments.userId })
+      .from(userRoleAssignments)
+      .where(eq(userRoleAssignments.roleId, roleId));
+    return rows.map((r) => r.userId);
+  }
+
   async findById(id: string): Promise<RoleAssignment | null> {
     const [row] = await this.db
       .select()
