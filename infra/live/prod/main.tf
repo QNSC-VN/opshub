@@ -1,3 +1,13 @@
+// opshub · production
+//
+// Thin by design: the stack lives in ../../modules/stack, so this environment can only
+// differ from develop in the values below. Production takes the durable settings —
+// on-demand capacity, deletion protection, 90-day retention, a real secret recovery
+// window.
+//
+// NOT YET APPLIED. There is no `opshub/prod/terraform.tfstate`, so this file describes
+// the environment that the first v*.*.* tag will create. The go-live checklist on the
+// `rds` block below is part of that first apply, not a later hardening pass.
 terraform {
   required_version = ">= 1.9"
   required_providers {
@@ -25,346 +35,100 @@ provider "aws" {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
-# Cloudflare provider — API token supplied out-of-band (TF_VAR_cloudflare_api_token
-# / CLOUDFLARE_API_TOKEN in CI). DNS + Pages resources are created only when the
-# zone id / account id are set. Same pattern as rally, keeping products consistent.
 provider "cloudflare" {
   api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : null
 }
 
-# ── Read shared layer outputs (ECR URLs, KMS ARN, artifacts bucket) ───────────
-data "terraform_remote_state" "shared" {
-  backend = "s3"
-  config = {
-    bucket = "qnsc-tofu-state"
-    key    = "opshub/shared/terraform.tfstate"
-    region = "ap-southeast-1"
-  }
-}
-
 locals {
-  env    = "production"
-  name   = "opshub-prod"
   region = "ap-southeast-1"
-  azs    = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
-
-  kms_key_arn = data.terraform_remote_state.shared.outputs.kms_key_arn
-
-  ecr_base       = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${local.region}.amazonaws.com"
-  ecr_api_url    = "${local.ecr_base}/opshub-api:${var.image_tag}"
-  ecr_worker_url = "${local.ecr_base}/opshub-worker:${var.image_tag}"
-
-  # Cloudflare IPv4 ranges — single source of truth in qnsc-infra bootstrap
-  # (read via _shared remote state), so a CF range change is one edit there.
-  cloudflare_ipv4 = data.terraform_remote_state.shared.outputs.cloudflare_ipv4
-
-  # Cloudflare zone id (qnsc.vn) from bootstrap via _shared. DNS + Pages custom
-  # domain are created only when this is set, so the stack applies before wiring.
-  cloudflare_zone_id = try(data.terraform_remote_state.shared.outputs.cloudflare_zone_id, "")
-
-  # prod_tier switch (Option A): lean = single-AZ DB + 1 task/svc; ha = multi-AZ
-  # DB + 2 tasks/svc. Cache is always a dedicated per-product node (below),
-  # independent of tier.
-  is_ha = var.prod_tier == "ha"
-
-  # Cache endpoint: this product's own dedicated Valkey node (module.cache below).
-  # The cache module enables in-transit encryption, so the client connects over
-  # TLS (rediss://). VALKEY_URL is an env var (not a secret) — the endpoint isn't
-  # sensitive.
-  cache_endpoint = module.cache.endpoint
-  cache_port     = module.cache.port
-  valkey_url     = "rediss://${local.cache_endpoint}:${local.cache_port}"
 }
 
-# ── Shared runtime layer (VPC + NAT + ALB + WAF) ──────────────────────────────
-# Option A: the prod VPC/NAT/ALB/WAF live once per env in
-# qnsc-infra/live/runtime-prod and are consumed here via remote state. RDS +
-# cache + Fargate stay per-product below.
-data "terraform_remote_state" "runtime" {
-  backend = "s3"
-  config = {
-    bucket = "qnsc-tofu-state"
-    key    = "platform/runtime-prod/terraform.tfstate"
-    region = "ap-southeast-1"
-  }
-}
+// ── The stack ─────────────────────────────────────────────────────────────────
+module "stack" {
+  source = "../../modules/stack"
 
-# ── Secrets ───────────────────────────────────────────────────────────────────
-module "secrets" {
-  source               = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/secrets?ref=secrets-v1.0.0"
-  prefix               = "opshub/${local.env}"
-  kms_key_arn          = local.kms_key_arn
-  recovery_window_days = 30 # longer recovery in production
+  product = "opshub"
+  env     = "production"
+  // Resources are named `opshub-prod`, not `opshub-production`: renaming them later
+  // would force replacement of the cluster, the RDS instance and every log group.
+  env_slug = "prod"
+  region   = local.region
 
-  secret_names = {
-    "db-url"              = "PostgreSQL connection URL"
-    "jwt-private-key"     = "JWT ES256 private key (PEM or base64-encoded PEM)"
-    "jwt-public-key"      = "JWT ES256 public key (PEM or base64-encoded PEM)"
-    "cookie-secret"       = "Fastify cookie signing secret (min 32 chars)"
-    "graph-client-secret" = "Microsoft Graph app client secret (client-credentials flow for Graph sync jobs)"
-  }
+  app_domain = "opshub.qnsc.vn"
+  api_domain = "opshub-api.qnsc.vn"
+  web_record = "opshub"
+  api_record = "opshub-api"
 
-  tags = { Environment = local.env }
-}
+  shared_state_key  = "opshub/shared/terraform.tfstate"
+  runtime_state_key = "platform/runtime-prod/terraform.tfstate"
 
-# ── RDS PostgreSQL (Multi-AZ, protected) ─────────────────────────────────────
-module "rds" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/rds?ref=rds-v1.1.0"
+  // The tag that triggered the apply, never a floating `latest` — infra-apply.yml
+  // passes github.ref_name, so an infra apply can never quietly move production onto
+  // a different image than the release it belongs to.
+  image_tag = var.image_tag
 
-  identifier        = local.name
-  subnet_ids        = data.terraform_remote_state.runtime.outputs.data_subnet_ids
-  security_group_id = data.terraform_remote_state.runtime.outputs.sg_rds_id
-  kms_key_arn       = local.kms_key_arn
+  entra_tenant_id = var.entra_tenant_id
+  entra_client_id = var.entra_client_id
 
-  instance_class           = local.is_ha ? "db.t4g.large" : "db.t4g.micro"
-  allocated_storage_gb     = 100
-  max_allocated_storage_gb = 500
-  multi_az                 = local.is_ha # HA tier only — lean is single-AZ
-  deletion_protection      = true
-  backup_retention_days    = 30
-  monitoring_interval      = local.is_ha ? 60 : 0 # Enhanced Monitoring in ha only
+  // 90 days is the SOC 2 minimum; the recovery window keeps a mistaken destroy
+  // recoverable.
+  log_retention_days           = 90
+  secrets_recovery_window_days = 30
 
-  tags = { Environment = local.env }
-}
+  // OFF, including here. Nothing in this product reads the ECS/ContainerInsights
+  // namespace: the autoscaling targets read AWS/ECS, which is free and published
+  // whether Container Insights is on or off, and application telemetry goes to OTLP.
+  // Raise it to "enhanced" temporarily during an incident that needs per-container
+  // drilldown, then put it back.
+  container_insights = "disabled"
 
-# ── Cache (dedicated per-product Valkey node) ────────────────────────────────
-# This product owns its own single-node ElastiCache Valkey so another product's
-# load or a node restart can't evict opshub's BFF sessions. In-transit + at-rest
-# encryption on (SOC 2); reuses the shared runtime-prod cache SG + data subnets.
-# Endpoint feeds local.valkey_url (rediss://) above.
-module "cache" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cache?ref=cache-v1.0.0"
-
-  name              = "${local.name}-valkey"
-  subnet_ids        = data.terraform_remote_state.runtime.outputs.data_subnet_ids
-  security_group_id = data.terraform_remote_state.runtime.outputs.sg_cache_id
-  kms_key_arn       = local.kms_key_arn
-
-  mode      = "node" # single cache.t4g.micro (~$12/mo) — cheaper than serverless ~$90 floor
-  node_type = "cache.t4g.micro"
-
-  tags = { Environment = local.env }
-}
-
-# ── Messaging (SQS + SNS) ─────────────────────────────────────────────────────
-module "messaging" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/messaging?ref=messaging-v1.0.0"
-  prefix = local.name
-
-  queues = {
-    outbox = { visibility_timeout = 60 }
+  // PRE-LAUNCH sizing. Multi-AZ with Enhanced Monitoring is the right production
+  // posture, and it is what this becomes at go-live — but Multi-AZ doubles the
+  // instance rate AND bills the mirrored volume, so paying for it before the first
+  // user buys durability for an empty database.
+  //
+  // GO-LIVE CHECKLIST — flip these together, before the first real user:
+  //     instance_class      = "db.t4g.small"  # 2 GB rather than 1 GB
+  //     multi_az            = true            # an AZ failure becomes a failover,
+  //                                           # not an outage plus a restore
+  //     monitoring_interval = 60              # per-process and per-device visibility
+  //
+  // 30 GB, not 100: `max_allocated_storage_gb` already autoscales, and RDS gp3 gives
+  // the same 3,000 baseline IOPS at every size under 400 GB, so over-allocating buys
+  // nothing. Treat any increase as PERMANENT — RDS refuses to shrink a volume and a
+  // snapshot restore cannot land smaller, so coming back down needs the instance
+  // replaced.
+  rds = {
+    instance_class           = "db.t4g.micro"
+    allocated_storage_gb     = 30
+    max_allocated_storage_gb = 500
+    multi_az                 = false
+    deletion_protection      = true
+    backup_retention_days    = 30
+    monitoring_interval      = 0
   }
 
-  topics = ["events"]
-
-  kms_key_arn = local.kms_key_arn
-
-  tags = { Environment = local.env }
-}
-
-# ── S3 upload bucket (shared app-bucket module) ───────────────────────────────
-module "app_bucket" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/app-bucket?ref=app-bucket-v1.0.0"
-
-  name        = "opshub-${local.env}-uploads"
-  kms_key_arn = local.kms_key_arn
-  versioning  = true
-  # prod: force_destroy stays false (default) — never auto-delete uploads.
-
-  cors_rules = [{
-    allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
-    allowed_methods = ["PUT"]
-    allowed_origins = ["https://opshub.qnsc.vn"]
-    expose_headers  = ["ETag"]
-    max_age_seconds = 3600
-  }]
-
-  lifecycle_rules = [{
-    id              = "expire-unconfirmed-uploads"
-    prefix          = "tmp/"
-    expiration_days = 1
-  }]
-
-  tags = { Environment = local.env }
-}
-
-# ── ALB: shared, lives in runtime-prod (with access logs + WAF). This stack
-# attaches a host-header listener rule (module.api) to its HTTPS listener. ─────
-
-# ── ECS Cluster ───────────────────────────────────────────────────────────────
-module "ecs_cluster" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-cluster?ref=ecs-cluster-v1.0.0"
-  name   = local.name
-  tags   = { Environment = local.env }
-}
-
-# ── Migrator (one-shot, triggered by CI) ──────────────────────────────────────
-module "migrator" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/oneshot-task?ref=oneshot-task-v1.0.0"
-
-  name               = "${local.name}-migrator"
-  container_name     = "migrator"
-  image              = "${local.ecr_base}/opshub-migrator:${var.image_tag}"
-  cpu                = 512
-  memory             = 1024
-  execution_role_arn = module.api.execution_role_arn
-  task_role_arn      = module.api.task_role_arn
-  region             = local.region
-  log_retention_days = 90
-
-  environment = {
-    NODE_ENV   = "production"
-    AWS_REGION = local.region
+  // On-demand, not Spot: an interruption here is user-visible. Tighter autoscale
+  // targets than develop, so it scales out earlier.
+  api = {
+    cpu               = 1024
+    memory            = 2048
+    max_count         = 6
+    use_spot          = false
+    cpu_target_pct    = 60
+    memory_target_pct = 70
   }
 
-  secrets = {
-    DATABASE_URL = module.secrets.secret_arns["db-url"]
+  worker = {
+    cpu       = 512
+    memory    = 1024
+    max_count = 4
+    use_spot  = false
   }
 
-  tags = { Environment = local.env, Service = "migrator" }
-}
+  // `force_destroy` stays false and no extra CORS origin is allowed: production
+  // uploads are never auto-deleted, and only the SPA's own origin may PUT.
+  uploads = {}
 
-# ── API service ───────────────────────────────────────────────────────────────
-module "api" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.3.0"
-
-  service_name = "api"
-  cluster_name = module.ecs_cluster.cluster_name
-  cluster_arn  = module.ecs_cluster.cluster_arn
-  region       = local.region
-  image_uri    = local.ecr_api_url
-
-  cpu            = 1024
-  memory         = 2048
-  container_port = 3000
-
-  vpc_id            = data.terraform_remote_state.runtime.outputs.vpc_id
-  subnet_ids        = data.terraform_remote_state.runtime.outputs.private_subnet_ids
-  security_group_id = data.terraform_remote_state.runtime.outputs.sg_app_id
-
-  desired_count = local.is_ha ? 2 : 1 # ha: 2 for redundancy; lean: 1
-  min_count     = local.is_ha ? 2 : 1
-  max_count     = 6
-
-  attach_alb        = true
-  alb_listener_arn  = data.terraform_remote_state.runtime.outputs.https_listener_arn
-  alb_priority      = 200 # unique on the shared prod ALB (rally=100)
-  alb_path_patterns = ["/*"]
-  alb_host_headers  = ["opshub-api.qnsc.vn"] # host-based routing on the shared prod ALB
-  health_check_path = "/v1/healthz"
-
-  secret_arns = values(module.secrets.secret_arns)
-  kms_key_arn = local.kms_key_arn
-  secrets = [
-    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
-    { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
-    { name = "GRAPH_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["graph-client-secret"] },
-  ]
-  environment_vars = [
-    { name = "NODE_ENV", value = "production" },
-    { name = "PORT", value = "3000" },
-    { name = "VALKEY_URL", value = local.valkey_url }, # dedicated per-product cache
-    { name = "AWS_REGION", value = local.region },
-    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
-    { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
-    { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
-    { name = "CORS_ORIGINS", value = "https://opshub.qnsc.vn" },
-    { name = "APP_URL", value = "https://opshub.qnsc.vn" },
-  ]
-
-  sqs_queue_arns     = values(module.messaging.queue_arns)
-  sns_topic_arns     = values(module.messaging.topic_arns)
-  s3_bucket_arns     = [module.app_bucket.arn]
-  cpu_target_pct     = 60 # tighter target in prod — scales out earlier
-  memory_target_pct  = 70
-  log_retention_days = 90 # SOC 2 minimum for prod logs
-
-  tags = { Environment = local.env, Service = "api" }
-}
-
-# ── Worker service ────────────────────────────────────────────────────────────
-module "worker" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v1.3.0"
-
-  service_name = "worker"
-  cluster_name = module.ecs_cluster.cluster_name
-  cluster_arn  = module.ecs_cluster.cluster_arn
-  region       = local.region
-  image_uri    = local.ecr_worker_url
-
-  cpu    = 512
-  memory = 1024
-
-  vpc_id            = data.terraform_remote_state.runtime.outputs.vpc_id
-  subnet_ids        = data.terraform_remote_state.runtime.outputs.private_subnet_ids
-  security_group_id = data.terraform_remote_state.runtime.outputs.sg_app_id
-
-  desired_count = local.is_ha ? 2 : 1
-  min_count     = local.is_ha ? 2 : 1
-  max_count     = 4
-
-  attach_alb = false
-
-  secret_arns = values(module.secrets.secret_arns)
-  kms_key_arn = local.kms_key_arn
-  secrets = [
-    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
-    { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
-    { name = "GRAPH_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["graph-client-secret"] },
-  ]
-  environment_vars = [
-    { name = "NODE_ENV", value = "production" },
-    { name = "VALKEY_URL", value = local.valkey_url },
-    { name = "AWS_REGION", value = local.region },
-    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
-    { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
-    { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
-    { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
-  ]
-
-  sqs_queue_arns     = values(module.messaging.queue_arns)
-  sns_topic_arns     = values(module.messaging.topic_arns)
-  s3_bucket_arns     = [module.app_bucket.arn]
-  log_retention_days = 90
-
-  tags = { Environment = local.env, Service = "worker" }
-}
-
-# ── WAF: lives in runtime-prod and is associated with the shared ALB there. ──
-
-# ── Web SPA — Cloudflare Pages (zero-egress, native SPA routing) ─────────────
-# Consistent with rally + opshub develop: SPA on Cloudflare Pages
-# (opshub.qnsc.vn), API on its own Cloudflare-proxied subdomain → ALB.
-# Replaces the deprecated CloudFront same-origin proxy. Gated on
-# cloudflare_account_id so the stack applies before the account is wired.
-module "web" {
-  count  = var.cloudflare_account_id != "" ? 1 : 0
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/pages-web?ref=pages-web-v1.0.0"
-
-  account_id  = var.cloudflare_account_id
-  name        = "opshub-prod-web"
-  zone_id     = local.cloudflare_zone_id
-  domain      = local.cloudflare_zone_id != "" ? var.web_domain : ""
-  record_name = local.cloudflare_zone_id != "" ? "opshub" : ""
-  comment     = "opshub-prod web SPA → Cloudflare Pages (managed by opshub-infra prod)"
-}
-
-# ── DNS — opshub-api.qnsc.vn → ALB (Cloudflare-proxied edge) ─────────────────
-module "dns_api" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/dns-record?ref=dns-record-v1.1.0"
-
-  enabled = local.cloudflare_zone_id != ""
-  zone_id = local.cloudflare_zone_id
-  name    = "opshub-api"
-  type    = "CNAME"
-  content = data.terraform_remote_state.runtime.outputs.alb_dns_name
-  proxied = true
-  comment = "opshub-prod API → ALB via Cloudflare proxy (managed by opshub-infra prod)"
+  cloudflare_account_id = var.cloudflare_account_id
 }

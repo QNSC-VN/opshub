@@ -29,6 +29,7 @@ Backend (`api` + `worker`) and web **build clean**. Consolidation is faithful (i
 - **License enums defined.** `db/schema/enums.ts` now defines `licenseTypeEnum` (`perpetual`, `subscription`, `per_seat`, `concurrent`) and `licenseStatusEnum` (`active`, `expiring_soon`, `expired`, `cancelled`) — values taken from the existing DTO Zod enums (`license.dto.ts`, the code-authoritative source). Also re-wired the `db/schema` and `@shared-kernel` barrels. Together these cleared the 17 pre-existing build errors carried from opshub-api.
 
 ### Open follow-ups (not blocking build)
-1. **infra/modules/ are local copies**, not the shared `qnsc-tf-modules` — they have diverged, so migrating is not a mechanical source-swap; needs interface reconciliation + `tofu plan`.
-2. **Generate the first Drizzle migration** for the license enums/tables (`pnpm db:generate`) before deploying the license module.
-3. Stray compiled `.js`/`.js.map` files beside some `db/schema/*.ts` — clean + gitignore.
+1. **Generate the first Drizzle migration** for the license enums/tables (`pnpm db:generate`) before deploying the license module.
+2. Stray compiled `.js`/`.js.map` files beside some `db/schema/*.ts` — clean + gitignore.
+
+The "infra/modules/ are local copies" item is gone: every resource is a versioned `qnsc-tf-modules` ref, and `infra/modules/stack` is the local *composition* module both environments call — so develop and production cannot drift structurally, and the callers in `infra/live/<env>` hold only values.

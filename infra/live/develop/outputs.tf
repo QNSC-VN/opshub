@@ -1,23 +1,18 @@
-output "alb_dns_name" { value = data.terraform_remote_state.runtime.outputs.alb_dns_name }
-output "ecs_cluster_name" { value = module.ecs_cluster.cluster_name }
-output "ecs_api_service" { value = module.api.service_name }
-output "ecs_worker_service" { value = module.worker.service_name }
-output "ecs_migrator_task_def" {
-  value       = module.migrator.family
-  description = "Migrator task definition family name — use with aws ecs run-task"
-}
-output "rds_endpoint" { value = module.rds.endpoint }
-output "rds_master_secret_arn" { value = module.rds.master_secret_arn }
-output "outbox_queue_url" { value = module.messaging.queue_urls["outbox"] }
-output "secret_arns" { value = module.secrets.secret_arns }
-
-# Networking — needed for ECS run-task (migrator) and GitHub env vars.
-# Sourced from the shared runtime layer (runtime-dev) so the CI output-sync stays correct.
-output "private_subnet_ids" { value = data.terraform_remote_state.runtime.outputs.private_subnet_ids }
-output "sg_app_id" { value = data.terraform_remote_state.runtime.outputs.sg_app_id }
-
-# Web (Cloudflare Pages) outputs — PAGES_PROJECT is published to GitHub env vars
-# for the opshub-web CI (wrangler --project-name).
-output "web_pages_project" { value = try(module.web[0].project_name, null) }
-output "web_custom_domain" { value = try(module.web[0].custom_domain, null) }
-output "web_url" { value = try("https://${module.web[0].custom_domain}", null) }
+// Re-exported from the stack module. CI's output-sync reads these to publish GitHub
+// environment variables (ECS names, migrator subnets, Pages project), so the names
+// must not change even though the resources moved.
+output "alb_dns_name" { value = module.stack.alb_dns_name }
+output "ecs_cluster_name" { value = module.stack.ecs_cluster_name }
+output "ecs_api_service" { value = module.stack.ecs_api_service }
+output "ecs_worker_service" { value = module.stack.ecs_worker_service }
+output "ecs_migrator_task_def" { value = module.stack.ecs_migrator_task_def }
+output "rds_endpoint" { value = module.stack.rds_endpoint }
+output "rds_master_secret_arn" { value = module.stack.rds_master_secret_arn }
+output "cache_endpoint" { value = module.stack.cache_endpoint }
+output "outbox_queue_url" { value = module.stack.outbox_queue_url }
+output "secret_arns" { value = module.stack.secret_arns }
+output "private_subnet_ids" { value = module.stack.private_subnet_ids }
+output "sg_app_id" { value = module.stack.sg_app_id }
+output "web_pages_project" { value = module.stack.web_pages_project }
+output "web_custom_domain" { value = module.stack.web_custom_domain }
+output "web_url" { value = module.stack.web_url }
