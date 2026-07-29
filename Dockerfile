@@ -57,7 +57,16 @@ RUN pnpm build:migrator
 
 # ── api (default) ─────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS api
-RUN apk upgrade --no-cache && apk add --no-cache tini && rm -rf /var/cache/apk/*
+# Upgrade all Alpine packages to latest security patches within the pinned Alpine
+# version, and remove the base image's global npm — it is unused at runtime (the app
+# runs via `node dist/...`) and its BUNDLED node-tar carries a CRITICAL CVE
+# (CVE-2026-59873, tar 7.5.13 < 7.5.19) that neither `apk upgrade` nor a pnpm override
+# can patch, because it is npm's own vendored copy rather than a dependency of ours.
+# Same treatment as rally.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache tini \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && rm -rf /var/cache/apk/*
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
 ENV PORT=3000
@@ -78,7 +87,16 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 # ── worker ────────────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS worker
-RUN apk upgrade --no-cache && apk add --no-cache tini && rm -rf /var/cache/apk/*
+# Upgrade all Alpine packages to latest security patches within the pinned Alpine
+# version, and remove the base image's global npm — it is unused at runtime (the app
+# runs via `node dist/...`) and its BUNDLED node-tar carries a CRITICAL CVE
+# (CVE-2026-59873, tar 7.5.13 < 7.5.19) that neither `apk upgrade` nor a pnpm override
+# can patch, because it is npm's own vendored copy rather than a dependency of ours.
+# Same treatment as rally.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache tini \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && rm -rf /var/cache/apk/*
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=256"
 WORKDIR /app
@@ -94,7 +112,16 @@ CMD ["node", "dist/apps/worker/apps/worker/src/main.js"]
 
 # ── migrator (one-shot Drizzle migration runner) ─────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS migrator
-RUN apk upgrade --no-cache && apk add --no-cache tini && rm -rf /var/cache/apk/*
+# Upgrade all Alpine packages to latest security patches within the pinned Alpine
+# version, and remove the base image's global npm — it is unused at runtime (the app
+# runs via `node dist/...`) and its BUNDLED node-tar carries a CRITICAL CVE
+# (CVE-2026-59873, tar 7.5.13 < 7.5.19) that neither `apk upgrade` nor a pnpm override
+# can patch, because it is npm's own vendored copy rather than a dependency of ours.
+# Same treatment as rally.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache tini \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && rm -rf /var/cache/apk/*
 ENV NODE_ENV=production
 WORKDIR /app
 # Production deps only — tsx and esbuild (with Go CVE binaries) are devDeps,
