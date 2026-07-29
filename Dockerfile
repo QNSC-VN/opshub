@@ -13,8 +13,8 @@
 #   docker build --target migrator -t opshub-migrator:latest .
 # =============================================================================
 
-ARG NODE_VERSION=22
-ARG ALPINE_VERSION=3.21
+ARG NODE_VERSION=24
+ARG ALPINE_VERSION=3.22
 ARG PNPM_VERSION=10.33.2
 
 # ── deps: all packages (dev+prod) for the builder ────────────────────────────
@@ -22,7 +22,7 @@ FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS deps
 ARG PNPM_VERSION
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     --mount=type=secret,id=node_auth_token \
     export NODE_AUTH_TOKEN="$(cat /run/secrets/node_auth_token 2>/dev/null || true)" && \
@@ -34,7 +34,7 @@ FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS prod-deps
 ARG PNPM_VERSION
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     --mount=type=secret,id=node_auth_token \
     export NODE_AUTH_TOKEN="$(cat /run/secrets/node_auth_token 2>/dev/null || true)" && \
