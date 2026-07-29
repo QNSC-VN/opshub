@@ -57,8 +57,11 @@ variable "cloudflare_account_id" {
     count-gated `module.web` resolved to 0 on every apply and the SPA was never managed
     by Terraform at all.
 
-    Filling it in cannot simply CREATE the project: `opshub-develop-web` already exists
-    and serves traffic. `import.tf` adopts it instead.
+    A stray `opshub-develop-web` Pages project existed in a DIFFERENT Cloudflare
+    account, deployed by hand — `opshub-develop-web.pages.dev` served the SPA while both
+    wrangler and Terraform reported "project does not exist" against this account. It was
+    deleted rather than imported, so opshub and rally keep one account, one API token and
+    one zone; Terraform creates the project here instead.
   EOT
   type        = string
   default     = "69e52835cf2d08edde5b6ebd741d30fa"
