@@ -13,6 +13,13 @@ export interface AssignRoleInput {
 
 export interface IRoleAssignmentRepository {
   listForUser(userId: string): Promise<RoleAssignment[]>;
+  /**
+   * Distinct users holding this role, in any scope. Needed because a change to a
+   * ROLE's definition changes what every holder can do, and each holder's resolved
+   * permissions are cached per user — so the write path has to know whose cache to
+   * drop.
+   */
+  listUserIdsForRole(roleId: string): Promise<string[]>;
   findById(id: string): Promise<RoleAssignment | null>;
   /** Idempotent grant — returns the existing row when the scope already exists. */
   assign(input: AssignRoleInput): Promise<RoleAssignment>;

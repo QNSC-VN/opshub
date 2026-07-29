@@ -97,7 +97,16 @@ export class AuthzAdminService {
       resourceId: roleId,
       changes: { before: role.permissions, after: permissionKeys },
     });
-    // Role-definition changes propagate to holders within the cache TTL.
+    // Editing a role changes what every HOLDER can do, so their cached resolutions
+    // are stale the moment this commits. This used to rely on the 300s cache TTL —
+    // documented, but it meant REMOVING a permission from a role took up to five
+    // minutes to take effect while every other write path here was immediate. Two
+    // revocation latencies in one service is the inconsistency, and the slow one is
+    // the security-relevant direction.
+    //
+    // Role KEYS are unchanged by this operation, so `employees.roles` (the claims
+    // cache) needs no re-sync — only the permission cache does.
+    await this.invalidateRoleHolders(roleId);
     return this.getRole(roleId);
   }
 
@@ -109,6 +118,10 @@ export class AuthzAdminService {
         `System role '${role.key}' cannot be deleted`,
       );
     }
+    // Read holders BEFORE the delete: `user_role_assignments.role_id` is
+    // ON DELETE CASCADE, so afterwards there is nothing left to enumerate.
+    const holders = await this.assignmentRepo.listUserIdsForRole(roleId);
+
     await this.roleRepo.delete(roleId);
     void this.audit.record({
       actorId: actor.sub,
@@ -116,8 +129,29 @@ export class AuthzAdminService {
       action: 'authz.role.deleted',
       resourceType: 'role',
       resourceId: roleId,
-      metadata: { key: role.key },
+      metadata: { key: role.key, holders: holders.length },
     });
+
+    // Both caches are now wrong for every holder: the permission cache still grants
+    // the deleted role's codes, and `employees.roles` still lists its key.
+    for (const userId of holders) {
+      await this.assignmentRepo.syncEmployeeRoleClaims(userId);
+      await this.authz.invalidate(userId);
+    }
+  }
+
+  /**
+   * Drop the cached permission resolution of everyone holding `roleId`.
+   *
+   * Sequential rather than parallel on purpose: the holder count is bounded by the
+   * org's headcount, and a burst of concurrent Valkey deletes on a role held by
+   * everyone is a worse failure mode than taking a few more milliseconds.
+   */
+  private async invalidateRoleHolders(roleId: string): Promise<void> {
+    const holders = await this.assignmentRepo.listUserIdsForRole(roleId);
+    for (const userId of holders) {
+      await this.authz.invalidate(userId);
+    }
   }
 
   // ── Assignments ──────────────────────────────────────────────────────────────
