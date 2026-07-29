@@ -19,45 +19,17 @@ export const REQUEST_TYPE = {
 
 export type RequestType = (typeof REQUEST_TYPE)[keyof typeof REQUEST_TYPE];
 
-// ── RBAC role keys ────────────────────────────────────────────────────────────
-
-export const ROLE = {
-  ADMIN: 'admin',
-  IT_ADMIN: 'it-admin',
-  SECURITY: 'security',
-  HR: 'hr',
-  AUDITOR: 'auditor',
-  MANAGER: 'manager',
-  HELPDESK: 'helpdesk',
-  EMPLOYEE: 'employee',
-} as const;
-
-export type RoleKey = (typeof ROLE)[keyof typeof ROLE];
-
-// ── Permission keys ───────────────────────────────────────────────────────────
-
-export const PERMISSION = {
-  RBAC_MANAGE: 'rbac.manage',
-  RBAC_READ: 'rbac.read',
-  ACCESS_REQUEST_APPROVE: 'access_request.approve',
-  ACCESS_REQUEST_SECURITY_APPROVE: 'access_request.security_approve',
-  ONBOARDING_APPROVE: 'onboarding.approve',
-  ONBOARDING_PROVISION: 'onboarding.provision',
-  ONBOARDING_COMPLETE: 'onboarding.complete',
-  OFFBOARDING_APPROVE: 'offboarding.approve',
-  LEAVE_REQUEST_APPROVE: 'leave_request.approve',
-  OVERTIME_APPROVE: 'overtime.approve',
-  LICENSES_VIEW: 'licenses.view',
-  LICENSES_MANAGE: 'licenses.manage',
-  COMPLIANCE_VIEW: 'compliance.view',
-  COMPLIANCE_MANAGE: 'compliance.manage',
-  ASSETS_VIEW: 'assets.view',
-  ASSETS_MANAGE: 'assets.manage',
-  AUDIT_VIEW: 'audit.view',
-  REQUESTS_APPROVE: 'requests.approve',
-} as const;
-
-export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];
+// ── RBAC roles + permissions ──────────────────────────────────────────────────
+//
+// Deliberately NOT here. Role keys and permission codes are defined once in
+// db/permissions.catalog.ts and re-exported by ./permissions.ts, because the seed
+// (which only ships db/**) and the guards must read the same list.
+//
+// This file previously declared its own PERMISSION map with a DIFFERENT
+// vocabulary — `assets.view`/`licenses.view`/`audit.view` against the database's
+// `asset.read`/`license.read`/`audit.read`. Nothing imported it, so it never broke
+// anything; it was one autocomplete away from gating a route on a permission no
+// role can hold.
 
 // ── Access request types ──────────────────────────────────────────────────────
 

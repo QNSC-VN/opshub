@@ -10,7 +10,6 @@ import { DatabaseModule } from './database/database.module';
 import { RequestContextService } from './context/request-context';
 import { JwtStrategy } from './auth/jwt.strategy';
 import { JwtAuthGuard } from './auth/jwt.guard';
-import { RoleGuard } from './auth/role.guard';
 import { ScopeEvaluator } from './auth/scope-evaluator';
 import { AuthzService } from './auth/authz.service';
 import { PolicyGuard } from './auth/policy.guard';
@@ -80,7 +79,6 @@ import { StorageService } from './storage/storage.service';
     RequestContextService,
     JwtStrategy,
     JwtAuthGuard,
-    RoleGuard,
     ScopeEvaluator,
     AuthzService,
     PolicyGuard,
@@ -118,7 +116,6 @@ import { StorageService } from './storage/storage.service';
     JwtModule,
     RequestContextService,
     JwtAuthGuard,
-    RoleGuard,
     ScopeEvaluator,
     AuthzService,
     PolicyGuard,

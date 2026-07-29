@@ -44,8 +44,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   validate(payload: SharedJwtPayload): JwtPayload {
     // Signature, exp, iss, aud already verified by passport-jwt.
     // Denylist check (revocation) is handled in JwtAuthGuard.canActivate().
-    // Flatten the package's nested `claims` onto the principal so the RoleGuard,
-    // AuthzService, and audit context read `roles`/`email`/`name` directly.
+    // Flatten the package's nested `claims` onto the principal so the audit
+    // context reads `email`/`name` directly.
+    //
+    // `roles` is carried for display and for the Entra reconcile, NOT for
+    // authorization: the PolicyGuard resolves permissions from the database on
+    // every request. Do not gate anything on this array — it is a mint-time
+    // snapshot, which is why the RoleGuard that read it was removed.
     const claims = (payload.claims ?? {}) as OpshubClaims;
     return {
       ...payload,

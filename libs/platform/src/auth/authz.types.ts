@@ -28,8 +28,12 @@ export interface ResourceAttrs {
 /** permissionKey → scopes in which the principal holds it. */
 export type EffectivePermissions = Record<string, Scope[]>;
 
-/** Wildcard permission key — grants every permission within its scope. */
-export const WILDCARD_PERMISSION = '*';
+/**
+ * Wildcard permission key — re-exported from the catalogue rather than declared,
+ * so there is exactly one `'*'` literal in the codebase. This module used to
+ * define its own copy.
+ */
+export { WILDCARD_PERMISSION } from '@shared-kernel';
 
 export interface Permission {
   key: string;
