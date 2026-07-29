@@ -5,8 +5,13 @@ import fastifyHelmet from '@fastify/helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
-import { AppConfigService, BFF_SESSION_COOKIE } from '@platform';
-import { CSRF_HEADER, CSRF_SECRET_COOKIE, requiresCsrfProtection } from '@platform';
+import {
+  AppConfigService,
+  BFF_SESSION_COOKIE,
+  CSRF_HEADER,
+  CSRF_SECRET_COOKIE,
+  requiresCsrfProtection,
+} from '@platform';
 
 /**
  * Applies cross-cutting HTTP concerns to the Fastify app: security headers,
