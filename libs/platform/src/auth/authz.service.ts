@@ -85,9 +85,21 @@ export class AuthzService {
   }
 
   /**
-   * Does the principal hold `permission`? When `resource` is provided, the grant
-   * must also cover it via {@link ScopeEvaluator}; otherwise holding the
-   * permission in any scope suffices. Wildcard (`*`) grants short-circuit.
+   * Does the principal hold `permission` for this resource?
+   *
+   * A `global` grant needs no resource: there is no constraint to verify. A
+   * CONSTRAINED grant (`self`/`team`/`dept`/`region`) needs one, and if the route
+   * declared no scope the answer is DENY — not allow.
+   *
+   * That last rule is the point. This used to read `if (!resource) return true`,
+   * and since no route declared a scope, every constrained grant was enforced as if
+   * it were global: an operator could assign "asset.write @ team=X" through the RBAC
+   * API — which validates and stores the scope — and the holder could write every
+   * team's assets. The scope was recorded and ignored.
+   *
+   * Failing closed inverts that: an unverifiable constraint denies and logs which
+   * route needs a scope descriptor, so the gap surfaces as a 403 with a breadcrumb
+   * instead of silent over-permission.
    */
   async check(
     userId: string,
@@ -106,7 +118,22 @@ export class AuthzService {
       .filter(([code]) => permissionGrants([code], permission))
       .flatMap(([, scopes]) => scopes);
     if (grants.length === 0) return false;
-    if (!resource || !user) return true;
+
+    // An unconstrained grant is decisive on its own.
+    if (grants.some((scope) => scope.type === 'global')) return true;
+
+    // Everything left is constrained. Without a resource (or a principal to compare
+    // `self` against) the constraint cannot be evaluated, so deny.
+    if (!resource || !user) {
+      this.logger.warn(
+        { userId, permission, scopes: grants.map((g) => g.type) },
+        'Denying: caller holds this permission only in a constrained scope, but the ' +
+          'route declares no scope to check it against — add a scope descriptor to ' +
+          '@RequirePermission, or grant the permission globally',
+      );
+      return false;
+    }
+
     return this.scopes.anyMatches(grants, resource, user);
   }
 }

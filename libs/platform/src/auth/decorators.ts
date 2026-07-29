@@ -9,14 +9,11 @@ import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from './jwt.guard';
 import { PolicyGuard } from './policy.guard';
 import type { JwtPayload } from './jwt.strategy';
-import type { ResourceAttrs } from './authz.types';
+import type { PolicyScope } from './authz.types';
 import type { Permission } from '@shared-kernel';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const PERMISSION_KEY = 'requiredPermission';
-
-/** Resolves the acted-upon resource's attributes from the request, for scoped checks. */
-export type ScopeResolver = (req: unknown) => ResourceAttrs | Promise<ResourceAttrs>;
 
 /** Metadata attached by @RequirePermission and read by the PolicyGuard. */
 export interface PermissionRequirement {
@@ -25,7 +22,11 @@ export interface PermissionRequirement {
    * than a route that fails closed for everyone in production.
    */
   permission: Permission;
-  scopeFrom?: ScopeResolver;
+  /**
+   * Declarative, so every route's scope can be read and audited without running
+   * anything. Omit it for a route whose permission is not resource-scoped.
+   */
+  scope?: PolicyScope;
 }
 
 /** Mark a route as unauthenticated (skip JwtAuthGuard). */
@@ -74,13 +75,31 @@ export const ApiCommonErrors = (...codes: HttpErrorCode[]) =>
 export const Auth = () => applyDecorators(UseGuards(JwtAuthGuard), ApiBearerAuth('access-token'));
 
 /**
- * Require a fine-grained permission (resource.action), enforced by the
- * PolicyGuard against the principal's cached effective permissions. Pass
- * `scopeFrom` to additionally constrain by resource scope (team/dept/region/self).
+ * Require a fine-grained permission (`module.action`), enforced by the PolicyGuard
+ * against the principal's DB-resolved effective permissions.
+ *
+ * `scope` declares WHICH resource the route acts on, so a grant limited to
+ * `self`/`dept` can be checked against it:
+ *
+ *   // the request already carries the owning employee
+ *   @RequirePermission('workforce.read', { from: 'query', field: 'employeeId', as: 'ownerId' })
+ *
+ *   // the request carries the resource id; load it to find its owner
+ *   @RequirePermission('asset.write', { resource: 'asset', from: 'param', field: 'id' })
+ *
+ * Omit `scope` only where the permission genuinely is not resource-scoped (listing
+ * the role catalogue, reading global reports). A holder of a `self`- or
+ * `dept`-scoped grant is DENIED on a route with no scope, because the constraint
+ * cannot be verified there — see AuthzService.check.
+ *
+ * This replaced a `scopeFrom: (req) => ResourceAttrs` callback that no route ever
+ * used: a per-route closure is strictly more powerful and cannot be listed,
+ * reviewed in bulk, or checked by a test, which is the opposite of what an
+ * authorization surface needs.
  */
-export const RequirePermission = (permission: Permission, scopeFrom?: ScopeResolver) =>
+export const RequirePermission = (permission: Permission, scope?: PolicyScope) =>
   applyDecorators(
     UseGuards(JwtAuthGuard, PolicyGuard),
-    SetMetadata(PERMISSION_KEY, { permission, scopeFrom } satisfies PermissionRequirement),
+    SetMetadata(PERMISSION_KEY, { permission, scope } satisfies PermissionRequirement),
     ApiBearerAuth('access-token'),
   );
