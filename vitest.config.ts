@@ -37,7 +37,11 @@ export default defineConfig({
       OTEL_SERVICE_NAME: 'opshub-api-test',
       COOKIE_SECRET: 'test-cookie-secret-minimum-32-chars!!',
     },
-    include: ['libs/**/*.spec.ts', 'apps/**/*.spec.ts'],
+    // `test/*.spec.ts` (one level, not recursive) picks up the cross-cutting
+    // contract specs — the permission catalogue and the FE↔BE permission contract —
+    // which belong to no single lib. Deliberately NOT `test/**` so anything added
+    // under test/e2e stays with the separate e2e config that boots a real DB.
+    include: ['libs/**/*.spec.ts', 'apps/**/*.spec.ts', 'test/*.spec.ts'],
     exclude: ['node_modules', 'dist'],
     coverage: {
       provider: 'v8',

@@ -7,13 +7,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from './jwt.guard';
-import { RoleGuard } from './role.guard';
 import { PolicyGuard } from './policy.guard';
 import type { JwtPayload } from './jwt.strategy';
 import type { ResourceAttrs } from './authz.types';
+import type { Permission } from '@shared-kernel';
 
 export const IS_PUBLIC_KEY = 'isPublic';
-export const ROLES_KEY = 'requiredRoles';
 export const PERMISSION_KEY = 'requiredPermission';
 
 /** Resolves the acted-upon resource's attributes from the request, for scoped checks. */
@@ -21,15 +20,16 @@ export type ScopeResolver = (req: unknown) => ResourceAttrs | Promise<ResourceAt
 
 /** Metadata attached by @RequirePermission and read by the PolicyGuard. */
 export interface PermissionRequirement {
-  permission: string;
+  /**
+   * Typed against the catalogue, so `'assset.read'` is a compile error rather
+   * than a route that fails closed for everyone in production.
+   */
+  permission: Permission;
   scopeFrom?: ScopeResolver;
 }
 
 /** Mark a route as unauthenticated (skip JwtAuthGuard). */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
-
-/** Require the principal to hold at least one of the given roles. */
-export const RequireRoles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
 
 /**
  * Extract the authenticated principal from the request.
@@ -59,20 +59,26 @@ export const ApiCommonErrors = (...codes: HttpErrorCode[]) =>
     ...codes.map((c) => ApiResponse({ status: c, description: HTTP_ERROR_DESCRIPTIONS[c] })),
   );
 
-/** Apply JWT auth + role guard + Swagger bearer annotation in one decorator. */
-export const Auth = (...roles: string[]) =>
-  applyDecorators(
-    UseGuards(JwtAuthGuard, RoleGuard),
-    ApiBearerAuth('access-token'),
-    ...(roles.length ? [RequireRoles(...roles)] : []),
-  );
+/**
+ * Authentication ONLY: verify the caller and annotate Swagger. It carries no
+ * authorization — a route under `@Auth()` alone is open to every authenticated
+ * caller, which is correct only for surfaces that are self-scoped by construction
+ * (`/me`, notification preferences) or that run around a session existing.
+ *
+ * For anything else use `@RequirePermission(...)`, which mounts the `PolicyGuard`.
+ * `@Auth()` used to also mount a `RoleGuard` and accept role names; that guard
+ * authorized from the JWT `roles` claim — a mint-time snapshot, so a revoked role
+ * stayed effective until the token rotated, and it sat beside the DB-resolved
+ * permission path as a second, disagreeing source of truth. Both are gone.
+ */
+export const Auth = () => applyDecorators(UseGuards(JwtAuthGuard), ApiBearerAuth('access-token'));
 
 /**
  * Require a fine-grained permission (resource.action), enforced by the
  * PolicyGuard against the principal's cached effective permissions. Pass
  * `scopeFrom` to additionally constrain by resource scope (team/dept/region/self).
  */
-export const RequirePermission = (permission: string, scopeFrom?: ScopeResolver) =>
+export const RequirePermission = (permission: Permission, scopeFrom?: ScopeResolver) =>
   applyDecorators(
     UseGuards(JwtAuthGuard, PolicyGuard),
     SetMetadata(PERMISSION_KEY, { permission, scopeFrom } satisfies PermissionRequirement),

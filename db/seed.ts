@@ -30,180 +30,32 @@ import { Pool } from 'pg';
 import { pgOptions } from './pg-ssl';
 import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
 import { employees } from './schema/identity';
+import {
+  PERMISSION,
+  PERMISSION_DESCRIPTIONS,
+  ROLE,
+  ROLE_NAMES,
+  ROLE_PERMISSIONS,
+  WILDCARD_PERMISSION,
+} from './permissions.catalog';
 
 type SeedDb = ReturnType<typeof drizzle>;
 
-// ── Permission catalog ────────────────────────────────────────────────────────
+// ── Permission catalogue + roles ──────────────────────────────────────────────
+// Sourced from db/permissions.catalog.ts, which the backend decorators and the
+// frontend gating also read. Defining them inline here is what let the seeded
+// vocabulary drift from the one the app used.
 const PERMISSIONS: Array<{ key: string; description: string }> = [
-  // Meta / RBAC
-  { key: '*', description: 'Wildcard — grants every permission (admin only)' },
-  { key: 'rbac.read', description: 'View roles, permissions and assignments' },
-  { key: 'rbac.manage', description: 'Create / edit / delete roles and permissions' },
-  { key: 'role.assign', description: 'Grant and revoke role assignments' },
-  // Identity / HR
-  { key: 'employee.read', description: 'View employee directory records' },
-  { key: 'employee.write', description: 'Create and update employee records' },
-  { key: 'employee.offboard', description: 'Trigger offboarding and revoke all access' },
-  // Assets
-  { key: 'asset.read', description: 'View hardware asset inventory' },
-  { key: 'asset.write', description: 'Create and update asset records' },
-  { key: 'asset.reassign', description: 'Reassign assets between employees' },
-  // Access requests
-  { key: 'access_request.read', description: 'View privileged-access requests' },
-  {
-    key: 'access_request.approve',
-    description: 'Step-1 approval for access requests (manager tier)',
-  },
-  {
-    key: 'access_request.security_approve',
-    description: 'Step-2 IT-Security approval for access requests',
-  },
-  // Compliance
-  { key: 'compliance.read', description: 'View compliance findings and software catalog' },
-  { key: 'compliance.manage', description: 'Resolve findings and manage compliance data' },
-  // Workforce
-  { key: 'workforce.read', description: 'View timesheets, leave and overtime entries' },
-  { key: 'workforce.approve', description: 'Approve or reject workforce requests (legacy)' },
-  {
-    key: 'workforce.leave.review',
-    description: 'Approve or reject leave requests via the approval engine',
-  },
-  {
-    key: 'workforce.overtime.review',
-    description: 'Approve or reject overtime requests via the approval engine',
-  },
-  // Onboarding / Offboarding workflows
-  { key: 'onboarding.approve', description: 'Step-1: Manager approves new employee hire' },
-  { key: 'onboarding.provision', description: 'Step-2: IT provisions accounts and equipment' },
-  { key: 'onboarding.complete', description: 'Step-3: HR marks onboarding complete' },
-  {
-    key: 'offboarding.approve',
-    description: 'HR approves offboarding and triggers full access revocation',
-  },
-  // Audit
-  { key: 'audit.read', description: 'Read the immutable audit log' },
-  // Reports
-  { key: 'reports.read', description: 'View aggregate reports and analytics dashboards' },
-  // Security Posture
-  { key: 'security.view', description: 'View Secure Score trends and baseline drift checks' },
-  { key: 'security.manage', description: 'Trigger Graph sync and manage security posture data' },
-  // Notifications
-  { key: 'notifications.manage', description: 'Manage notification preferences for all users' },
-  // Outbound Webhooks
-  { key: 'webhooks.manage', description: 'Create and manage outbound webhook subscriptions' },
-  // Service Catalog
-  { key: 'catalog.manage', description: 'Create / edit / delete service catalog items' },
-  // Software Licenses
-  { key: 'license.read', description: 'View software licenses, seats and utilization' },
-  { key: 'license.manage', description: 'Create / edit licenses and assign / revoke seats' },
+  { key: WILDCARD_PERMISSION, description: 'Wildcard — grants every permission (admin only)' },
+  ...Object.values(PERMISSION).map((key) => ({
+    key,
+    description: PERMISSION_DESCRIPTIONS[key],
+  })),
 ];
 
-// ── System roles → permission bundles ────────────────────────────────────────
-const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
-  {
-    key: 'admin',
-    name: 'Platform Administrator',
-    permissions: ['*'],
-  },
-  {
-    key: 'it-admin',
-    name: 'IT Administrator',
-    permissions: [
-      'employee.read',
-      'employee.write',
-      'asset.read',
-      'asset.write',
-      'asset.reassign',
-      'access_request.read',
-      'access_request.approve',
-      'access_request.security_approve',
-      'compliance.read',
-      'security.view',
-      'security.manage',
-      'audit.read',
-      'reports.read',
-      'rbac.read',
-      'onboarding.provision',
-      'webhooks.manage',
-      'catalog.manage',
-      'license.read',
-      'license.manage',
-    ],
-  },
-  {
-    key: 'security',
-    name: 'Security Officer',
-    permissions: [
-      'compliance.read',
-      'compliance.manage',
-      'security.view',
-      'security.manage',
-      'access_request.read',
-      'access_request.approve',
-      'access_request.security_approve',
-      'audit.read',
-      'reports.read',
-      'license.read',
-    ],
-  },
-  {
-    key: 'hr',
-    name: 'HR Manager',
-    permissions: [
-      'employee.read',
-      'employee.write',
-      'employee.offboard',
-      'workforce.read',
-      'workforce.approve',
-      'workforce.leave.review',
-      'workforce.overtime.review',
-      'audit.read',
-      'reports.read',
-      'onboarding.approve',
-      'onboarding.complete',
-      'offboarding.approve',
-    ],
-  },
-  {
-    key: 'manager',
-    name: 'People Manager',
-    permissions: [
-      'employee.read',
-      'workforce.read',
-      'workforce.approve',
-      'workforce.leave.review',
-      'workforce.overtime.review',
-      'access_request.read',
-      'access_request.approve',
-      'reports.read',
-      'onboarding.approve',
-    ],
-  },
-  {
-    key: 'helpdesk',
-    name: 'Help Desk',
-    permissions: ['asset.read', 'asset.write', 'access_request.read', 'employee.read'],
-  },
-  {
-    key: 'auditor',
-    name: 'Auditor (read-only)',
-    permissions: [
-      'rbac.read',
-      'audit.read',
-      'compliance.read',
-      'security.view',
-      'employee.read',
-      'asset.read',
-      'reports.read',
-      'license.read',
-    ],
-  },
-  {
-    key: 'employee',
-    name: 'Employee',
-    permissions: [], // Base role — can submit requests and view own data.
-  },
-];
+const ROLES: Array<{ key: string; name: string; permissions: string[] }> = Object.values(ROLE).map(
+  (key) => ({ key, name: ROLE_NAMES[key], permissions: [...ROLE_PERMISSIONS[key]] }),
+);
 
 // ── Demo employees — one per system role, for RBAC + dev-login testing ───────
 // Fixed UUIDs keep re-seeds idempotent. Each employee gets the matching legacy

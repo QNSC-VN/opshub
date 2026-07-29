@@ -4,8 +4,8 @@ import { InjectDrizzle, type DrizzleDB } from '../database/drizzle.provider';
 import { CacheService } from '@qnsc-vn/platform-cache';
 import { rolePermissions, userRoleAssignments } from '../../../../db/schema';
 import { ScopeEvaluator } from './scope-evaluator';
+import { permissionGrants } from '@shared-kernel';
 import {
-  WILDCARD_PERMISSION,
   type EffectivePermissions,
   type JwtPayload,
   type ResourceAttrs,
@@ -96,7 +96,15 @@ export class AuthzService {
     user?: JwtPayload,
   ): Promise<boolean> {
     const effective = await this.resolve(userId);
-    const grants = [...(effective[WILDCARD_PERMISSION] ?? []), ...(effective[permission] ?? [])];
+
+    // Which of the holder's codes cover `permission` is decided by the catalogue's
+    // `permissionGrants` — the same function the frontend gating and the seed use —
+    // rather than re-implemented here. Previously this checked only `*` and an
+    // exact match, so a module-wide grant (`asset.*`) would have been silently
+    // ignored by the guard while the UI showed the capability as held.
+    const grants = Object.entries(effective)
+      .filter(([code]) => permissionGrants([code], permission))
+      .flatMap(([, scopes]) => scopes);
     if (grants.length === 0) return false;
     if (!resource || !user) return true;
     return this.scopes.anyMatches(grants, resource, user);
