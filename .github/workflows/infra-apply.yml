@@ -140,12 +140,11 @@ jobs:
         working-directory: infra/live/develop
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:          ${{ vars.ACM_CERT_ARN_DEVELOP }}
-          TF_VAR_image_tag:             ${{ vars.DEFAULT_IMAGE_TAG || 'latest' }}
-          TF_VAR_entra_tenant_id:       ${{ vars.ENTRA_TENANT_ID }}
-          TF_VAR_entra_client_id:       ${{ vars.ENTRA_CLIENT_ID }}
-          TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The only TF_VAR left. The Entra ids and the Cloudflare account id are public
+          # identifiers held in infra/live/develop/variables.tf, so plan and apply now
+          # read the same values (see infra-plan.yml); develop's image_tag is `latest`
+          # in the caller; and acm_cert_arn was a required variable no resource read.
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       # Mint a short-lived installation token from the RELEASE_BOT GitHub App
       # (same app release.yml uses) so we never need a long-lived user PAT.
@@ -160,27 +159,47 @@ jobs:
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
       # Sync the infra IDs the deploy workflows read (backend-deploy.yml,
-      # web-deploy.yml) straight from Terraform outputs, so a rebuild that
-      # changes subnet/SG/Pages IDs can never leave the vars stale. Skipped
-      # automatically when no app token could be minted. Tolerant of a missing
-      # "Variables: write" grant so it never blocks the infra apply.
+      # web-deploy.yml) straight from Terraform outputs, so a rebuild that changes
+      # subnet/SG/Pages IDs can never leave the vars stale. Skipped automatically when
+      # no app token could be minted.
+      #
+      # A write can still be rejected — an App installation token needs the
+      # "Variables: read and write" grant, and cannot write to a protected environment
+      # at all. That is surfaced as a visible ::warning:: naming each variable to
+      # reconcile, never a silent green, but it never blocks the apply. This step used
+      # `continue-on-error`, which turned exactly that case into a green run with stale
+      # variables the deploy would then read.
       - name: Publish infra IDs to develop environment variables
         if: ${{ steps.app-token.outputs.token != '' }}
-        continue-on-error: true
         working-directory: infra/live/develop
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          set_var() { echo "  set ${1}"; gh variable set "$1" --env develop --repo "$REPO" --body "$2"; }
+          missed=0
+          set_var() {
+            if gh variable set "$1" --env develop --repo "$REPO" --body "$2"; then
+              echo "  set $1"
+            else
+              echo "::warning title=infra-id publish::could not set '$1' on the develop environment — reconcile manually: gh variable set $1 --env develop --repo $REPO --body '$2'"
+              missed=1
+            fi
+          }
           set_var ECS_CLUSTER           "$(tofu output -raw ecs_cluster_name)"
           set_var ECS_API_SERVICE       "$(tofu output -raw ecs_api_service)"
           set_var ECS_WORKER_SERVICE    "$(tofu output -raw ecs_worker_service)"
           set_var ECS_MIGRATOR_TASK_DEF "$(tofu output -raw ecs_migrator_task_def)"
           set_var ECS_MIGRATOR_SUBNET   "$(tofu output -json private_subnet_ids | jq -r 'join(",")')"
           set_var ECS_MIGRATOR_SG       "$(tofu output -raw sg_app_id)"
-          set_var PAGES_PROJECT         "$(tofu output -raw web_pages_project)"
+          # PAGES_PROJECT is deliberately NOT published while `module.web` is skipped
+          # (cloudflare_account_id is empty — see infra/live/develop/variables.tf).
+          # `web_pages_project` is null in that state, so publishing it would overwrite
+          # the working `opshub-develop-web` value with an empty string and break
+          # web-deploy. It goes back in the list when the Pages project is imported.
+          if [[ $missed -ne 0 ]]; then
+            echo "::warning title=infra-id publish::One or more develop infra-ID vars were not auto-published — the deploy reads these, so verify they match Terraform outputs to avoid drift."
+          fi
 
   # ───────────────────────────────────────────────────────────────────────────
   # Production — only on a v*.*.* tag push, AND requires manual approval via the
@@ -214,9 +233,66 @@ jobs:
         working-directory: infra/live/prod
         run: tofu apply -input=false -auto-approve
         env:
-          TF_VAR_acm_cert_arn:          ${{ secrets.ACM_CERT_ARN_PROD }}
-          TF_VAR_image_tag:             ${{ vars.PINNED_IMAGE_TAG }}
-          TF_VAR_entra_tenant_id:       ${{ vars.ENTRA_TENANT_ID }}
-          TF_VAR_entra_client_id:       ${{ vars.ENTRA_CLIENT_ID }}
-          TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Pin production to the exact release tag that triggered this apply (e.g.
+          # v1.4.2), so an infra apply can never move production onto a different image
+          # than the release it belongs to.
+          #
+          # This read `vars.PINNED_IMAGE_TAG`, a variable a human had to remember to
+          # update — and which does not exist on this repo, so the apply would have
+          # failed on a missing required variable. github.ref_name is the tag itself and
+          # cannot go stale.
+          TF_VAR_image_tag:            ${{ github.ref_name }}
+
+      # Mint a short-lived installation token from the RELEASE_BOT GitHub App so we
+      # never need a long-lived user PAT. Requires the app to have
+      # "Variables: read and write" on this repo. Falls back to no token (publish step
+      # skipped) when the app isn't configured.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        id: app-token
+        if: ${{ vars.RELEASE_BOT_APP_ID != '' }}
+        continue-on-error: true
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      # The production half of the output sync, which this workflow simply did not have:
+      # develop published its infra IDs and production never did, so backend-deploy.yml
+      # would read whatever a human had typed into the production environment — and
+      # today that environment holds no variables at all.
+      #
+      # NOTE: `production` is a PROTECTED environment (required reviewers), and a GitHub
+      # App installation token cannot write variables to a protected environment (403
+      # "Resource not accessible by integration"). When that happens each variable is
+      # named in a ::warning:: to reconcile by hand — never a silent green — but the
+      # apply is not blocked. The prod infra IDs are deterministic and stable, so they
+      # persist between applies; a human reconciles them on the rare rebuild that
+      # changes one.
+      - name: Publish infra IDs to production environment variables
+        if: ${{ steps.app-token.outputs.token != '' }}
+        working-directory: infra/live/prod
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          missed=0
+          set_var() {
+            if gh variable set "$1" --env production --repo "$REPO" --body "$2"; then
+              echo "  set $1"
+            else
+              echo "::warning title=infra-id publish::could not set '$1' on the production environment (a protected env rejects App-token writes) — reconcile manually: gh variable set $1 --env production --repo $REPO --body '$2'"
+              missed=1
+            fi
+          }
+          set_var ECS_CLUSTER           "$(tofu output -raw ecs_cluster_name)"
+          set_var ECS_API_SERVICE       "$(tofu output -raw ecs_api_service)"
+          set_var ECS_WORKER_SERVICE    "$(tofu output -raw ecs_worker_service)"
+          set_var ECS_MIGRATOR_TASK_DEF "$(tofu output -raw ecs_migrator_task_def)"
+          set_var ECS_MIGRATOR_SUBNET   "$(tofu output -json private_subnet_ids | jq -r 'join(",")')"
+          set_var ECS_MIGRATOR_SG       "$(tofu output -raw sg_app_id)"
+          # PAGES_PROJECT: see the develop job — `module.web` is skipped in both
+          # environments until the Pages projects are adopted.
+          if [[ $missed -ne 0 ]]; then
+            echo "::warning title=infra-id publish::One or more production infra-ID vars were not auto-published — the deploy reads these, so verify they match Terraform outputs to avoid drift."
+          fi
