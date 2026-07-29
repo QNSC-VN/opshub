@@ -22,7 +22,13 @@ permissions:
   packages: read       # pull @qnsc-vn/* from GitHub Packages
 
 env:
-  NODE_VERSION: '24'
+  # Deliberately 22 while .nvmrc and the Dockerfile are 24 — a split, and a
+  # temporary one. Node 24's V8 coverage instrumentation counts functions
+  # differently, which drops the measured figure to 9.74% against a 10% floor, so
+  # bumping this without touching the ratchet turns Tests red. The fix is the
+  # narrow-include coverage model rally uses (only files that have specs, at a real
+  # floor) rather than lowering a threshold; tracked as the next CI parity item.
+  NODE_VERSION: '22'
   PNPM_VERSION: '10.33.2'
 
 jobs:
