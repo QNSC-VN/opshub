@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.3
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.4
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -92,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.3
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.4
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -225,7 +225,7 @@ jobs:
             echo "No backward-incompatible DDL detected."
           fi
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.3
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.4
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -327,7 +327,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.3
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.4
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -387,7 +387,7 @@ jobs:
           OTEL_SERVICE_NAME: opshub-api
 
       - name: Upload OpenAPI spec artifact
-        uses: QNSC-VN/qnsc-ci/actions/publish-openapi-spec@v1.6.3
+        uses: QNSC-VN/qnsc-ci/actions/publish-openapi-spec@v1.6.4
         with:
           spec-path: openapi.json
           artifact-name: openapi-spec-${{ github.sha }}
@@ -406,7 +406,7 @@ jobs:
 
       - name: Check for breaking API changes (PR only)
         if: github.event_name == 'pull_request'
-        uses: QNSC-VN/qnsc-ci/actions/validate-openapi-contract@v1.6.3
+        uses: QNSC-VN/qnsc-ci/actions/validate-openapi-contract@v1.6.4
         with:
           current-spec-path: openapi.json
           base-spec-path: base-spec/openapi.json
