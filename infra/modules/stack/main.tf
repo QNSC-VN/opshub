@@ -413,6 +413,19 @@ module "web" {
   domain      = local.cloudflare_zone_id != "" ? var.app_domain : ""
   record_name = local.cloudflare_zone_id != "" ? var.web_record : ""
   comment     = "${local.name} web SPA → Cloudflare Pages (managed by ${var.product}-infra ${var.env})"
+
+  # Upstream for the Pages Function at apps/web/functions/v1/[[path]].ts, which
+  # forwards /v1/* (including /v1/bff/*) to the API. That proxy is what keeps the SPA
+  # and the API on ONE origin, and it is a requirement rather than an optimisation:
+  # a `__Host-` session cookie cannot be set cross-site, so the BFF auth flow only
+  # works same-origin. It also removes CORS from the browser path entirely.
+  #
+  # The SPA is built with VITE_API_URL unset, so it calls relative /v1 paths and has
+  # no knowledge of this hostname; setting VITE_API_URL would send the browser
+  # straight to the API origin and break the cookie.
+  production_env_vars = {
+    API_ORIGIN = "https://${var.api_domain}"
+  }
 }
 
 # ── DNS — the API's public edge ───────────────────────────────────────────────

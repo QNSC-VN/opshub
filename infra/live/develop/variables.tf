@@ -51,18 +51,15 @@ variable "cloudflare_account_id" {
     Cloudflare account that owns the Pages project (also a public identifier — it names
     an account without authorising anything).
 
-    Deliberately still EMPTY, unlike the two ids above, and empty means `module.web` is
-    skipped entirely. The `opshub-develop-web` Pages project already exists and serves
-    traffic (`opshub-develop-web.pages.dev` answers 200) but has never been in this
-    state file — the account id was plumbed from `secrets.CLOUDFLARE_ACCOUNT_ID`, and it
-    is an org-level VARIABLE rather than a secret, so the count-gated module has always
-    resolved to 0. Filling this in would therefore make the apply CREATE a project that
-    is already there and fail with "a project with this name already exists".
+    It was empty until now, and the reason is worth keeping: it used to be plumbed from
+    `secrets.CLOUDFLARE_ACCOUNT_ID`, but it is an org-level VARIABLE, not a secret. A
+    `secrets.` reference to a variable evaluates to empty with no error, so the
+    count-gated `module.web` resolved to 0 on every apply and the SPA was never managed
+    by Terraform at all.
 
-    Adopting it needs a config-driven `import` block, whose id format is worth proving
-    on a plan of its own rather than inside this refactor. Until then the value is "",
-    which is exactly what every apply so far has used.
+    Filling it in cannot simply CREATE the project: `opshub-develop-web` already exists
+    and serves traffic. `import.tf` adopts it instead.
   EOT
   type        = string
-  default     = ""
+  default     = "69e52835cf2d08edde5b6ebd741d30fa"
 }

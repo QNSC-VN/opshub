@@ -57,14 +57,10 @@ variable "cloudflare_account_id" {
   description = <<-EOT
     Cloudflare account that owns the Pages project (public identifier).
 
-    Empty, so `module.web` is skipped — matching develop, where the existing
-    `opshub-develop-web` project has to be imported before the module can own it. Unlike
-    develop, `opshub-prod-web` does NOT exist yet, so filling this in here creates it
-    cleanly; it stays empty only so the two environments are wired the same way and one
-    follow-up PR turns both on.
-
-    GO-LIVE: this must hold the account id before the SPA can be served in production.
+    No `import` block here, unlike develop: `opshub-prod-web` does not exist yet
+    (`opshub-prod-web.pages.dev` does not resolve), so the first prod apply creates the
+    project, its custom domain and the CNAME cleanly.
   EOT
   type        = string
-  default     = ""
+  default     = "69e52835cf2d08edde5b6ebd741d30fa"
 }

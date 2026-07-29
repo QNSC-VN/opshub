@@ -194,11 +194,7 @@ jobs:
           set_var ECS_MIGRATOR_TASK_DEF "$(tofu output -raw ecs_migrator_task_def)"
           set_var ECS_MIGRATOR_SUBNET   "$(tofu output -json private_subnet_ids | jq -r 'join(",")')"
           set_var ECS_MIGRATOR_SG       "$(tofu output -raw sg_app_id)"
-          # PAGES_PROJECT is deliberately NOT published while `module.web` is skipped
-          # (cloudflare_account_id is empty — see infra/live/develop/variables.tf).
-          # `web_pages_project` is null in that state, so publishing it would overwrite
-          # the working `opshub-develop-web` value with an empty string and break
-          # web-deploy. It goes back in the list when the Pages project is imported.
+          set_var PAGES_PROJECT         "$(tofu output -raw web_pages_project)"
           if [[ $missed -ne 0 ]]; then
             echo "::warning title=infra-id publish::One or more develop infra-ID vars were not auto-published — the deploy reads these, so verify they match Terraform outputs to avoid drift."
           fi
@@ -293,8 +289,7 @@ jobs:
           set_var ECS_MIGRATOR_TASK_DEF "$(tofu output -raw ecs_migrator_task_def)"
           set_var ECS_MIGRATOR_SUBNET   "$(tofu output -json private_subnet_ids | jq -r 'join(",")')"
           set_var ECS_MIGRATOR_SG       "$(tofu output -raw sg_app_id)"
-          # PAGES_PROJECT: see the develop job — `module.web` is skipped in both
-          # environments until the Pages projects are adopted.
+          set_var PAGES_PROJECT         "$(tofu output -raw web_pages_project)"
           if [[ $missed -ne 0 ]]; then
             echo "::warning title=infra-id publish::One or more production infra-ID vars were not auto-published — the deploy reads these, so verify they match Terraform outputs to avoid drift."
           fi
