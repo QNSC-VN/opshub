@@ -108,8 +108,8 @@ importers:
         specifier: ^1.43.0
         version: 1.43.0
       '@qnsc-vn/identity':
-        specifier: ^5.4.0
-        version: 5.4.0(28d4e2fc768b86ff4b0a94e4def9fbfd)
+        specifier: ^6.0.0
+        version: 6.0.0(aeccf69e8d35107358b76cfe2bec0f39)
       '@qnsc-vn/platform-cache':
         specifier: ^2.1.0
         version: 2.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(ioredis@5.11.1)
@@ -2218,22 +2218,16 @@ packages:
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
-  '@qnsc-vn/identity@5.4.0':
-    resolution: {integrity: sha512-7vEZmlGcdgMnGA4EAym9/2O82M1sVI0x5qZ5ozDVDEXssG80baI0x61Pb8tO1MbsooQw8wxuzkZE6LxfwlhTbA==, tarball: https://npm.pkg.github.com/download/@qnsc-vn/identity/5.4.0/88658c8adfd62752bf4c1886e641a48e5793711f}
+  '@qnsc-vn/identity@6.0.0':
+    resolution: {integrity: sha512-truDsw9QwgKhlLOdnLdZ+KFKFC/cPYcxhBrb3sy6WLyDa+cZVYrZhuIaKrmsCl11ZRuQ1LVzu8zwa5N37m+E8Q==, tarball: https://npm.pkg.github.com/download/@qnsc-vn/identity/6.0.0/593a4e82e69da03265c360106c03dee2278c7896}
     peerDependencies:
-      '@fastify/cookie': '>=11'
       '@nestjs/common': '>=11'
-      '@nestjs/core': '>=11'
       '@nestjs/jwt': '>=11'
       '@nestjs/passport': '>=11'
-      '@nestjs/swagger': '>=11'
       '@qnsc-vn/platform-cache': '>=2.0.0'
       '@qnsc-vn/platform-http': '>=2.0.0'
-      fastify: '>=5'
-      nestjs-zod: '>=5'
       passport: '>=0.7'
       passport-jwt: '>=4'
-      zod: '>=4'
 
   '@qnsc-vn/platform-cache@2.1.0':
     resolution: {integrity: sha512-BXJ7UWEQUfWVi/OoG3AaitwlqOH8xjpeQZavk0Gsg2U38mB+VYDORwP3VC/TangFNC77bK0qdGSiXOBBsgISNg==, tarball: https://npm.pkg.github.com/download/@qnsc-vn/platform-cache/2.1.0/25d962fb0bdf7387bfddcd82c2850066e8ed8d71}
@@ -8331,23 +8325,17 @@ snapshots:
 
   '@protobufjs/utf8@1.1.2': {}
 
-  '@qnsc-vn/identity@5.4.0(28d4e2fc768b86ff4b0a94e4def9fbfd)':
+  '@qnsc-vn/identity@6.0.0(aeccf69e8d35107358b76cfe2bec0f39)':
     dependencies:
-      '@fastify/cookie': 11.1.1
       '@nestjs/common': 11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@nestjs/core': 11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/jwt': 11.0.2(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))
       '@nestjs/passport': 11.0.5(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(passport@0.7.0)
-      '@nestjs/swagger': 11.4.5(@fastify/static@10.1.2)(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)
       '@qnsc-vn/platform-cache': 2.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(ioredis@5.11.1)
       '@qnsc-vn/platform-http': 3.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/swagger@11.4.5(@fastify/static@10.1.2)(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2))(@qnsc-vn/platform-cache@2.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(ioredis@5.11.1))(fastify@5.10.0)(ioredis@5.11.1)(nestjs-zod@5.4.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/swagger@11.4.5(@fastify/static@10.1.2)(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2))(rxjs@7.8.2)(zod@4.4.3))(zod@4.4.3)
-      fastify: 5.10.0
       jose: 6.2.3
-      nestjs-zod: 5.4.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/swagger@11.4.5(@fastify/static@10.1.2)(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2))(rxjs@7.8.2)(zod@4.4.3)
       passport: 0.7.0
       passport-jwt: 4.0.1
       uuidv7: 1.2.1
-      zod: 4.4.3
 
   '@qnsc-vn/platform-cache@2.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(ioredis@5.11.1)':
     dependencies:

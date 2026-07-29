@@ -12,6 +12,7 @@ function env(overrides: Record<string, string | undefined> = {}) {
     DATABASE_URL: 'postgres://u:p@localhost:5432/opshub',
     JWT_PRIVATE_KEY: privatePem,
     COOKIE_SECRET: 'y'.repeat(32),
+    CSRF_SECRET: 'z'.repeat(32),
     ...overrides,
   };
 }

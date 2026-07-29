@@ -1,10 +1,12 @@
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
+import fastifyCsrf from '@fastify/csrf-protection';
 import fastifyHelmet from '@fastify/helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
-import { AppConfigService } from '@platform';
+import { AppConfigService, BFF_SESSION_COOKIE } from '@platform';
+import { CSRF_HEADER, CSRF_SECRET_COOKIE, requiresCsrfProtection } from '@platform';
 
 /**
  * Applies cross-cutting HTTP concerns to the Fastify app: security headers,
@@ -31,8 +33,45 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
   const cookieSecret = config.get('COOKIE_SECRET');
   await app.register(fastifyCookie, { secret: cookieSecret });
 
+  // ── CSRF (double-submit, session-bound) ─────────────────────────────────────
+  // The secret lives in a signed `__Host-` cookie; the token is handed to the SPA by
+  // GET /v1/auth/me and echoed back in the X-CSRF-Token header. `userInfo` binds each
+  // token to the session id that requested it (HMAC'd with CSRF_SECRET), so a token
+  // lifted from one session cannot be replayed in another.
+  //
+  // Registering the plugin only decorates `reply.generateCsrf()` and
+  // `app.csrfProtection` — it enforces NOTHING until the hook below attaches it.
+  await app.register(fastifyCsrf, {
+    sessionPlugin: '@fastify/cookie',
+    cookieKey: CSRF_SECRET_COOKIE,
+    cookieOpts: { signed: true, httpOnly: true, secure: true, sameSite: 'strict', path: '/' },
+    // Header only. The default also reads `body._csrf`, which is never populated here and
+    // would accept a token an attacker can plant in a form post.
+    getToken: (req) => {
+      const header = req.headers[CSRF_HEADER];
+      return Array.isArray(header) ? header[0] : header;
+    },
+    getUserInfo: (req) => req.cookies?.[BFF_SESSION_COOKIE] ?? '',
+    csrfOpts: { hmacKey: config.get('CSRF_SECRET'), userInfo: true },
+  });
+
+  // Enforce on every cookie-authenticated state-changing request. Attaching the check
+  // in ONE hook rather than per route is deliberate: with decorators, a new controller
+  // is unprotected until someone remembers, and the omission is invisible in review.
+  // Here the default is protected and `requiresCsrfProtection` is the single place the
+  // policy lives — see libs/platform/src/http/csrf.ts for which requests it selects and
+  // why each exemption exists.
+  const fastify = app.getHttpAdapter().getInstance();
+  fastify.addHook('onRequest', function csrfGate(req, reply, done) {
+    if (!requiresCsrfProtection(req)) return done();
+    fastify.csrfProtection(req, reply, done);
+  });
+
   app.enableCors({
-    origin: config.get('CORS_ORIGINS').split(',').map((o) => o.trim()),
+    origin: config
+      .get('CORS_ORIGINS')
+      .split(',')
+      .map((o) => o.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
