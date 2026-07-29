@@ -77,6 +77,52 @@ export const EnvSchema = z
     JWT_ISSUER: z.string().default('opshub-api'),
     JWT_AUDIENCE: z.string().default('opshub-web'),
 
+    // ── BFF (Backend-for-Frontend) — server-side OIDC session ──────────────────
+    // The API is a *confidential* OIDC client: it runs the Entra Authorization-Code
+    // + PKCE flow server-side and issues an opaque, httpOnly `__Host-` session
+    // cookie, so no Entra or JWT token ever reaches the browser. The SPA reaches
+    // these routes same-origin through the Cloudflare Pages Function proxy.
+    /**
+     * Entra confidential-client secret, used only in the server-side code exchange.
+     *
+     * OPTIONAL, unlike rally's, and deliberately so: opshub's Entra app registration
+     * has no client secret minted yet. An empty secret leaves the login path
+     * unusable — `/v1/bff/login` still returns an authorize URL, and the callback's
+     * token exchange is what fails — while the app boots and both the Bearer path and
+     * dev-login keep working. Making it required instead would turn a missing secret
+     * into a crash-looping service.
+     */
+    ENTRA_CLIENT_SECRET: z.string().min(1).optional(),
+    /**
+     * Absolute URL of the BFF OIDC callback, which must also be registered as a
+     * redirect URI on the Entra app registration — e.g.
+     * https://opshub-dev.qnsc.vn/v1/bff/callback. Note the SPA origin, not the API
+     * origin: the browser is redirected here, and it must land same-origin so the
+     * session cookie set on the response is accepted.
+     */
+    ENTRA_REDIRECT_URI: emptyToUndefined(z.string().url().optional()),
+    /**
+     * Same-origin path the browser lands on after a successful login when the
+     * supplied `returnTo` is absent or fails the open-redirect guard.
+     */
+    BFF_POST_LOGIN_REDIRECT: z.string().default('/'),
+    /** Server-side session lifetime in seconds. Defaults to 30 days. */
+    BFF_SESSION_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(30 * 24 * 60 * 60),
+    /**
+     * HMAC key binding a CSRF token to the session that requested it, so a token
+     * lifted from one session cannot be replayed in another.
+     *
+     * Distinct from COOKIE_SECRET on purpose: that one signs every cookie the app
+     * sets, so rotating it invalidates all of them. Sharing one value would make a
+     * cookie-hygiene rotation read as a CSRF change in the audit trail, and vice
+     * versa.
+     */
+    CSRF_SECRET: z.string().min(32),
+
     // ── AWS (optional in dev) ──────────────────────────────────────────────────
     AWS_REGION: z.string().default('ap-southeast-1'),
     SQS_OUTBOX_URL: z.string().optional(),

@@ -95,6 +95,28 @@ variable "entra_client_id" {
   type        = string
 }
 
+variable "entra_client_secret_set" {
+  description = <<-EOT
+    Inject `entra-client-secret` into api and worker, enabling the BFF's server-side
+    code exchange.
+
+    OFF by default for the same mechanical reason as `graph_client_secret_set`: ECS
+    cannot inject a Secrets Manager secret that holds no value — the task dies before the
+    app runs — so wiring a credential that has not been minted yet takes the whole
+    environment down.
+
+    This one cannot be generated on this side. It is a confidential-client secret created
+    on the Entra app registration, so the order is: create the secret in Entra, put it in
+    Secrets Manager, then flip this.
+
+    While it is false the SPA can still reach `POST /v1/bff/login` and receive an
+    authorize URL; the callback is what fails, closed, with a generic 401. Everything
+    that does not depend on interactive login is unaffected.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "graph_client_secret_set" {
   description = <<-EOT
     Inject `graph-client-secret` into api and worker.

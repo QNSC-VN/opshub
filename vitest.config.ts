@@ -36,6 +36,7 @@ export default defineConfig({
       OTEL_ENABLED: 'false',
       OTEL_SERVICE_NAME: 'opshub-api-test',
       COOKIE_SECRET: 'test-cookie-secret-minimum-32-chars!!',
+      CSRF_SECRET: 'test-csrf-secret-minimum-32-characters!',
     },
     // `test/*.spec.ts` (one level, not recursive) picks up the cross-cutting
     // contract specs — the permission catalogue and the FE↔BE permission contract —

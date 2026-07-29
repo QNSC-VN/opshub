@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { JwtPayload as SharedJwtPayload } from '@qnsc-vn/identity';
 import { AppConfigService } from '../config/app-config.service';
+import { toOpshubPrincipal } from './opshub-principal';
 
 /**
  * Authenticated principal attached to request.user after JWT validation.
@@ -21,13 +22,6 @@ export interface JwtPayload extends SharedJwtPayload {
   roles: string[];
 }
 
-/** The nested authorization claims opshub's {@link RolesClaimsProvider} stamps. */
-interface OpshubClaims {
-  roles?: string[];
-  email?: string;
-  name?: string;
-}
-
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(config: AppConfigService) {
@@ -44,19 +38,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   validate(payload: SharedJwtPayload): JwtPayload {
     // Signature, exp, iss, aud already verified by passport-jwt.
     // Denylist check (revocation) is handled in JwtAuthGuard.canActivate().
-    // Flatten the package's nested `claims` onto the principal so the audit
-    // context reads `email`/`name` directly.
     //
-    // `roles` is carried for display and for the Entra reconcile, NOT for
-    // authorization: the PolicyGuard resolves permissions from the database on
-    // every request. Do not gate anything on this array — it is a mint-time
-    // snapshot, which is why the RoleGuard that read it was removed.
-    const claims = (payload.claims ?? {}) as OpshubClaims;
-    return {
-      ...payload,
-      roles: claims.roles ?? [],
-      email: claims.email ?? '',
-      name: claims.name ?? '',
-    };
+    // The claim flattening is shared with the BFF session path — see
+    // toOpshubPrincipal — so both authentication modes produce the same principal.
+    return toOpshubPrincipal(payload);
   }
 }

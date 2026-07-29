@@ -13,6 +13,16 @@ export const DevLoginSchema = z.object({
 });
 export class DevLoginDto extends createZodDto(DevLoginSchema) {}
 
+export const BffLoginSchema = z.object({
+  /**
+   * Same-origin path to land on after login. Validated server-side by the shared
+   * service's open-redirect guard, which falls back to BFF_POST_LOGIN_REDIRECT — so an
+   * absolute URL here cannot bounce the browser off-site.
+   */
+  returnTo: z.string().optional(),
+});
+export class BffLoginDto extends createZodDto(BffLoginSchema) {}
+
 /**
  * Response for all auth login + refresh endpoints.
  * The refresh token is delivered via HttpOnly cookie — never in the response body.
@@ -35,4 +45,12 @@ export class MeResponseDto {
    * truth the SPA uses to gate UI — it must never re-derive permissions itself.
    */
   permissions!: string[];
+  /**
+   * Double-submit CSRF token, bound by HMAC to the session that requested it.
+   *
+   * Present ONLY for a request authenticated by the BFF session cookie — a Bearer
+   * caller is not exposed to CSRF and is not issued one. The SPA echoes it in the
+   * `X-CSRF-Token` header on every state-changing request.
+   */
+  csrfToken?: string;
 }

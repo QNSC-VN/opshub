@@ -76,7 +76,19 @@ locals {
     # individually valid to Terraform and to the app's env schema.
     { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private"] },
     { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
+    # Required by the env schema, so it is injected unconditionally rather than gated
+    # like the two below: it is a random key this side generates, not a credential
+    # minted in someone else's console, so there is no window where it cannot be set.
+    { name = "CSRF_SECRET", secret_arn = module.secrets.secret_arns["csrf-secret"] },
     ],
+    # The BFF's confidential-client secret. Gated for the same reason as Graph's: an
+    # empty Secrets Manager value cannot be injected at all, so wiring it before the
+    # Entra app registration has one would stop every task from starting. While it is
+    # off, the login START still works and the callback's token exchange is what fails —
+    # the app boots, and the Bearer path is unaffected.
+    var.entra_client_secret_set ? [
+      { name = "ENTRA_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["entra-client-secret"] },
+    ] : [],
     # Injected only once populated — see the variable. ECS cannot inject a secret that
     # holds no value: the task fails to start with
     # "ResourceInitializationError ... can't find the specified secret value for staging
@@ -106,6 +118,11 @@ locals {
     { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
+    # The SPA origin, NOT the API origin: Entra redirects the browser here, and the
+    # session cookie is set on that response — it has to land same-origin with the SPA or
+    # the `__Host-` cookie is refused. The Pages Function forwards /v1/* to the API.
+    # This exact string must also be registered as a redirect URI on the app registration.
+    { name = "ENTRA_REDIRECT_URI", value = "${local.app_url}/v1/bff/callback" },
     # Terraform already knows the deployed tag, so the version needs no CI plumbing.
     # Read by the OTel resource and by the served OpenAPI document, both of which
     # reported "dev" in every environment before this was injected.
@@ -131,6 +148,8 @@ module "secrets" {
   secret_names = {
     "jwt-private"         = "JWT ES256 private key, EC P-256 (PEM or base64-encoded PEM). The public half is derived from it."
     "cookie-secret"       = "Fastify cookie signing secret (min 32 chars)"
+    "csrf-secret"         = "HMAC key binding a CSRF token to its session (min 32 chars). Distinct from cookie-secret so the two rotate independently."
+    "entra-client-secret" = "Entra confidential-client secret for the BFF server-side code exchange"
     "graph-client-secret" = "Microsoft Graph app client secret (client-credentials flow for Graph sync jobs)"
   }
 

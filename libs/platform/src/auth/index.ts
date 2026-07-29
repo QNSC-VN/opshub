@@ -1,4 +1,6 @@
 export * from './jwt.strategy';
+export * from './bff-session-resolver';
+export * from './opshub-principal';
 export * from './jwt.guard';
 export * from './decorators';
 export * from './authz.types';
