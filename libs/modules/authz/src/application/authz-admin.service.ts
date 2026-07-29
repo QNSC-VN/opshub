@@ -146,6 +146,25 @@ export class AuthzAdminService {
       );
     }
 
+    // `team` and `region` are in the scope_type enum and the ScopeEvaluator, but
+    // NOTHING in the schema produces a team or a region: there is no teams table and
+    // no region column, so `ResourceScopeResolver` can never populate those
+    // attributes and a grant scoped to them can only ever deny.
+    //
+    // Refusing at write time is the honest failure. Accepting the grant would let an
+    // operator believe they had scoped someone's access when they had actually
+    // removed it — and before the guard started failing closed, it silently GRANTED
+    // everything instead, which is worse. Re-allow a dimension here in the same
+    // change that gives the schema and the resolver something to match on.
+    if (scopeType === 'team' || scopeType === 'region') {
+      throw new ValidationException(
+        'VALIDATION_FAILED',
+        `Scope type '${scopeType}' is not supported yet: no resource carries a ` +
+          `${scopeType}, so the grant could never be satisfied. Use 'global', 'self' ` +
+          `or 'dept'.`,
+      );
+    }
+
     const assignment = await this.assignmentRepo.assign({
       userId: command.userId,
       roleId: command.roleId,

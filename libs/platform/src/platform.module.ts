@@ -11,6 +11,7 @@ import { RequestContextService } from './context/request-context';
 import { JwtStrategy } from './auth/jwt.strategy';
 import { JwtAuthGuard } from './auth/jwt.guard';
 import { ScopeEvaluator } from './auth/scope-evaluator';
+import { ResourceScopeResolver } from './auth/resource-scope.resolver';
 import { AuthzService } from './auth/authz.service';
 import { PolicyGuard } from './auth/policy.guard';
 import { RequestRegistry } from './requests/request-registry';
@@ -80,6 +81,7 @@ import { StorageService } from './storage/storage.service';
     JwtStrategy,
     JwtAuthGuard,
     ScopeEvaluator,
+    ResourceScopeResolver,
     AuthzService,
     PolicyGuard,
     RequestRegistry,
@@ -117,6 +119,7 @@ import { StorageService } from './storage/storage.service';
     RequestContextService,
     JwtAuthGuard,
     ScopeEvaluator,
+    ResourceScopeResolver,
     AuthzService,
     PolicyGuard,
     RequestRegistry,
