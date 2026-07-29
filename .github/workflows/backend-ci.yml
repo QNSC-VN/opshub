@@ -22,7 +22,7 @@ permissions:
   packages: read       # pull @qnsc-vn/* from GitHub Packages
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   PNPM_VERSION: '10.33.2'
 
 jobs:
@@ -160,7 +160,92 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────────────────────────────────────
-  # 3. Docker build validation (BuildKit cache, no push)
+  # 3. Migration upgrade path — prove a migration applies to a REAL database,
+  #    not just a fresh one.
+  #
+  #    A fresh-DB migrate cannot catch incremental-only hazards: the classic one
+  #    is `ALTER TYPE … ADD VALUE` plus a use of that value in the same batch
+  #    (Postgres 55P04), which passes on an empty database and fails on a
+  #    deployed one. So build main's schema first, then apply only what this PR
+  #    adds on top.
+  # ─────────────────────────────────────────────────────────────────────────
+  migrations:
+    name: Migration upgrade path
+    if: github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/opshub_upgrade?sslmode=disable
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opshub_upgrade
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0 # need origin/main to build the baseline schema
+
+      # Expand-contract advisory (WARN-only): migrate-before-flip runs the new
+      # migration while the OLD app is briefly still live, so backward-
+      # incompatible DDL (drop/rename/narrow a column) can break it. Flag such DDL
+      # in this PR's new migration lines via GHA annotations — never fails the
+      # build. Acknowledge a deliberate one with a trailing
+      # `-- expand-contract-ok: <reason>` on the line.
+      - name: Expand-contract advisory
+        if: github.event_name == 'pull_request'
+        run: |
+          added=$(git diff origin/main...HEAD -- 'db/migrations/*.sql' \
+            | grep -E '^\+' | grep -vE '^\+\+\+' || true)
+          if [ -z "$added" ]; then echo "No new migration lines."; exit 0; fi
+          pattern='DROP[[:space:]]+COLUMN|DROP[[:space:]]+TABLE|RENAME[[:space:]]+(COLUMN|TO)|SET[[:space:]]+NOT[[:space:]]+NULL'
+          hits=$(echo "$added" | grep -iE "$pattern" | grep -iv 'expand-contract-ok' || true)
+          if [ -n "$hits" ]; then
+            echo "$hits" | while IFS= read -r line; do
+              echo "::warning title=Expand-contract::Backward-incompatible DDL — verify migrate-before-flip safe: ${line#+}"
+            done
+          else
+            echo "No backward-incompatible DDL detected."
+          fi
+
+      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+
+      # Baseline: check out main's ENTIRE db/ tree (migrations, seed AND the
+      # Drizzle schema) and run it end-to-end, so the DB mirrors a real deployed
+      # environment as the last release produced it. Then restore this PR's files.
+      # Pinning the whole tree — not just db/migrations — matters because
+      # `db:migrate` also runs the seed, and the seed builds its INSERTs from the
+      # Drizzle schema: a PR that adds a column would otherwise run HEAD's seed
+      # against main's older tables and fail spuriously.
+      # (On push-to-main this is a no-op: origin/main == HEAD.)
+      - name: Apply baseline (main) migrations
+        run: |
+          git checkout origin/main -- db
+          pnpm db:migrate
+          git checkout HEAD -- db
+
+      # Upgrade: apply only the migrations this PR adds, on the committed
+      # baseline. Reproduces the committed-enum restriction and any other
+      # incremental-only hazard; fails the PR if the upgrade cannot complete.
+      - name: Apply new migrations on top of baseline
+        run: pnpm db:migrate
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4. Docker build validation (BuildKit cache, no push)
   #    Runs after tests to avoid wasting compute on broken code.
   # ─────────────────────────────────────────────────────────────────────────
   build:
@@ -272,7 +357,11 @@ jobs:
           echo "API_PID=$API_PID" >> "$GITHUB_ENV"
           # Poll until ready (max 30s)
           for i in $(seq 1 30); do
-            curl -sf http://localhost:3000/healthz && break || sleep 1
+            if curl -sf http://localhost:3000/v1/healthz > /dev/null 2>&1; then
+              echo "API ready after ${i}s"
+              break
+            fi
+            sleep 1
           done
           curl -sf http://localhost:3000/api/docs-json -o openapi.json
           kill "$API_PID" || true
@@ -292,11 +381,11 @@ jobs:
           OTEL_SERVICE_NAME: opshub-api
 
       - name: Upload OpenAPI spec artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: QNSC-VN/qnsc-ci/actions/publish-openapi-spec@v1.6.2
         with:
-          name: openapi-spec-${{ github.sha }}
-          path: openapi.json
-          retention-days: 30
+          spec-path: openapi.json
+          artifact-name: openapi-spec-${{ github.sha }}
+          retention-days: "30"
 
       # On PRs: download the base-branch spec and diff for breaking changes.
       - name: Download base spec
