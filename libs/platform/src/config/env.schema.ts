@@ -1,3 +1,4 @@
+import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { z } from 'zod';
 
 const booleanish = (defaultValue: boolean) =>
@@ -25,7 +26,17 @@ export const EnvSchema = z
     CORS_ORIGINS: z.string().default('http://localhost:5173'),
 
     // ── Database ───────────────────────────────────────────────────────────────
-    DATABASE_URL: z.string().url(),
+    // Supply EITHER a complete DATABASE_URL (local dev, CI) OR the discrete parts
+    // (deployed). See db/database-url.ts for why the deployed path composes from
+    // parts rather than storing a URL: the password belongs to the RDS-managed
+    // secret that AWS rotates, and any copy of it goes stale silently.
+    DATABASE_URL: z.string().url().optional(),
+    DATABASE_HOST: z.string().optional(),
+    DATABASE_PORT: z.coerce.number().int().positive().optional(),
+    DATABASE_NAME: z.string().optional(),
+    DATABASE_USER: z.string().optional(),
+    DATABASE_PASSWORD: z.string().optional(),
+    DATABASE_SSLMODE: z.string().default('require'),
     DATABASE_POOL_MIN: z.coerce.number().int().positive().default(2),
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(20),
 
@@ -38,11 +49,19 @@ export const EnvSchema = z
       .min(1)
       .transform((v) => (v.includes('-----BEGIN') ? v : Buffer.from(v, 'base64').toString('utf8')))
       .refine((v) => v.includes('-----BEGIN'), 'JWT_PRIVATE_KEY must be a PEM-encoded private key'),
+    /**
+     * OPTIONAL — derived from JWT_PRIVATE_KEY when absent (see the transform at the
+     * bottom of this file). Supply it only to override, e.g. a local .env that already
+     * has a pair. Nothing needs it configured: an ES256 public key is a pure function
+     * of its private key, and opshub publishes no JWKS, so no verifier exists that
+     * lacks the private key.
+     */
     JWT_PUBLIC_KEY: z
       .string()
       .min(1)
       .transform((v) => (v.includes('-----BEGIN') ? v : Buffer.from(v, 'base64').toString('utf8')))
-      .refine((v) => v.includes('-----BEGIN'), 'JWT_PUBLIC_KEY must be a PEM-encoded public key'),
+      .refine((v) => v.includes('-----BEGIN'), 'JWT_PUBLIC_KEY must be a PEM-encoded public key')
+      .optional(),
 
     // Entra ID SSO — required in production, optional in dev (enables entra-login endpoint).
     ENTRA_TENANT_ID: emptyToUndefined(z.string().uuid().optional()),
@@ -103,11 +122,97 @@ export const EnvSchema = z
     /** Public base URL used to build links inside notification emails. */
     APP_URL: z.string().url().default('http://localhost:5173'),
   })
-  .transform((data) => ({
-    ...data,
-    // VALKEY_URL is the infra-injected alias for Redis-compatible caches (e.g. ElastiCache Valkey).
-    // Normalize at parse time so all callers use get('REDIS_URL') regardless of which var infra sets.
-    REDIS_URL: data.VALKEY_URL ?? data.REDIS_URL,
-  }));
+  .superRefine((env, ctx) => {
+    // Database credentials must arrive by exactly one of the two routes. Checked here
+    // so a misconfigured task dies at boot with a precise message, rather than
+    // surviving startup and failing on the first query — which is how a stale db-url
+    // secret presents: a healthy-looking deploy, then 28P01.
+    if (env.DATABASE_URL) return;
+
+    const missing = (
+      [
+        'DATABASE_HOST',
+        'DATABASE_PORT',
+        'DATABASE_NAME',
+        'DATABASE_USER',
+        'DATABASE_PASSWORD',
+      ] as const
+    ).filter((k) => !env[k]);
+
+    if (missing.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DATABASE_URL'],
+        message:
+          `Database not configured. Set DATABASE_URL, or all of DATABASE_HOST, DATABASE_PORT, ` +
+          `DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD. Missing: ${missing.join(', ')}.`,
+      });
+    }
+  })
+  .transform((env, ctx) => {
+    // VALKEY_URL is the infra-injected alias for Redis-compatible caches (e.g. ElastiCache
+    // Valkey). Normalize at parse time so all callers use get('REDIS_URL') regardless of
+    // which var infra sets.
+    const normalized = { ...env, REDIS_URL: env.VALKEY_URL ?? env.REDIS_URL };
+
+    // JWT_PUBLIC_KEY is DERIVED, not configured.
+    //
+    // Storing the public half alongside the private one invites the single failure a
+    // key pair cannot otherwise have: a MISMATCHED pair, where signing succeeds and
+    // every verification rejects — total auth outage. Nothing catches it, because both
+    // values are individually valid to Terraform, to the deploy preflight, and to this
+    // schema. Deriving removes the possibility rather than monitoring for it.
+    //
+    // An explicit value still wins, so a local .env with a real pair keeps working and
+    // infra can keep injecting one through the transition.
+    // Restated rather than `return normalized`, and not redundantly: inside this guard
+    // TS narrows the property to `string`, which is what makes JWT_PUBLIC_KEY
+    // non-optional on the inferred Env type. Returning the object unchanged leaves it
+    // `string | undefined` and every consumer needs a non-null assertion.
+    if (normalized.JWT_PUBLIC_KEY) {
+      return { ...normalized, JWT_PUBLIC_KEY: normalized.JWT_PUBLIC_KEY };
+    }
+
+    const reject = (message: string) => {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['JWT_PRIVATE_KEY'], message });
+      return z.NEVER;
+    };
+
+    // createPrivateKey FIRST, deliberately. createPublicKey happily accepts a public
+    // key as its input and hands it straight back, so deriving from it would silently
+    // succeed for the likeliest paste error there is — the public half dropped into the
+    // private slot — and fail much later at the first sign().
+    let privateKey;
+    try {
+      privateKey = createPrivateKey(normalized.JWT_PRIVATE_KEY);
+    } catch {
+      return reject(
+        'JWT_PRIVATE_KEY is PEM but not a PRIVATE key. A public key pasted here would ' +
+          'pass the format check and then break signing at runtime.',
+      );
+    }
+
+    // ES256 means P-256 specifically. Any other curve signs happily and produces
+    // tokens every verifier rejects, which reads as a broken deploy with no cause.
+    const curve = privateKey.asymmetricKeyDetails?.namedCurve;
+    if (privateKey.asymmetricKeyType !== 'ec' || curve !== 'prime256v1') {
+      return reject(
+        `JWT_PRIVATE_KEY must be an EC P-256 key for ES256, got ` +
+          `${privateKey.asymmetricKeyType}${curve ? `/${curve}` : ''}.`,
+      );
+    }
+
+    return {
+      ...normalized,
+      // Derived from the validated PEM rather than the KeyObject: @types/node's
+      // createPublicKey overloads do not accept a bare KeyObject, though the runtime
+      // does. Re-exporting keeps this typed without a cast.
+      JWT_PUBLIC_KEY: createPublicKey(
+        privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      )
+        .export({ type: 'spki', format: 'pem' })
+        .toString(),
+    };
+  });
 
 export type Env = z.infer<typeof EnvSchema>;

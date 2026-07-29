@@ -95,6 +95,26 @@ variable "entra_client_id" {
   type        = string
 }
 
+variable "graph_client_secret_set" {
+  description = <<-EOT
+    Inject `graph-client-secret` into api and worker.
+
+    OFF by default, and the default is the point. ECS cannot inject a Secrets Manager
+    secret that holds no value — the task dies before the app runs with
+    "ResourceInitializationError ... can't find the specified secret value for staging
+    label: AWSCURRENT". So wiring an OPTIONAL integration unconditionally makes it
+    mandatory in the worst possible way: this single empty secret is why no opshub task
+    has ever started, even though the app treats the Graph features as self-disabling.
+
+    While this is false the Graph-backed surfaces (compliance sync, security posture,
+    workforce provisioning, PIM) report themselves disabled and everything else runs.
+    Populate the secret in Secrets Manager first, then flip this — the same two-step
+    shape rally uses for credentials it cannot generate.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "cache" {
   description = <<-EOT
     Cache sizing. Encryption is NOT an option here: the module always enables KMS at

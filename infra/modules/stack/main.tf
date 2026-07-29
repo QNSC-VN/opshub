@@ -57,13 +57,35 @@ locals {
   # Injected into api AND worker. One list, because a secret the api can read and the
   # worker cannot is a runtime failure discovered in production, and the two lists
   # drifted apart exactly that way while they were maintained per environment.
-  app_secrets = [
-    { name = "DATABASE_URL", secret_arn = module.secrets.secret_arns["db-url"] },
-    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private-key"] },
-    { name = "JWT_PUBLIC_KEY", secret_arn = module.secrets.secret_arns["jwt-public-key"] },
+  app_secrets = concat([
+    # The database credential, read LIVE from the secret AWS owns and rotates. `:key::`
+    # selects one field of that secret's JSON.
+    #
+    # This replaced a hand-populated `db-url` secret. RDS is created with
+    # `manage_master_user_password = true`, so that copy went stale on every rotation
+    # and the next deploy would die with 28P01 (password authentication failed for
+    # "app_admin") with nothing drifting in Terraform to explain it. Host/port/name are
+    # not secret and travel as plain env below; the app composes the URL
+    # (db/database-url.ts). It is also what makes least-privilege roles possible — while
+    # the whole credential arrived as one URL there was nothing to point at another role.
+    { name = "DATABASE_USER", secret_arn = "${module.rds.master_secret_arn}:username::" },
+    { name = "DATABASE_PASSWORD", secret_arn = "${module.rds.master_secret_arn}:password::" },
+    # The public half is DERIVED from this at boot, so there is no second secret to fall
+    # out of step with it. A mismatched pair is the one failure a keypair cannot
+    # otherwise have: signing succeeds, every verification rejects, and both values look
+    # individually valid to Terraform and to the app's env schema.
+    { name = "JWT_PRIVATE_KEY", secret_arn = module.secrets.secret_arns["jwt-private"] },
     { name = "COOKIE_SECRET", secret_arn = module.secrets.secret_arns["cookie-secret"] },
-    { name = "GRAPH_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["graph-client-secret"] },
-  ]
+    ],
+    # Injected only once populated — see the variable. ECS cannot inject a secret that
+    # holds no value: the task fails to start with
+    # "ResourceInitializationError ... can't find the specified secret value for staging
+    # label: AWSCURRENT". So wiring an OPTIONAL integration unconditionally makes it
+    # mandatory in the worst way, and that is precisely what kept develop from ever
+    # booting.
+    var.graph_client_secret_set ? [
+      { name = "GRAPH_CLIENT_SECRET", secret_arn = module.secrets.secret_arns["graph-client-secret"] },
+  ] : [])
 
   # Env both services need. Same reasoning as app_secrets: the queue URL, the bucket
   # and the cache endpoint are the contract between them, so they cannot be allowed to
@@ -76,6 +98,10 @@ locals {
     { name = "NODE_ENV", value = "production" },
     { name = "VALKEY_URL", value = local.valkey_url },
     { name = "AWS_REGION", value = var.region },
+    # Non-secret connection parts; DATABASE_USER/PASSWORD arrive via secrets above.
+    { name = "DATABASE_HOST", value = module.rds.address },
+    { name = "DATABASE_PORT", value = tostring(module.rds.port) },
+    { name = "DATABASE_NAME", value = module.rds.db_name },
     { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
     { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
@@ -99,10 +125,11 @@ module "secrets" {
 
   recovery_window_days = var.secrets_recovery_window_days
 
+  # Three secrets, not five. `db-url` is gone — the credential is read live from the
+  # RDS-managed secret AWS rotates (see local.app_secrets) — and so is `jwt-public-key`,
+  # which the app derives from the private half at boot.
   secret_names = {
-    "db-url"              = "PostgreSQL connection URL"
-    "jwt-private-key"     = "JWT ES256 private key (PEM or base64-encoded PEM)"
-    "jwt-public-key"      = "JWT ES256 public key (PEM or base64-encoded PEM)"
+    "jwt-private"         = "JWT ES256 private key, EC P-256 (PEM or base64-encoded PEM). The public half is derived from it."
     "cookie-secret"       = "Fastify cookie signing secret (min 32 chars)"
     "graph-client-secret" = "Microsoft Graph app client secret (client-credentials flow for Graph sync jobs)"
   }
@@ -267,7 +294,11 @@ module "api" {
   alb_host_headers  = [var.api_domain]
   health_check_path = "/v1/healthz"
 
-  secret_arns = values(module.secrets.secret_arns)
+  # Includes the AWS-managed RDS secret: the execution role needs GetSecretValue on it
+  # to inject DATABASE_USER/PASSWORD. Omit it and the task cannot start at all ("unable
+  # to pull secrets") — a boot failure, not a runtime error. The migrator reuses the
+  # api's roles, so it is covered by the api's copy of this list too.
+  secret_arns = concat(values(module.secrets.secret_arns), [module.rds.master_secret_arn])
   kms_key_arn = local.kms_key_arn
   secrets     = local.app_secrets
 
@@ -310,7 +341,11 @@ module "worker" {
   # No listener rule: the worker serves no HTTP traffic.
   attach_alb = false
 
-  secret_arns = values(module.secrets.secret_arns)
+  # Includes the AWS-managed RDS secret: the execution role needs GetSecretValue on it
+  # to inject DATABASE_USER/PASSWORD. Omit it and the task cannot start at all ("unable
+  # to pull secrets") — a boot failure, not a runtime error. The migrator reuses the
+  # api's roles, so it is covered by the api's copy of this list too.
+  secret_arns = concat(values(module.secrets.secret_arns), [module.rds.master_secret_arn])
   kms_key_arn = local.kms_key_arn
   secrets     = local.app_secrets
 
@@ -343,10 +378,21 @@ module "migrator" {
   environment = {
     NODE_ENV   = "production"
     AWS_REGION = var.region
+    # Non-secret connection parts; USER/PASSWORD arrive via secrets below.
+    DATABASE_HOST = module.rds.address
+    DATABASE_PORT = tostring(module.rds.port)
+    DATABASE_NAME = module.rds.db_name
   }
 
+  # The master credential, and it stays that way when the least-privilege roles land:
+  # the migrator runs DDL, so it needs the owner. Narrowing it additionally requires
+  # transferring schema ownership, which is a separate and more disruptive step.
+  #
+  # Read live from the AWS-managed secret so a rotation can never leave the migrator
+  # holding a stale password — the failure that made this worth changing.
   secrets = {
-    DATABASE_URL = module.secrets.secret_arns["db-url"]
+    DATABASE_USER     = "${module.rds.master_secret_arn}:username::"
+    DATABASE_PASSWORD = "${module.rds.master_secret_arn}:password::"
   }
 
   tags = merge(local.tags, { Service = "migrator" })

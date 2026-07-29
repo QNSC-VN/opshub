@@ -41,7 +41,10 @@ export default defineConfig({
     // contract specs — the permission catalogue and the FE↔BE permission contract —
     // which belong to no single lib. Deliberately NOT `test/**` so anything added
     // under test/e2e stays with the separate e2e config that boots a real DB.
-    include: ['libs/**/*.spec.ts', 'apps/**/*.spec.ts', 'test/*.spec.ts'],
+    // `db/**` is included because db/ holds production code the app imports, not just
+    // migrations — db/database-url.ts composes the connection string every process
+    // uses. A spec that never runs is worse than no spec, since it reads as coverage.
+    include: ['libs/**/*.spec.ts', 'apps/**/*.spec.ts', 'db/**/*.spec.ts', 'test/*.spec.ts'],
     exclude: ['node_modules', 'dist'],
     coverage: {
       provider: 'v8',

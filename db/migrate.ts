@@ -15,11 +15,17 @@ import { Pool } from 'pg';
 import path from 'path';
 import { seed, seedRbacCatalog } from './seed';
 import { pgOptions } from './pg-ssl';
+import { resolveDatabaseUrl, resolveMigrationUrl } from './database-url';
 
-const url = process.env['DATABASE_MIGRATION_URL'] ?? process.env['DATABASE_URL'];
-
-if (!url) {
-  console.error('❌  DATABASE_MIGRATION_URL or DATABASE_URL required');
+// Resolves DATABASE_MIGRATION_URL, else DATABASE_URL, else composes from the
+// DATABASE_* parts (the deployed path — credentials come straight from the RDS-managed
+// secret, never a hand-maintained copy). Throws with a precise message listing what is
+// missing, so the manual presence check this replaced is no longer needed.
+let url: string;
+try {
+  url = resolveMigrationUrl();
+} catch (err) {
+  console.error(`❌  ${(err as Error).message}`);
   process.exit(1);
 }
 
@@ -32,8 +38,17 @@ async function run() {
     await migrate(db, { migrationsFolder: path.join(__dirname, 'migrations') });
     console.log('✅  Migrations applied');
 
-    // Seed uses DATABASE_URL (app role), not the migration URL (admin role).
-    const seedUrl = process.env['DATABASE_URL'] ?? url;
+    // Seed uses the app connection, not the migration URL (admin role), so a grant the
+    // app role is missing fails here rather than succeeding as the owner and hiding it.
+    // Falls back to the migration URL when no separate app credential is configured,
+    // which is every environment until the least-privilege roles land.
+    const seedUrl = (() => {
+      try {
+        return resolveDatabaseUrl();
+      } catch {
+        return url;
+      }
+    })();
 
     // The RBAC reference catalogue (permissions + roles + grants) is prod-safe
     // reference data the app depends on to authorize anything — ensure it in
