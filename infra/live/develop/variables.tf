@@ -19,10 +19,17 @@ variable "cloudflare_api_token" {
 // They used to arrive as TF_VARs from GitHub Actions variables and secrets, which made
 // `Infrastructure · Plan` lie. ENTRA_CLIENT_ID is environment-scoped and the plan job
 // has no `environment:` context (adding one would gate every PR behind the production
-// reviewer), so it resolved to "" and every plan reported the api and worker task
-// definitions "must be replaced"; ENTRA_TENANT_ID was never set at repo level at all,
-// so it was empty in the apply too. Reviewers who see phantom replacements on every PR
-// stop reading plans — which is exactly when a real one slips through.
+// reviewer), so it resolved to "" while the apply saw the real value — and every plan
+// reported the api and worker task definitions "must be replaced". Reviewers who see
+// phantom replacements on every PR stop reading plans, which is exactly when a real one
+// slips through.
+//
+// ENTRA_TENANT_ID was never affected: it is an ORG-level variable, visible to both jobs.
+// The value here is the same one — verified against the running task definition — so
+// holding it in git changes nothing except that it is now reviewable in a diff.
+// CLOUDFLARE_ACCOUNT_ID is an org variable too, which is the actual reason module.web
+// has never been created: the workflows read `secrets.CLOUDFLARE_ACCOUNT_ID`, and a
+// variable is not a secret, so the count-gate always saw "".
 //
 // In git the value is identical at plan and apply time, so the plan tells the truth and
 // the value is reviewable in a diff. Same treatment as rally.
@@ -47,10 +54,10 @@ variable "cloudflare_account_id" {
     Deliberately still EMPTY, unlike the two ids above, and empty means `module.web` is
     skipped entirely. The `opshub-develop-web` Pages project already exists and serves
     traffic (`opshub-develop-web.pages.dev` answers 200) but has never been in this
-    state file — the account id was plumbed from a `CLOUDFLARE_ACCOUNT_ID` GitHub secret
-    that does not exist, so the count-gated module has always resolved to 0. Filling
-    this in would therefore make the apply CREATE a project that is already there and
-    fail with "a project with this name already exists".
+    state file — the account id was plumbed from `secrets.CLOUDFLARE_ACCOUNT_ID`, and it
+    is an org-level VARIABLE rather than a secret, so the count-gated module has always
+    resolved to 0. Filling this in would therefore make the apply CREATE a project that
+    is already there and fail with "a project with this name already exists".
 
     Adopting it needs a config-driven `import` block, whose id format is worth proving
     on a plan of its own rather than inside this refactor. Until then the value is "",

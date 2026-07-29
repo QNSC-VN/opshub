@@ -28,6 +28,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { inArray, eq, sql } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { pgOptions } from './pg-ssl';
+import { resolveDatabaseUrl } from './database-url';
 import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
 import { employees } from './schema/identity';
 import {
@@ -182,8 +183,9 @@ async function seedRbacCatalogInto(db: SeedDb): Promise<void> {
  * contains no demo fixtures. Exported so db/migrate.ts runs it unconditionally.
  */
 export async function seedRbacCatalog(connectionUrl?: string): Promise<void> {
-  const url = connectionUrl ?? process.env['DATABASE_URL'];
-  if (!url) throw new Error('DATABASE_URL or connectionUrl required');
+  // resolveDatabaseUrl accepts a complete DATABASE_URL or composes one from the
+  // DATABASE_* parts, and throws naming what is missing. See db/database-url.ts.
+  const url = connectionUrl ?? resolveDatabaseUrl();
 
   const pool = new Pool({ ...pgOptions(url), max: 1 });
   const db = drizzle(pool);
@@ -256,8 +258,9 @@ export async function seed(connectionUrl?: string): Promise<void> {
     throw new Error('Seed (demo fixtures) must not run in production (NODE_ENV=production).');
   }
 
-  const url = connectionUrl ?? process.env['DATABASE_URL'];
-  if (!url) throw new Error('DATABASE_URL or connectionUrl required');
+  // resolveDatabaseUrl accepts a complete DATABASE_URL or composes one from the
+  // DATABASE_* parts, and throws naming what is missing. See db/database-url.ts.
+  const url = connectionUrl ?? resolveDatabaseUrl();
 
   const pool = new Pool({ ...pgOptions(url), max: 1 });
   const db = drizzle(pool);
