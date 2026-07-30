@@ -1,104 +1,59 @@
 import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './generated/api';
-import { getToken, useAuthStore } from './auth-store';
+import { useAuthStore } from './auth-store';
+import { withCsrfHeader } from './csrf';
 import { ENV } from '@/shared/config/env';
 
-/** Whether a token refresh is already in flight — prevents concurrent refresh storms. */
-let refreshPromise: Promise<string | null> | null = null;
-
 /**
- * Serialize refresh across ALL tabs of this origin via the Web Locks API. Two
- * tabs racing to refresh would each POST the same single-use cookie; the second
- * hits an already-rotated token, which the server would otherwise treat as theft
- * and revoke the whole family. Holding an exclusive lock makes tabs refresh one
- * at a time so later tabs reuse the freshly-rotated cookie. Falls back to a bare
- * call where Web Locks is unavailable (older browsers / non-secure contexts).
+ * Cookie-authenticated middleware for the BFF flow.
+ *
+ * Every request carries the opaque `__Host-opshub_session` cookie, and every
+ * state-changing one echoes the session-bound CSRF token. No Authorization header, no
+ * token in the JS heap.
+ *
+ * What this replaced, and why none of it is needed any more: a Bearer header from an
+ * in-memory access token, a 401 handler that silently refreshed and retried, single-flight
+ * de-duplication of that refresh, and a cross-tab Web Locks mutex so two tabs could not
+ * replay the same single-use refresh cookie — which the server treats as token theft and
+ * answers by revoking the entire family. The server now refreshes the token behind the
+ * session, so there is nothing for the browser to coordinate and no race left to lose.
  */
-function withRefreshLock(fn: () => Promise<string | null>): Promise<string | null> {
-  const locks = (globalThis.navigator as Navigator | undefined)?.locks;
-  if (locks?.request) {
-    return locks.request('opshub-auth-refresh', { mode: 'exclusive' }, fn);
-  }
-  return fn();
-}
-
-/** Read a non-HttpOnly cookie value by name (returns null when absent). */
-function readCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-async function doRefreshOnce(): Promise<string | null> {
-  try {
-    // Double-submit CSRF: echo the JS-readable csrf_token cookie in the
-    // X-CSRF-Token header. The server validates it against the value bound to
-    // the session at login before rotating the refresh cookie.
-    const csrf = readCookie('csrf_token');
-    const res = await fetch(`${ENV.API_BASE_URL}/v1/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include', // send the HttpOnly cookie
-      headers: csrf ? { 'X-CSRF-Token': csrf } : undefined,
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { accessToken: string };
-    useAuthStore.getState().setToken(data.accessToken);
-    return data.accessToken;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Silent access-token refresh. Single-flight within this tab (`refreshPromise`)
- * and serialized across tabs (`withRefreshLock`). Exported so cold-start
- * bootstrap reuses the exact same coordinated path instead of racing its own
- * uncoordinated fetch with the same single-use cookie.
- */
-export async function attemptRefresh(): Promise<string | null> {
-  if (refreshPromise) return refreshPromise;
-
-  refreshPromise = (async () => {
-    try {
-      return await withRefreshLock(doRefreshOnce);
-    } finally {
-      refreshPromise = null;
+const sessionMiddleware: Middleware = {
+  onRequest({ request }) {
+    for (const [name, value] of Object.entries(withCsrfHeader(request.method))) {
+      request.headers.set(name, value);
     }
-  })();
-
-  return refreshPromise;
-}
-
-const authMiddleware: Middleware = {
-  async onRequest({ request }) {
-    const token = getToken();
-    if (token) request.headers.set('Authorization', `Bearer ${token}`);
     return request;
   },
 
-  async onResponse({ response, request }) {
-    if (response.status !== 401) return response;
-
-    // Attempt a silent token refresh
-    const newToken = await attemptRefresh();
-    if (!newToken) {
+  onResponse({ response }) {
+    // A 401 now means the session is gone server-side — expired, revoked, or logged out
+    // in another tab. There is no local credential to renew, so the only correct move is
+    // to send the user back to the login page.
+    if (response.status === 401) {
       useAuthStore.getState().clear();
-      window.location.replace('/login');
-      return response;
+      // Guard against a redirect loop: /login itself renders unauthenticated.
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.replace('/login');
+      }
     }
-
-    // Retry the original request once with the new token
-    const retried = new Request(request, {
-      headers: new Headers(request.headers),
-    });
-    retried.headers.set('Authorization', `Bearer ${newToken}`);
-    return fetch(retried);
+    return response;
   },
 };
 
 /**
- * Typed API client. In dev, `API_BASE_URL` is empty and requests are proxied to
- * the API at `/v1` (see vite.config). In prod, the SPA is on Cloudflare Pages and
- * `API_BASE_URL` points at the API origin (e.g. https://opshub-api-dev.qnsc.vn).
+ * Typed API client.
+ *
+ * `credentials: 'include'` is set once, here, so no call site can forget it — a request
+ * without it silently drops the session cookie and 401s, which reads like an expired
+ * login rather than a missing option.
+ *
+ * `API_BASE_URL` is empty in every environment: locally the Vite proxy forwards `/v1`,
+ * and deployed the Cloudflare Pages Function forwards it to the API origin. Same-origin
+ * is a requirement of the `__Host-` cookie, not a convenience.
  */
-export const api = createClient<paths>({ baseUrl: ENV.API_BASE_URL });
-api.use(authMiddleware);
+export const api = createClient<paths>({
+  baseUrl: ENV.API_BASE_URL,
+  credentials: 'include',
+});
+api.use(sessionMiddleware);

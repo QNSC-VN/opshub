@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
-import { api } from '@/shared/api/client';
-import { useAuthStore } from '@/shared/api/auth-store';
+import { ENV } from '@/shared/config/env';
+import { sessionFetch } from '@/shared/api/session-fetch';
 
 function OpsHubMark({ size = 32 }: { size?: number }) {
   return (
@@ -17,27 +16,40 @@ function OpsHubMark({ size = 32 }: { size?: number }) {
 }
 
 /**
- * Dev-only login page — only reached when VITE_ENTRA_TENANT_ID / CLIENT_ID are
- * not configured. In production the router's beforeLoad calls triggerLogin() and
- * redirects the user straight to Microsoft before this page ever renders.
+ * Sign-in page. One button, because there is one directory: the company Entra tenant.
+ *
+ * The SPA never sees a token. `POST /v1/bff/login` starts the Authorization-Code + PKCE
+ * flow SERVER-side and returns the Entra authorize URL; the browser is then handed to
+ * Microsoft, and comes back to `/v1/bff/callback`, which mints a server-side session and
+ * sets the opaque `__Host-opshub_session` cookie before redirecting here-ward.
+ *
+ * `window.location.assign`, not the router: this is a top-level navigation to a different
+ * origin, and it must be a real document load so Entra can set its own cookies and return
+ * through the redirect chain.
  */
 export function LoginPage() {
-  const navigate = useNavigate();
-  const setToken = useAuthStore((s) => s.setToken);
-  const [email, setEmail] = useState('admin@opshub.local');
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSignIn() {
     setLoading(true);
-    const { data, error } = await api.POST('/v1/auth/dev-login', { body: { email } });
-    setLoading(false);
-    if (error || !data) {
-      toast.error('Login failed. Is the API running on :3000?');
-      return;
+    // returnTo is validated server-side against an open-redirect guard, so a hostile
+    // value cannot bounce the browser off-site — it falls back to BFF_POST_LOGIN_REDIRECT.
+    const returnTo = new URLSearchParams(window.location.search).get('returnTo') ?? '/';
+    // Raw fetch, not the generated client: the BFF controller is @ApiExcludeController,
+    // so these browser-redirect routes are deliberately absent from the OpenAPI document
+    // and from the typed client built off it.
+    try {
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/bff/login`, {
+        method: 'POST',
+        body: JSON.stringify({ returnTo }),
+      });
+      if (!res.ok) throw new Error(`login start failed (${res.status})`);
+      const { authorizeUrl } = (await res.json()) as { authorizeUrl: string };
+      window.location.assign(authorizeUrl);
+    } catch {
+      setLoading(false);
+      toast.error('Could not start sign-in. Please try again or contact IT.');
     }
-    setToken(data.accessToken);
-    navigate({ to: '/' });
   }
 
   return (
@@ -46,7 +58,9 @@ export function LoginPage() {
       <div className="hidden w-[400px] shrink-0 flex-col justify-between bg-sidebar p-10 lg:flex">
         <div className="flex items-center gap-3">
           <OpsHubMark size={32} />
-          <span className="text-base font-semibold tracking-tight text-sidebar-fg-active">OpsHub</span>
+          <span className="text-base font-semibold tracking-tight text-sidebar-fg-active">
+            OpsHub
+          </span>
         </div>
         <div className="flex flex-col gap-6">
           <div>
@@ -54,8 +68,8 @@ export function LoginPage() {
               Internal Ops Platform
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-sidebar-fg">
-              One portal for IT and HR to manage the full lifecycle of employees,
-              devices, software, access, and time.
+              One portal for IT and HR to manage the full lifecycle of employees, devices, software,
+              access, and time.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -70,7 +84,7 @@ export function LoginPage() {
           </div>
         </div>
         <p className="text-xs text-sidebar-label">
-          Development environment — set VITE_ENTRA_TENANT_ID to enable SSO.
+          Access is managed by IT. Contact your administrator if you cannot sign in.
         </p>
       </div>
 
@@ -83,34 +97,18 @@ export function LoginPage() {
 
         <div className="w-full max-w-[360px]">
           <div className="mb-7">
-            <h2 className="text-lg font-semibold tracking-tight text-fg">Dev sign in</h2>
-            <p className="mt-1 text-sm text-fg-muted">
-              No password required. Uses seeded employees only.
-            </p>
+            <h2 className="text-lg font-semibold tracking-tight text-fg">Sign in</h2>
+            <p className="mt-1 text-sm text-fg-muted">Use your company Microsoft account.</p>
           </div>
 
-          <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="login-email" className="text-xs font-medium text-fg-muted">Email</label>
-              <input
-                id="login-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-                placeholder="user@opshub.local"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-1 h-9 w-full rounded-md bg-accent text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-1 focus:ring-offset-surface"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={onSignIn}
+            disabled={loading}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-accent text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-1 focus:ring-offset-surface"
+          >
+            {loading ? 'Redirecting…' : 'Sign in with Microsoft'}
+          </button>
         </div>
       </div>
     </div>

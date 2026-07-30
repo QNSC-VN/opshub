@@ -12,7 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { getToken } from '@/shared/api/auth-store';
+import { sessionFetch } from '@/shared/api/session-fetch';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 const PAGE_SIZE = 50;
@@ -91,9 +91,7 @@ function useLicenses(search: string, page: number) {
         offset: String(offset),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/licenses?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-      });
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/licenses?${params.toString()}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(body.message ?? 'Failed to load licenses');
@@ -108,11 +106,7 @@ function useUtilization() {
   return useQuery({
     queryKey: ['licenses', 'utilization'],
     queryFn: async () => {
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/licenses/utilization`, {
-        headers: {
-          Authorization: `Bearer ${getToken() ?? ''}`,
-        },
-      });
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/licenses/utilization`);
       if (!res.ok) throw new Error('Failed to load utilization');
       return res.json() as Promise<LicenseUtilization[]>;
     },
@@ -140,10 +134,8 @@ function AddLicenseModal({ onClose, onSuccess }: AddLicenseModalProps) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const token = getToken() ?? '';
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/licenses`, {
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/licenses`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: form.name,
           vendor: form.vendor,
