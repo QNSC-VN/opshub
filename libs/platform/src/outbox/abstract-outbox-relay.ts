@@ -33,6 +33,25 @@ import type { DrizzleDB, DrizzleTx } from '../database/drizzle.provider';
 /** Optional callback returned by processRow() to run after the transaction commits. */
 export type PostCommitTask = () => Promise<void>;
 
+/**
+ * Log field marking a row that has exhausted `maxAttempts` and will never be retried.
+ *
+ * A dead-lettered row is silent work loss: an email nobody receives, a notification
+ * nobody sees, an outbox event that never reaches its consumer. The row records it,
+ * but only for someone who thinks to query `status = 'failed'` — so in practice the
+ * queue stops doing its job and the first symptom is a user asking why.
+ *
+ * A distinct field rather than a distinguishable message, because a CloudWatch metric
+ * filter matches structured fields, and pattern-matching on prose breaks the day
+ * someone rewords a log line.
+ *
+ * NOTE: unlike rally, opshub has no CloudWatch alarm wired to this yet — it has no
+ * alarm infrastructure at all. The field is the half that belongs in shared
+ * boilerplate; the metric filter and alarm are an infra follow-up, tracked in
+ * OPSHUB_RALLY_PARITY_PLAN.md. Until then this is greppable but not alerting.
+ */
+export const DEAD_LETTER_FIELD = 'outboxDeadLetter';
+
 export abstract class AbstractOutboxRelay<TRow extends { id: string; attempts: number }> {
   /** Override in subclass to tune per-relay. */
   protected readonly maxAttempts: number = 5;
@@ -129,10 +148,21 @@ export abstract class AbstractOutboxRelay<TRow extends { id: string; attempts: n
 
             await this.markFailed(tx, row.id, newAttempts, newStatus, errMsg);
 
-            this.logger.error(
-              { rowId: row.id, err },
-              `Relay failed (attempt ${newAttempts}/${this.maxAttempts})`,
-            );
+            // Only the TERMINAL failure carries DEAD_LETTER_FIELD. A row still inside
+            // its retry budget is the retry machinery working as designed; tagging
+            // every attempt would make any future alarm fire on transient errors that
+            // resolve themselves on the next tick.
+            if (newStatus === 'failed') {
+              this.logger.error(
+                { rowId: row.id, err, [DEAD_LETTER_FIELD]: this.constructor.name },
+                `Relay dead-lettered a row after ${newAttempts}/${this.maxAttempts} attempts — it will never be retried`,
+              );
+            } else {
+              this.logger.error(
+                { rowId: row.id, err },
+                `Relay failed (attempt ${newAttempts}/${this.maxAttempts})`,
+              );
+            }
           }
         }
       });
@@ -145,7 +175,9 @@ export abstract class AbstractOutboxRelay<TRow extends { id: string; attempts: n
       if (this.wakeOnComplete) {
         this.wakeOnComplete = false;
         setImmediate(() => {
-          void this.relay().catch((err: unknown) => this.logger.error({ err }, 'Post-wake relay failed'));
+          void this.relay().catch((err: unknown) =>
+            this.logger.error({ err }, 'Post-wake relay failed'),
+          );
         });
       }
     }
