@@ -5,8 +5,7 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router';
-import { getToken } from '@/shared/api/auth-store';
-import { isSsoConfigured, triggerLogin } from '@/app/auth/msal';
+import { isAuthenticated } from '@/shared/api/auth-store';
 import { AppShell } from '@/widgets/app-shell/app-shell';
 import { LoginPage } from '@/pages/login/login-page';
 import { DashboardPage } from '@/pages/dashboard/dashboard-page';
@@ -29,9 +28,9 @@ import { SecurityPosturePage } from '@/pages/security-posture/security-posture-p
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
 /**
- * Dev-only login route — only used when SSO env vars are not set.
- * In production the user never sees this page; `beforeLoad` sends them
- * straight to Microsoft via loginRedirect().
+ * Sign-in route. Reached whenever there is no session — the shell guard redirects here
+ * rather than bouncing straight to Entra, so the user sees where they are before a
+ * cross-origin navigation takes over.
  */
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -44,18 +43,14 @@ const shellRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: '_shell',
   component: AppShell,
-  beforeLoad: async () => {
-    if (getToken()) return; // already authenticated — proceed
+  beforeLoad: ({ location }) => {
+    // The bootstrap has already run and resolved the session from the cookie (see
+    // AppProviders), so this is a synchronous read — no request, no flicker.
+    if (isAuthenticated()) return;
 
-    if (isSsoConfigured) {
-      // Full-page redirect to Microsoft — no OpsHub login page shown.
-      await triggerLogin();
-      // triggerLogin() navigates away; this line never executes.
-      return;
-    }
-
-    // SSO not configured (dev mode) — fall back to the dev login page.
-    throw redirect({ to: '/login' });
+    // Carry the attempted path so the BFF can return the user to it after Entra. The
+    // server validates it against an open-redirect guard before honouring it.
+    throw redirect({ to: '/login', search: { returnTo: location.href } });
   },
 });
 
@@ -81,19 +76,19 @@ const accessRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/access',
   component: AccessPage,
-});;
+});
 
 const complianceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/compliance',
   component: CompliancePage,
-});;
+});
 
 const workforceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/workforce',
   component: WorkforcePage,
-});;
+});
 
 const webhooksRoute = createRoute({
   getParentRoute: () => shellRoute,

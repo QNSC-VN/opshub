@@ -26,10 +26,9 @@ import {
   PanelLeft,
 } from 'lucide-react';
 import { AiChatPanel } from '@/widgets/ai-chat/ai-chat-panel';
-import { useAuthStore, getToken } from '@/shared/api/auth-store';
-import { attemptRefresh } from '@/shared/api/client';
+import { useAuthStore } from '@/shared/api/auth-store';
 import { resetBootstrap } from '@/shared/api/auth-bootstrap';
-import { msalLogoutRedirect } from '@/app/auth/msal';
+import { setCsrfToken, withCsrfHeader } from '@/shared/api/csrf';
 import { cn } from '@/shared/lib/utils';
 import { NotificationBell } from '@/widgets/notifications/notification-bell';
 import { CommandPalette } from '@/widgets/command-palette/command-palette';
@@ -199,46 +198,27 @@ export function AppShell() {
   }, [showPalette]);
 
   async function handleLogout() {
-    // Read authMethod from the JWT before clear() nulls the in-memory token.
-    let wasSSO = false;
-    const token = getToken();
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]!)) as { authMethod?: string };
-        wasSSO = payload.authMethod === 'sso';
-      } catch {
-        /* malformed token — treat as non-SSO */
-      }
-    }
-
-    // The logout endpoint is @Auth-protected: it identifies the session from the
-    // access token, revokes the session row and clears the refresh cookie. A bare
-    // fetch without the Authorization header (or with an expired token) 401s, so
-    // the server never revokes the session and the HttpOnly refresh cookie
-    // survives — the next navigation would then silently re-authenticate. Attach
-    // the token and, on 401, refresh once and retry so logout truly revokes.
-    const postLogout = (bearer: string | null) =>
-      fetch(`${ENV.API_BASE_URL}/v1/auth/logout`, {
+    // POST /v1/bff/logout drops the server-side session AND denylists the access token it
+    // held, so the logout is effective at once rather than at token expiry. It is
+    // cookie-authenticated and CSRF-gated like any other write, so the token goes with it.
+    //
+    // What this replaced: reading `authMethod` out of the JWT to decide whether to also
+    // call MSAL's logoutRedirect, and a refresh-then-retry dance because a bare fetch
+    // without the Authorization header would 401 — leaving the session row alive and the
+    // refresh cookie in place, so the next navigation silently signed the user back in.
+    // With one opaque cookie there is nothing to inspect and nothing to retry.
+    try {
+      await fetch(`${ENV.API_BASE_URL}/v1/bff/logout`, {
         method: 'POST',
         credentials: 'include',
-        headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
+        headers: withCsrfHeader('POST'),
       });
-    try {
-      let res = await postLogout(token);
-      if (res.status === 401) {
-        const fresh = await attemptRefresh();
-        if (fresh) res = await postLogout(fresh);
-      }
     } catch {
-      // best-effort
+      // Best-effort: the cookie is cleared locally either way, below.
     }
     clear();
+    setCsrfToken(null);
     resetBootstrap();
-
-    if (wasSSO) {
-      await msalLogoutRedirect(window.location.origin);
-      return;
-    }
     navigate({ to: '/login' });
   }
 

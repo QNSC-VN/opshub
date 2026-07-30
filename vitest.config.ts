@@ -45,12 +45,22 @@ export default defineConfig({
     // `db/**` is included because db/ holds production code the app imports, not just
     // migrations — db/database-url.ts composes the connection string every process
     // uses. A spec that never runs is worse than no spec, since it reads as coverage.
-    include: ['libs/**/*.spec.ts', 'apps/**/*.spec.ts', 'db/**/*.spec.ts', 'test/*.spec.ts'],
+    // `apps/api` and `apps/worker`, not `apps/**`: the web app has its own vitest project
+    // (apps/web/vitest.config.ts) that `Web · CI` runs, so sweeping it here would execute
+    // the same specs twice — once per pipeline — and make coverage numbers depend on which
+    // one you read.
+    include: [
+      'libs/**/*.spec.ts',
+      'apps/api/**/*.spec.ts',
+      'apps/worker/**/*.spec.ts',
+      'db/**/*.spec.ts',
+      'test/*.spec.ts',
+    ],
     exclude: ['node_modules', 'dist'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      include: ['libs/**/*.ts', 'apps/**/*.ts'],
+      include: ['libs/**/*.ts', 'apps/api/**/*.ts', 'apps/worker/**/*.ts'],
       exclude: ['**/*.spec.ts', '**/*.module.ts', '**/index.ts'],
       // Coverage ratchet: floors set just below current coverage so CI stays
       // green while preventing regressions. Raise these as suites are added —

@@ -15,7 +15,7 @@ import { ENV } from '@/shared/config/env';
 import { Bell, Check, CheckCheck, X, Inbox } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
-import { getToken } from '@/shared/api/auth-store';
+import { sessionFetch } from '@/shared/api/session-fetch';
 import type { InAppNotification, NotificationListResult } from '@/shared/api/types';
 import { useSSENotifications } from './use-sse-notifications';
 
@@ -51,11 +51,7 @@ function useNotificationList(enabled: boolean) {
   return useQuery<NotificationListResult>({
     queryKey: ['notifications', 'list'],
     queryFn: async () => {
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/notifications?limit=20`, {
-        headers: {
-          Authorization: `Bearer ${getToken() ?? ''}`,
-        },
-      });
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/notifications?limit=20`);
       if (!res.ok) throw new Error('Failed to load notifications');
       return res.json() as Promise<NotificationListResult>;
     },
@@ -84,14 +80,10 @@ function NotifItem({ notif, onMarkRead }: NotifItemProps) {
       <span className="mt-0.5 shrink-0 text-base leading-none">{icon}</span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-fg">{notif.title}</p>
-        {notif.body && (
-          <p className="mt-0.5 text-xs text-fg-muted line-clamp-2">{notif.body}</p>
-        )}
+        {notif.body && <p className="mt-0.5 text-xs text-fg-muted line-clamp-2">{notif.body}</p>}
         <p className="mt-1 text-[10px] text-fg-subtle">{relativeTime(notif.createdAt)}</p>
       </div>
-      {!notif.isRead && (
-        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-muted0" />
-      )}
+      {!notif.isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-muted0" />}
     </div>
   );
 }
@@ -121,8 +113,10 @@ export function NotificationBell() {
     if (!open) return;
     function handler(e: MouseEvent) {
       if (
-        panelRef.current && !panelRef.current.contains(e.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+        panelRef.current &&
+        !panelRef.current.contains(e.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target as Node)
       ) {
         setOpen(false);
       }
@@ -131,16 +125,19 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const markRead = useCallback(async (id: string) => {
-    // Optimistic update in list cache
-    qc.setQueryData<NotificationListResult>(['notifications', 'list'], (old) =>
-      old
-        ? { ...old, items: old.items.map((n) => (n.id === id ? { ...n, isRead: true } : n)) }
-        : old,
-    );
-    decrementUnread();
-    await api.PATCH('/v1/notifications/{id}/read', { params: { path: { id } } });
-  }, [qc, decrementUnread]);
+  const markRead = useCallback(
+    async (id: string) => {
+      // Optimistic update in list cache
+      qc.setQueryData<NotificationListResult>(['notifications', 'list'], (old) =>
+        old
+          ? { ...old, items: old.items.map((n) => (n.id === id ? { ...n, isRead: true } : n)) }
+          : old,
+      );
+      decrementUnread();
+      await api.PATCH('/v1/notifications/{id}/read', { params: { path: { id } } });
+    },
+    [qc, decrementUnread],
+  );
 
   const markAllRead = useCallback(async () => {
     qc.setQueryData<NotificationListResult>(['notifications', 'list'], (old) =>
@@ -201,7 +198,7 @@ export function NotificationBell() {
                 <span className="text-sm text-fg-subtle">Loading…</span>
               </div>
             )}
-            {!isLoading && (!data?.items.length) && (
+            {!isLoading && !data?.items.length && (
               <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                 <Inbox className="h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
                 <p className="text-sm text-fg-subtle">No notifications yet</p>
