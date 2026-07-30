@@ -90,13 +90,34 @@ export function buildProxyRequest(request: Request, apiOrigin: string): Request 
  * Copy the upstream response back to the client, preserving status and every
  * `Set-Cookie` header individually (a naive `new Headers(res.headers)` collapses
  * multiple cookies into one comma-joined value and corrupts them).
+ *
+ * NOTE for anyone tempted to simplify this back to `new Headers(upstream.headers)`: the
+ * unit suite will NOT stay green if you do — see the stub-based test in proxy.spec.ts,
+ * which exists because every other assertion there passes against the naive version
+ * (undici carries the set-cookie list through the constructor). The Workers runtime this
+ * actually runs on historically does not, and a corrupted `__Host-` session cookie is a
+ * silent login failure.
  */
 export function buildClientResponse(upstream: Response): Response {
   const headers = new Headers();
+
+  // Collected during the same pass, and used ONLY if `getSetCookie` turns out to be
+  // unavailable. Pairing the skip below with `?? []` meant a runtime without
+  // `getSetCookie` skipped every Set-Cookie header and then appended nothing — the
+  // cookies vanished. That is the worst shape this bug can take: the API returns 200, the
+  // proxy returns 200, and the browser simply never receives the session cookie, so a
+  // successful login presents as an immediate silent logout. (rally#259.)
+  const fallbackSetCookie: string[] = [];
+
   upstream.headers.forEach((value, key) => {
-    if (key.toLowerCase() !== 'set-cookie') headers.set(key, value);
+    if (key.toLowerCase() === 'set-cookie') {
+      fallbackSetCookie.push(value);
+      return;
+    }
+    headers.set(key, value);
   });
-  const setCookies = upstream.headers.getSetCookie?.() ?? [];
+
+  const setCookies = upstream.headers.getSetCookie?.() ?? fallbackSetCookie;
   for (const cookie of setCookies) headers.append('set-cookie', cookie);
 
   return new Response(upstream.body, {

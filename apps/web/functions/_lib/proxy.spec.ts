@@ -112,16 +112,10 @@ describe('buildClientResponse', () => {
     expect(result.headers.get('content-type')).toBe('text/plain');
   });
 
-  // LIMIT OF THIS TEST, stated because it is easy to over-read. It pins the CONTRACT —
-  // two cookies in, two cookies out, values intact — and would catch cookies being
-  // dropped or corrupted. It does NOT distinguish the manual append loop in
-  // buildClientResponse from a naive `new Headers(upstream.headers)`: replacing one with
-  // the other keeps this suite green, because undici (Node) preserves the set-cookie
-  // list through the Headers constructor. The loop exists for the Cloudflare Workers
-  // runtime, which historically collapses multiple set-cookie headers into one
-  // comma-joined value — and a corrupted `__Host-` session cookie is a silent login
-  // failure. Verifying that difference needs the Workers runtime (`wrangler pages dev`),
-  // not vitest, so do not "simplify" the loop on the strength of this passing.
+  // Pins the CONTRACT — two cookies in, two out, values intact. It does NOT distinguish
+  // the per-cookie loop from a naive `new Headers(upstream.headers)`, because undici
+  // carries the set-cookie list through the constructor, so that swap keeps THIS
+  // assertion green. The stub-based test below is the one that kills that mutation.
   it('preserves multiple Set-Cookie headers individually', () => {
     const upstream = new Response(null, { status: 204 });
     upstream.headers.append('set-cookie', '__Host-opshub_session=abc; Path=/; Secure');
@@ -131,6 +125,75 @@ describe('buildClientResponse', () => {
     expect(cookies).toHaveLength(2);
     expect(cookies).toContain('__Host-opshub_session=abc; Path=/; Secure');
     expect(cookies).toContain('__Host-bff_state=; Path=/; Max-Age=0');
+  });
+
+  // The fallback path, and the reason it exists. `getSetCookie` is skipped over in the
+  // header loop, so pairing that skip with `?? []` meant a runtime WITHOUT it dropped
+  // every cookie: 200 from the API, 200 from the proxy, and no session cookie at the
+  // browser — a successful login that presents as an immediate silent logout.
+  it('still forwards Set-Cookie when the runtime has no getSetCookie', () => {
+    const upstream = new Response(null, {
+      status: 204,
+      headers: { 'set-cookie': '__Host-opshub_session=abc; Path=/; Secure' },
+    });
+    Object.defineProperty(upstream.headers, 'getSetCookie', { value: undefined });
+
+    const result = buildClientResponse(upstream);
+
+    expect(result.headers.get('set-cookie')).toBe('__Host-opshub_session=abc; Path=/; Secure');
+  });
+
+  it('does not leak the fallback into the normal path', () => {
+    // With getSetCookie present the per-cookie list wins, so a cookie is appended once
+    // rather than twice — a double-append would corrupt the header.
+    const upstream = new Response(null, { status: 204 });
+    upstream.headers.append('set-cookie', 'a=1; Path=/');
+
+    const result = buildClientResponse(upstream);
+
+    expect(result.headers.getSetCookie?.() ?? []).toEqual(['a=1; Path=/']);
+  });
+
+  // The mutation guard, and the reason it cannot use a real Response.
+  //
+  // Under vitest, on a real Response, the defence and its absence are indistinguishable:
+  // undici carries the set-cookie list through `new Headers()`, so every other assertion
+  // here passes against the naive version. A spec that warns against a swap while
+  // permitting it is worse than no warning.
+  //
+  // A Headers-LIKE stub closes it. It exposes only what the implementation is allowed to
+  // rely on — `forEach`, with `getSetCookie` absent, as the Workers runtime historically
+  // presented — and is not something `new Headers()` can consume, so the naive version
+  // fails here instead of passing quietly. Technique from rally#272, which found this
+  // same hole in the file opshub's copy came from.
+  it('rebuilds every Set-Cookie individually, not via the Headers constructor', () => {
+    const entries: Array<[string, string]> = [
+      ['content-type', 'application/json'],
+      ['set-cookie', '__Host-opshub_session=abc; Path=/; Secure'],
+      ['set-cookie', '__Host-bff_state=; Path=/; Max-Age=0'],
+    ];
+    const headersLike = {
+      forEach(cb: (value: string, key: string) => void) {
+        for (const [key, value] of entries) cb(value, key);
+      },
+      // Deliberately absent, not undefined-by-accident: this is the capability gap.
+      getSetCookie: undefined,
+    };
+    const upstream = {
+      body: null,
+      status: 204,
+      statusText: 'No Content',
+      headers: headersLike,
+    } as unknown as Response;
+
+    const result = buildClientResponse(upstream);
+
+    const cookies = result.headers.getSetCookie?.() ?? [];
+    expect(cookies).toHaveLength(2);
+    expect(cookies).toContain('__Host-opshub_session=abc; Path=/; Secure');
+    expect(cookies).toContain('__Host-bff_state=; Path=/; Max-Age=0');
+    // Non-cookie headers must still make it across.
+    expect(result.headers.get('content-type')).toBe('application/json');
   });
 });
 
