@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-  '/healthz': {
+  '/v1/healthz': {
     parameters: {
       query?: never;
       header?: never;
@@ -21,7 +21,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/readyz': {
+  '/v1/readyz': {
     parameters: {
       query?: never;
       header?: never;
@@ -312,7 +312,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Dev login — only available outside production (Entra OIDC is used in prod) */
+    /** Dev login (non-production) — mint a session for an active employee */
     post: operations['AuthController_devLogin'];
     delete?: never;
     options?: never;
@@ -1780,7 +1780,9 @@ export interface components {
       resourceType: string;
       resourceId: string | null;
       changes: Record<string, never>;
-      metadata: Record<string, never>;
+      metadata: {
+        [key: string]: unknown;
+      };
       occurredAt: string;
     };
     NotificationResponseDto: {
@@ -1884,6 +1886,14 @@ export interface components {
        *     truth the SPA uses to gate UI — it must never re-derive permissions itself.
        */
       permissions: string[];
+      /**
+       * @description Double-submit CSRF token, bound by HMAC to the session that requested it.
+       *
+       *     Present ONLY for a request authenticated by the BFF session cookie — a Bearer
+       *     caller is not exposed to CSRF and is not issued one. The SPA echoes it in the
+       *     `X-CSRF-Token` header on every state-changing request.
+       */
+      csrfToken?: string;
     };
     PermissionResponseDto: {
       key: string;
@@ -1958,7 +1968,9 @@ export interface components {
       mdmDeviceId: string | null;
       purchaseDate: string | null;
       warrantyExpiry: string | null;
-      specs: Record<string, never>;
+      specs: {
+        [key: string]: unknown;
+      };
       assignedTo: string | null;
       photoStorageKey: string | null;
       createdAt: string;
@@ -2008,7 +2020,7 @@ export interface components {
       accessType: string;
       target: string;
       justification: string;
-      durationHours: string;
+      durationHours: number;
       status: string;
       reviewerId: string | null;
       reviewNote: string | null;
@@ -2207,7 +2219,9 @@ export interface components {
       assigneeId?: string | null;
       status: string;
       priority: string;
-      payload: Record<string, never>;
+      payload: {
+        [key: string]: unknown;
+      };
       resolutionNote?: string | null;
       submittedAt: string;
       resolvedAt?: string | null;
@@ -2365,7 +2379,9 @@ export interface components {
       id: string;
       subscriptionId: string;
       eventType: string;
-      payload: Record<string, never>;
+      payload: {
+        [key: string]: unknown;
+      };
       status: string;
       attempts: number;
       nextAttemptAt: string;
@@ -3309,20 +3325,6 @@ export interface operations {
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Forbidden — insufficient permissions */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Unprocessable — business rule violation */
-      422: {
         headers: {
           [name: string]: unknown;
         };
