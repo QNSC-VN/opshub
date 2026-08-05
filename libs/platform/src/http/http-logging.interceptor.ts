@@ -4,6 +4,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { RequestContextService } from '../context/request-context';
+import { albReceivedAtMs, albWaitMs, arrivalAtMs } from './request-timing';
 
 /** Health/readiness probes — suppress from access logs to avoid noise. */
 const SILENT_PREFIXES = ['/v1/healthz', '/v1/readyz', '/favicon.ico'];
@@ -83,15 +84,35 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       req.ip ??
       'unknown';
 
+    // Interval attribution. `start` is Nest pipeline entry, so `durationMs` has never
+    // included anything before it. `albWaitMs` is the ALB-to-app gap decoded from
+    // X-Amzn-Trace-Id (omitted inside its noise floor); `bodyWaitMs` is request-body
+    // receipt. Together they say which side of the wire a slow request was slow on.
+    const arrival = arrivalAtMs(req);
+    const traceHeader = req.headers['x-amzn-trace-id'];
+    const albWait = albWaitMs(
+      arrival,
+      albReceivedAtMs(Array.isArray(traceHeader) ? traceHeader[0] : traceHeader),
+    );
+    const bodyWait = arrival !== undefined ? start - arrival : undefined;
+
     return next.handle().pipe(
       tap({
-        next: () => this.emit(req, res.statusCode, start, ip),
-        error: (err: unknown) => this.emit(req, resolveErrorStatus(err, res), start, ip),
+        next: () => this.emit(req, res.statusCode, start, ip, albWait, bodyWait),
+        error: (err: unknown) =>
+          this.emit(req, resolveErrorStatus(err, res), start, ip, albWait, bodyWait),
       }),
     );
   }
 
-  private emit(req: FastifyRequest, statusCode: number, start: number, ip: string): void {
+  private emit(
+    req: FastifyRequest,
+    statusCode: number,
+    start: number,
+    ip: string,
+    albWaitMs?: number,
+    bodyWaitMs?: number,
+  ): void {
     const userId = this.ctx.getUserId();
     const base = {
       method: req.method,
@@ -99,6 +120,11 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       statusCode,
       durationMs: Date.now() - start,
       ip,
+      // Spread-omitted rather than logged as undefined: absent means "nothing worth
+      // saying", and a fabricated 0 would read as "no delay" — the exact
+      // misattribution these fields exist to prevent.
+      ...(albWaitMs !== undefined ? { albWaitMs } : {}),
+      ...(bodyWaitMs !== undefined ? { bodyWaitMs } : {}),
       ...(userId ? { userId } : {}),
     };
 

@@ -10,6 +10,7 @@ import {
   BFF_SESSION_COOKIE,
   CSRF_HEADER,
   CSRF_SECRET_COOKIE,
+  registerRequestTiming,
   requiresCsrfProtection,
 } from '@platform';
 
@@ -67,6 +68,13 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
   // policy lives — see libs/platform/src/http/csrf.ts for which requests it selects and
   // why each exemption exists.
   const fastify = app.getHttpAdapter().getInstance();
+
+  // Registered BEFORE the CSRF gate, and before any hook that can reject: this only
+  // stamps an arrival timestamp, and it has to run on every request that reaches the
+  // process — including ones something later refuses — or the access log loses the
+  // arrival time for exactly the requests worth investigating.
+  registerRequestTiming(fastify);
+
   fastify.addHook('onRequest', function csrfGate(req, reply, done) {
     if (!requiresCsrfProtection(req)) return done();
     fastify.csrfProtection(req, reply, done);

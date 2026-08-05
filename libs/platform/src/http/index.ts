@@ -6,6 +6,7 @@ export {
   type RequestContextAccessor,
 } from '@qnsc-vn/platform-http';
 export * from './csrf';
+export * from './request-timing';
 export * from './http-logging.interceptor';
 export * from './idempotency.interceptor';
 export * from './pagination';

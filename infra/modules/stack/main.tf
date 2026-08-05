@@ -46,6 +46,42 @@ locals {
   kms_key_arn        = data.terraform_remote_state.shared.outputs.kms_key_arn
   cloudflare_zone_id = try(data.terraform_remote_state.shared.outputs.cloudflare_zone_id, "")
 
+  # ── Connection-pool budget ──────────────────────────────────────────────────
+  # `DATABASE_POOL_MAX` defaults to 20 per PROCESS in env.schema.ts, and nothing here
+  # set it. That default is a per-task number multiplied by the autoscaler's ceiling,
+  # so production can legitimately open 6 api tasks x 20 + 4 worker tasks x 20 = 200
+  # connections against a db.t4g.micro that accepts ~112. It has not bitten yet only
+  # because neither environment carries real load.
+  #
+  # The failure mode is indirect, which is what makes it worth asserting rather than
+  # documenting: the pool queues, `connectionTimeoutMillis` (5s, drizzle.provider.ts)
+  # elapses, and every affected request pays five seconds before erroring — while
+  # CPU-target autoscaling responds by adding MORE tasks, each bringing another pool,
+  # starving the database further.
+  #
+  # Postgres computes max_connections as LEAST(DBInstanceClassMemory/9531392, 5000).
+  # Listed per class rather than computed, so an unlisted class fails the plan instead
+  # of silently inheriting a number that does not hold for it.
+  db_max_connections_by_class = {
+    "db.t4g.micro"  = 112
+    "db.t4g.small"  = 225
+    "db.t4g.medium" = 450
+    "db.t4g.large"  = 901
+  }
+  db_max_connections = local.db_max_connections_by_class[var.rds.instance_class]
+
+  # Reserved off the top: 3 for Postgres' superuser slots, 10 for migrations (which
+  # run DURING a deploy while api and worker are still up), 5 for an operator holding
+  # a psql session while debugging.
+  db_pool_budget = local.db_max_connections - 18
+
+  # Split 60/40 api:worker, each divided by that service's autoscaling ceiling. The
+  # worker's share is not proportional to its task count: a relay tick holds one
+  # connection for its claim transaction while the row's work runs on a second, so it
+  # needs at least two per task.
+  api_pool_max    = max(4, floor(local.db_pool_budget * 0.6 / var.api.max_count))
+  worker_pool_max = max(4, floor(local.db_pool_budget * 0.4 / var.worker.max_count))
+
   # `rediss://`, never `redis://`: the cache module enables transit encryption
   # unconditionally, so a plaintext scheme would simply fail to connect. ioredis turns
   # TLS on from the scheme alone, so the app needs no configuration. Not a secret — an
@@ -323,6 +359,8 @@ module "api" {
 
   environment_vars = concat(local.shared_env, [
     { name = "PORT", value = "3000" },
+    # Per-task pool ceiling, derived from the RDS class — see local.api_pool_max.
+    { name = "DATABASE_POOL_MAX", value = tostring(local.api_pool_max) },
     { name = "CORS_ORIGINS", value = local.app_url },
     { name = "APP_URL", value = local.app_url },
   ])
@@ -368,7 +406,11 @@ module "worker" {
   kms_key_arn = local.kms_key_arn
   secrets     = local.app_secrets
 
-  environment_vars = local.shared_env
+  # Not plain `local.shared_env`: the pool ceiling is per-SERVICE, because it divides
+  # the shared budget by this service's own autoscaling ceiling.
+  environment_vars = concat(local.shared_env, [
+    { name = "DATABASE_POOL_MAX", value = tostring(local.worker_pool_max) },
+  ])
 
   sqs_queue_arns = values(module.messaging.queue_arns)
   sns_topic_arns = values(module.messaging.topic_arns)
@@ -460,4 +502,27 @@ module "dns_api" {
   content = data.terraform_remote_state.runtime.outputs.alb_dns_name
   proxied = true
   comment = "${local.name} API → ALB via Cloudflare proxy (managed by ${var.product}-infra ${var.env})"
+}
+
+# ── Guard: the pool arithmetic must fit the instance ──────────────────────────
+# `local.api_pool_max` / `worker_pool_max` divide a connection budget by the
+# AUTOSCALER'S CEILING, so the arithmetic only holds while both ceilings and the
+# instance class stay in step. Raising a max_count shrinks the per-task pool to
+# compensate, which is correct; shrinking the RDS class moves the budget under both.
+#
+# Worth an assertion rather than a comment because the failure is invisible in a plan
+# and indirect at runtime — requests stall for `connectionTimeoutMillis` rather than
+# anything reporting "out of connections".
+check "db_pool_fits_instance_class" {
+  assert {
+    condition = (var.api.max_count * local.api_pool_max
+    + var.worker.max_count * local.worker_pool_max) <= local.db_pool_budget
+    error_message = join(" ", [
+      "DB pool ceiling exceeds the budget for ${var.rds.instance_class}:",
+      "api ${var.api.max_count}x${local.api_pool_max}",
+      "+ worker ${var.worker.max_count}x${local.worker_pool_max}",
+      "> ${local.db_pool_budget} usable of ${local.db_max_connections}.",
+      "Lower a max_count or move to a larger instance class.",
+    ])
+  }
 }
