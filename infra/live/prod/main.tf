@@ -166,4 +166,25 @@ module "stack" {
   uploads = {}
 
   cloudflare_account_id = var.cloudflare_account_id
+
+  // Dormant until otlp_endpoint is set — see develop. Production would want a probability
+  // BELOW 1 for cost once a backend exists; be aware that head sampling drops most ERROR
+  // traces too, so keeping all errors needs tail sampling at a gateway that sees whole traces.
+  observability = {
+    otlp_endpoint        = var.otlp_endpoint
+    sampling_probability = 1.0
+  }
+
+  // Production gets the dashboard: it is what you open after an alarm pages you.
+  create_dashboard = true
+
+  // Cannot be satisfied while the api is tunnelled — there is no target group. This is a REAL
+  // gap in production, not just plumbing: with no ALB, nothing on the AWS side observes
+  // ingress. ECS reports the task RUNNING whether or not cloudflared holds edge connections,
+  // and the sidecar is distroless so an ECS healthCheck cannot probe it. Replace it from
+  // OUTSIDE AWS — a Cloudflare health check or a synthetic probe on the public hostname —
+  // before production depends on the tunnel.
+  monitor_target_health = false
+
+  alarm_emails = var.alarm_emails
 }

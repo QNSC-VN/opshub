@@ -172,6 +172,11 @@ locals {
     { name = "NODE_ENV", value = "production" },
     { name = "VALKEY_URL", value = local.valkey_url },
     { name = "AWS_REGION", value = var.region },
+    # Head sampling, read by `resolveSampler` in libs/platform/src/observability/otel.ts and
+    # asserted by otel.spec.ts. Shared rather than per-service so a trace that crosses from
+    # api to worker is judged by one probability — differing values would drop the far half of
+    # a trace and look like broken instrumentation.
+    { name = "OTEL_SAMPLING_PROBABILITY", value = tostring(var.observability.sampling_probability) },
     # Non-secret connection parts; DATABASE_USER/PASSWORD arrive via secrets above.
     { name = "DATABASE_HOST", value = module.rds.address },
     { name = "DATABASE_PORT", value = tostring(module.rds.port) },
@@ -207,7 +212,15 @@ module "secrets" {
   # Three secrets, not five. `db-url` is gone — the credential is read live from the
   # RDS-managed secret AWS rotates (see local.app_secrets) — and so is `jwt-public-key`,
   # which the app derives from the private half at boot.
-  secret_names = {
+  # Merged rather than a flat map so `observability-token` can be omitted ENTIRELY while the
+  # OTel path is dormant. It is the one secret that cannot exist empty: the collector sidecar
+  # reads it as an Authorization header, and ECS refuses to inject a secret with no value —
+  # so creating it unconditionally would either sit unused (fine) or, once the sidecar is
+  # switched on before it is populated, take the task down. Gating on the same flag that
+  # creates the sidecar keeps those two facts in one place.
+  secret_names = merge(var.observability.otlp_endpoint == "" ? {} : {
+    "observability-token" = "Authorization header for the OTLP backend (e.g. 'Basic <base64>')"
+    }, {
     "jwt-private"   = "JWT ES256 private key, EC P-256 (PEM or base64-encoded PEM). The public half is derived from it."
     "cookie-secret" = "Fastify cookie signing secret (min 32 chars)"
     "csrf-secret"   = "HMAC key binding a CSRF token to its session (min 32 chars). Distinct from cookie-secret so the two rotate independently."
@@ -225,7 +238,7 @@ module "secrets" {
     # `db_role_passwords_set` and `db_least_privilege`. Empty until step 2 of the runbook.
     "db-app-password"    = "Password for the opshub_app Postgres role (api). [A-Za-z0-9_-], 24+ chars."
     "db-worker-password" = "Password for the opshub_worker Postgres role (worker). [A-Za-z0-9_-], 24+ chars."
-  }
+  })
 
   tags = local.tags
 }
@@ -400,7 +413,10 @@ module "api" {
 
   # Merged into the task definition; the connector reaches the app at 127.0.0.1:3000
   # through the shared task network namespace. Empty list while the tunnel is off.
-  additional_containers = module.tunnel_api.container_definitions
+  additional_containers = concat(
+    module.otel_agent_api.container_definitions,
+    module.tunnel_api.container_definitions,
+  )
 
   # Includes the AWS-managed RDS secret: the execution role needs GetSecretValue on it
   # to inject DATABASE_USER/PASSWORD. Omit it and the task cannot start at all ("unable
@@ -416,6 +432,11 @@ module "api" {
     { name = "DATABASE_POOL_MAX", value = tostring(local.api_pool_max) },
     { name = "CORS_ORIGINS", value = local.app_url },
     { name = "APP_URL", value = local.app_url },
+    # Telemetry. `enabled` and `endpoint` both come FROM the sidecar module, so the app can
+    # never be told to export to a collector that was not created — the two cannot disagree.
+    { name = "OTEL_SERVICE_NAME", value = "${var.product}-api" },
+    { name = "OTEL_ENABLED", value = tostring(module.otel_agent_api.enabled) },
+    { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = module.otel_agent_api.endpoint },
   ])
 
   sqs_queue_arns = values(module.messaging.queue_arns)
@@ -452,6 +473,11 @@ module "worker" {
   # No listener rule: the worker serves no HTTP traffic.
   attach_alb = false
 
+  # No tunnel sidecar here — the worker is a relay with no HTTP surface. The collector is
+  # still wanted: the outbox and webhook relays are exactly the code whose latency and
+  # failures are invisible from a request trace.
+  additional_containers = module.otel_agent_worker.container_definitions
+
   # Includes the AWS-managed RDS secret: the execution role needs GetSecretValue on it
   # to inject DATABASE_USER/PASSWORD. Omit it and the task cannot start at all ("unable
   # to pull secrets") — a boot failure, not a runtime error. The migrator reuses the
@@ -464,6 +490,9 @@ module "worker" {
   # the shared budget by this service's own autoscaling ceiling.
   environment_vars = concat(local.shared_env, local.worker_db_env, [
     { name = "DATABASE_POOL_MAX", value = tostring(local.worker_pool_max) },
+    { name = "OTEL_SERVICE_NAME", value = "${var.product}-worker" },
+    { name = "OTEL_ENABLED", value = tostring(module.otel_agent_worker.enabled) },
+    { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = module.otel_agent_worker.endpoint },
   ])
 
   sqs_queue_arns = values(module.messaging.queue_arns)
@@ -549,6 +578,39 @@ module "tunnel_api" {
   app_port                = 3000
   log_group               = "/ecs/${local.name}-api"
   region                  = var.region
+}
+
+# ── Telemetry collector sidecars ──────────────────────────────────────────────
+# One per service: each needs its own log group, and a sidecar can only ever see the task it
+# lives in.
+#
+# Both are a NO-OP until `observability.otlp_endpoint` is set AND the `observability-token`
+# secret holds a value — the module returns empty container lists, and `OTEL_ENABLED` below is
+# gated on the same flag, so the app is never told to export into a void. That is what makes
+# turning telemetry on a one-line change per environment rather than a migration, and it is
+# why adopting this costs nothing while it is off.
+module "otel_agent_api" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/observability-agent?ref=observability-agent-v1.0.0"
+
+  product       = var.product
+  env           = var.env
+  otlp_endpoint = var.observability.otlp_endpoint
+  # try(): the secret is not created while the OTel path is dormant, and the module is a no-op
+  # in that state anyway — so an absent ARN is the correct input here, not an error.
+  token_secret_arn = try(module.secrets.secret_arns["observability-token"], "")
+  log_group        = "/ecs/${local.name}-api"
+  region           = var.region
+}
+
+module "otel_agent_worker" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/observability-agent?ref=observability-agent-v1.0.0"
+
+  product          = var.product
+  env              = var.env
+  otlp_endpoint    = var.observability.otlp_endpoint
+  token_secret_arn = try(module.secrets.secret_arns["observability-token"], "")
+  log_group        = "/ecs/${local.name}-worker"
+  region           = var.region
 }
 
 # ── Web SPA — Cloudflare Pages ────────────────────────────────────────────────
@@ -770,6 +832,54 @@ resource "aws_scheduler_schedule" "ecs_scale_down" {
 # instead of producing an environment that looks healthy. Waking an idled environment is
 # therefore one coherent change — cache back on, floors back to 1 — rather than two that
 # can be applied in the wrong order.
+# ── Alarms, alert topic and dashboard ─────────────────────────────────────────
+# CloudWatch alarms for ECS (CPU, memory), RDS (CPU, connections, free storage) and — with an
+# ALB — per-target-group latency and unhealthy hosts. The module also OWNS the alert topic, so
+# there is exactly one topic and one subscription to confirm per environment.
+#
+# Adopted from rally. opshub had no alarms at all, which is the state where an outage is
+# discovered by a person rather than by a page.
+module "observability" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/observability?ref=observability-v4.1.0"
+
+  create_dashboard = var.create_dashboard
+
+  name              = local.name
+  region            = var.region
+  ecs_cluster_name  = module.ecs_cluster.cluster_name
+  ecs_service_names = [module.api.service_name, module.worker.service_name]
+
+  # Empty while the api is tunnelled: the shared ALBs were deleted when both products moved to
+  # tunnels, so `runtime.outputs.alb_arn` is absent and the two ALB alarms have nothing to read.
+  alb_arn = var.tunnel_enabled ? "" : try(data.terraform_remote_state.runtime.outputs.alb_arn, "")
+
+  # `identifier` (opshub-dev), NOT `instance_id` (db-XXXX…). CloudWatch publishes RDS metrics
+  # under the DBInstanceIdentifier dimension, and passing the resource id leaves the RDS alarms
+  # in INSUFFICIENT_DATA permanently while appearing covered — a trap rally fell into for six
+  # alarms across both environments. observability-v3.0.0+ rejects a resource id outright, so
+  # this fails the plan rather than regressing silently.
+  rds_instance_id = module.rds.identifier
+
+  # No target groups while tunnelled, so the latency and UnHealthyHostCount alarms are not
+  # created. See `monitor_target_health` — that is a real gap to close from outside AWS, not
+  # just plumbing, because with no ALB nothing on the AWS side observes ingress at all.
+  target_group_arns     = var.tunnel_enabled ? {} : { api = module.api.target_group_arn }
+  monitor_target_health = var.monitor_target_health
+
+  # Suppresses the alarms whose premise is "this environment is serving traffic" — ECS CPU and
+  # memory, ALB 5xx, unhealthy hosts.
+  #
+  # Derived from the idle posture rather than being its own switch: an environment whose
+  # services have a floor of 0 is exactly one that cannot support a load alarm. A service
+  # scaled to zero makes its CPU metric DISAPPEAR rather than read zero, so the alarm would
+  # walk OK -> INSUFFICIENT_DATA -> OK on every wake and mail an OK notice each time. Tying it
+  # to the floors means restoring capacity re-arms the alarms in the same change.
+  environment_idle = var.api.min_count == 0 && var.worker.min_count == 0
+
+  alarm_emails = var.alarm_emails
+  tags         = local.tags
+}
+
 check "idled_environment_runs_no_tasks" {
   assert {
     condition = var.cache.enabled || (var.api.min_count == 0 && var.worker.min_count == 0)
