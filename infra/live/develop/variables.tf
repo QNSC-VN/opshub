@@ -66,3 +66,29 @@ variable "cloudflare_account_id" {
   type        = string
   default     = "69e52835cf2d08edde5b6ebd741d30fa"
 }
+
+variable "otlp_endpoint" {
+  description = <<-EOT
+    OTLP/HTTP base URL of the telemetry backend, e.g.
+    `https://otlp-gateway-prod-ap-southeast-1.grafana.net/otlp`.
+
+    Empty (the default) keeps telemetry DORMANT: no collector sidecar is created, no
+    `observability-token` secret exists, and OTEL_ENABLED stays false. Populate that secret
+    with the Authorization header BEFORE setting this, or the collector starts and cannot
+    authenticate.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "alarm_emails" {
+  description = <<-EOT
+    Addresses subscribed to this environment's alarm topic. Terraform creates the
+    subscription; each recipient must still confirm it by email, so an unconfirmed address
+    silently receives nothing.
+
+    Empty means the alarms still exist and still change state — they just page nobody.
+  EOT
+  type        = list(string)
+  default     = []
+}

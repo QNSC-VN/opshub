@@ -140,4 +140,26 @@ module "stack" {
   }
 
   cloudflare_account_id = var.cloudflare_account_id
+
+  // Telemetry stays DORMANT until otlp_endpoint is set: no collector sidecar, OTEL_ENABLED
+  // false, no observability-token secret created. Put the Authorization header in that secret
+  // FIRST, then set this — reversing the order starts a collector that cannot authenticate.
+  observability = {
+    otlp_endpoint = var.otlp_endpoint
+    // Full fidelity: develop volume is trivial, and validating the instrumentation is the
+    // only reason to enable it here at all. Applied by resolveSampler in
+    // libs/platform/src/observability/otel.ts, and asserted by otel.spec.ts.
+    sampling_probability = 1.0
+  }
+
+  // No dashboard in develop. CloudWatch bills dashboards per ACCOUNT — three free, then
+  // $3/mo — and nobody opens develop's. Alarms are created either way, and alarms are what
+  // page someone.
+  create_dashboard = false
+
+  // Left OFF, and it would be inert anyway while the api is tunnelled: no ALB target group
+  // means no UnHealthyHostCount metric to alarm on.
+  monitor_target_health = false
+
+  alarm_emails = var.alarm_emails
 }

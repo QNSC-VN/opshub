@@ -421,3 +421,77 @@ variable "cloudflare_account_id" {
   type        = string
   default     = ""
 }
+
+// ── Observability ───────────────────────────────────────────────────────────────
+
+variable "observability" {
+  description = <<-EOT
+    Telemetry export. `otlp_endpoint` is the master switch: while it is empty no collector
+    sidecar is created, `OTEL_ENABLED` stays false, and the whole OTel path is dormant — so
+    this can be adopted before a backend exists, at no cost.
+
+    Turning it on is two steps, in this order:
+      1. put the Authorization header in the `observability-token` secret
+      2. set `otlp_endpoint` here
+    Reversing them starts a collector that cannot authenticate.
+
+    `sampling_probability` is HEAD sampling, the only lever the SDK has on its own. 1.0 in
+    develop (volume is trivial and full fidelity is the point of enabling it there); lower in
+    production for cost. Be aware that anything below 1.0 drops most ERROR traces too —
+    keeping all errors needs tail sampling, which needs a gateway that sees whole traces
+    rather than a per-task sidecar.
+
+    This value is actually APPLIED: `resolveSampler` in
+    libs/platform/src/observability/otel.ts builds a ParentBased/TraceIdRatio sampler from it,
+    and otel.spec.ts asserts a configured probability changes the decisions. It was inert
+    before that — declared here and in the env schema, and ignored by opshub's own OTel
+    bootstrap, which had drifted behind the `@qnsc-vn/observability` package rally uses.
+  EOT
+  type = object({
+    otlp_endpoint        = optional(string, "")
+    sampling_probability = optional(number, 1.0)
+  })
+  default = {}
+
+  validation {
+    condition     = var.observability.sampling_probability >= 0 && var.observability.sampling_probability <= 1
+    error_message = "observability.sampling_probability is a probability: it must be between 0 and 1 inclusive."
+  }
+}
+
+variable "monitor_target_health" {
+  description = <<-EOT
+    Create the per-service UnHealthyHostCount alarm.
+
+    OFF by default, and irrelevant while `tunnel_enabled` is true: a tunnelled task has no
+    ALB target group, so there is nothing for the alarm to read and no target group ARN is
+    passed to the observability module.
+
+    That is a REAL LOSS OF COVERAGE rather than mere plumbing — with no ALB, nothing on the
+    AWS side observes ingress at all. ECS reports the task RUNNING whether or not cloudflared
+    holds edge connections, and the sidecar's image is distroless so an ECS healthCheck
+    cannot probe it either. Before relying on a tunnel in production, replace this from
+    OUTSIDE AWS: a Cloudflare health check or a synthetic probe against the public hostname.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "create_dashboard" {
+  description = <<-EOT
+    Create the CloudWatch dashboard for this environment. Alarms are created either way.
+
+    CloudWatch bills dashboards per ACCOUNT: three free, then $3/mo each. Two products at two
+    environments is four, so the fourth starts charging. Develop is the one to drop — alarms
+    are what page someone, a dashboard is what you open afterwards, and nobody opens
+    develop's.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "alarm_emails" {
+  description = "Addresses subscribed to the alarm topic. Terraform creates the subscription; each recipient must still confirm by email."
+  type        = list(string)
+  default     = []
+}
