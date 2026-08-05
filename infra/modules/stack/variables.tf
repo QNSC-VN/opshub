@@ -441,11 +441,11 @@ variable "observability" {
     keeping all errors needs tail sampling, which needs a gateway that sees whole traces
     rather than a per-task sidecar.
 
-    Unlike rally, this value is actually APPLIED: `resolveSampler` in
+    This value is actually APPLIED: `resolveSampler` in
     libs/platform/src/observability/otel.ts builds a ParentBased/TraceIdRatio sampler from it,
-    and otel.spec.ts asserts a configured probability changes the decisions. rally declares
-    the same variable and passes it from Terraform, but nothing reads it there — so rally
-    samples everything regardless of what this says.
+    and otel.spec.ts asserts a configured probability changes the decisions. It was inert
+    before that — declared here and in the env schema, and ignored by opshub's own OTel
+    bootstrap, which had drifted behind the `@qnsc-vn/observability` package rally uses.
   EOT
   type = object({
     otlp_endpoint        = optional(string, "")

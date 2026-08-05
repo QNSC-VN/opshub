@@ -31,11 +31,20 @@ export const DEFAULT_SAMPLING_PROBABILITY = 1;
  * Build the trace sampler from `OTEL_SAMPLING_PROBABILITY`.
  *
  * Exported and pure so it can be tested, which is the whole reason it is a function.
- * rally declares this same variable in its env schema AND passes it from Terraform with a
- * comment about head sampling and production cost — but nothing reads it, so rally samples
- * everything regardless of the value. A knob that is configured, documented, and inert is
- * worse than no knob: it reads as a cost control that is not applied. The spec beside this
- * file is what stops opshub inheriting that.
+ *
+ * Why this exists at all: opshub maintains its OWN OTel bootstrap, while rally delegates to
+ * `@qnsc-vn/observability`. That package already builds this sampler from the same variable —
+ * so opshub declared `OTEL_SAMPLING_PROBABILITY` in its env schema and then ignored it, purely
+ * because the local copy had drifted behind the shared one. The variable was configured,
+ * documented and inert HERE, not in rally.
+ *
+ * The real fix is to adopt `@qnsc-vn/observability` and delete this file. Until then this
+ * closes the gap, and the spec beside it is what makes the closure verifiable.
+ *
+ * NOTE one deliberate difference from the package: it defaults production to 0.1, this
+ * defaults to 1. A default that silently discards 90% of traces is not something to inherit
+ * by accident — when the package is adopted, set the probability explicitly per environment
+ * rather than relying on either default.
  *
  * `ParentBasedSampler` wrapping the ratio sampler, not the ratio sampler alone. The ratio
  * decision is a function of the trace id, so applying it per span would agree with itself

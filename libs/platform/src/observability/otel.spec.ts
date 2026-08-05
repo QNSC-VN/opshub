@@ -1,11 +1,16 @@
 /**
  * Unit tests for the trace sampler.
  *
- * These exist because the variable they cover is inert in rally: `OTEL_SAMPLING_PROBABILITY`
- * is declared in its env schema and passed from Terraform with a comment about head sampling
- * and production cost, and nothing reads it — so rally samples every trace regardless of the
- * value. A knob that is configured, documented and ignored is worse than no knob, because it
- * reads as a cost control that is being applied.
+ * These exist because the variable they cover was inert IN OPSHUB. `OTEL_SAMPLING_PROBABILITY`
+ * was declared in the env schema and passed from Terraform, and this repo's own OTel bootstrap
+ * never read it — so opshub sampled every trace regardless of the value. A knob that is
+ * configured, documented and ignored is worse than no knob, because it reads as a cost control
+ * that is being applied.
+ *
+ * rally does NOT have this problem: it delegates to `@qnsc-vn/observability`, which builds the
+ * same sampler from the same variable. The gap was opshub's local reimplementation drifting
+ * behind the shared package — which is the argument for adopting the package and deleting the
+ * local copy.
  *
  * The sampler is the one part of the OTel bootstrap that can be tested: the rest of the file
  * runs at import time and starts an SDK. So the decision logic is a pure function, and this
@@ -20,14 +25,8 @@ import { DEFAULT_SAMPLING_PROBABILITY, resolveSampler } from './otel';
 
 /** Ask a sampler for its decision on a ROOT span (no parent in context). */
 function decideRoot(sampler: ReturnType<typeof resolveSampler>, traceId: string) {
-  return sampler.shouldSample(
-    ROOT_CONTEXT,
-    traceId,
-    'GET /v1/assets',
-    SpanKind.SERVER,
-    {},
-    [],
-  ).decision;
+  return sampler.shouldSample(ROOT_CONTEXT, traceId, 'GET /v1/assets', SpanKind.SERVER, {}, [])
+    .decision;
 }
 
 /** Ask a sampler for its decision on a span whose PARENT arrived already sampled (or not). */
@@ -71,8 +70,9 @@ function traceIds(count: number): string[] {
     state >>>= 0;
     return state.toString(16).padStart(8, '0');
   };
-  return Array.from({ length: count }, () =>
-    `${nextHex8()}${nextHex8()}${nextHex8()}${nextHex8()}`,
+  return Array.from(
+    { length: count },
+    () => `${nextHex8()}${nextHex8()}${nextHex8()}${nextHex8()}`,
   );
 }
 
@@ -97,13 +97,13 @@ describe('resolveSampler', () => {
     expect(DEFAULT_SAMPLING_PROBABILITY).toBe(1);
   });
 
-  // THE assertion that fails against rally's arrangement: a configured probability has to
-  // change what happens, or the variable is decoration. Stated as a proportion because that
-  // is the actual contract — which specific ids survive is the SDK's business.
+  // THE assertion that fails against the pre-fix arrangement: a configured probability has to
+  // change what happens, or the variable is decoration. Stated as a proportion because that is
+  // the actual contract — which specific ids survive is the SDK's business.
   it('applies a configured probability instead of ignoring it', () => {
     const half = sampledFraction(resolveSampler({ OTEL_SAMPLING_PROBABILITY: '0.5' }), IDS);
-    // Wide bounds: this asserts the knob is WIRED, not that the SDK's hash is uniform.
-    // Rally's arrangement — the value read and discarded — scores exactly 1 here.
+    // Wide bounds: this asserts the knob is WIRED, not that the SDK's hash is uniform. The
+    // pre-fix arrangement — no sampler set at all — scores exactly 1 here.
     expect(half).toBeGreaterThan(0.3);
     expect(half).toBeLessThan(0.7);
   });

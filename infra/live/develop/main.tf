@@ -147,8 +147,8 @@ module "stack" {
   observability = {
     otlp_endpoint = var.otlp_endpoint
     // Full fidelity: develop volume is trivial, and validating the instrumentation is the
-    // only reason to enable it here at all. Unlike rally, this value is actually applied —
-    // see resolveSampler in libs/platform/src/observability/otel.ts.
+    // only reason to enable it here at all. Applied by resolveSampler in
+    // libs/platform/src/observability/otel.ts, and asserted by otel.spec.ts.
     sampling_probability = 1.0
   }
 
