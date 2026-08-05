@@ -27,15 +27,22 @@ overrides:
   # GHSA-c96f-x56v-gq3h — HIGH "DDoS with HTTP2", fixed 9.7.0. Transitive via
   # fastify / @nestjs/platform-fastify, whose declared ^9.6.0 already allows it.
   "find-my-way@<9.7.0": "9.7.0"
-  # fast-uri host confusion via failed IDN canonicalization — GHSA-4c8g-83qw-93j6 /
-  # GHSA-v2hh-gcrm-f6hx, then a third advisory that resolved to exactly 3.1.4 and was
-  # therefore still vulnerable. Same class of bug in the same parser two advisories
-  # running, so pin the FLOOR rather than a version: `>=3.1.5` lets the next patch land
-  # without another edit here.
+  # fast-uri, FOUR advisories deep in the same parser: GHSA-4c8g-83qw-93j6 /
+  # GHSA-v2hh-gcrm-f6hx (IDN canonicalization), then one that resolved to exactly 3.1.4,
+  # then GHSA-7p8r-x3mc-p8w7 (CVSS 7.5, host confusion via a backslash authority
+  # introducer), fixed per major at 2.4.4 / 3.1.5 / 4.1.2.
   #
-  # This one reaches PRODUCTION (fastify → @fastify/ajv-compiler → fast-uri), unlike the
-  # undici pins below.
-  "fast-uri@<3.1.5": ">=3.1.5"
+  # A BARE key, like brace-expansion above, and that is the point. A ranged key
+  # (`fast-uri@<3.1.5`) matches the range a dependency REQUESTS, not the version it
+  # resolves to — so `>=3.1.5` cheerfully admitted 4.1.1, pinned and vulnerable at the
+  # same time. Adding a second ranged key for the 4.x line did not help either:
+  # @fastify/ajv-compiler kept 4.1.1 while the rest of the tree moved to 4.1.2.
+  #
+  # This is the path that reaches PRODUCTION — fastify -> @fastify/ajv-compiler ->
+  # fast-uri — so a partially-applied pin is the worst outcome: the scanner is quiet on
+  # nine of ten paths and the tenth is the one serving traffic. The whole tree is already
+  # on 4.x, so a bare floor forces no major jump on anyone.
+  "fast-uri": ">=4.1.2"
   # GHSA-r28c-9q8g-f849 — postcss line-return parsing, fixed 8.5.18. Transitive
   # via the web build toolchain (vite / tailwind).
   "postcss@<8.5.18": ">=8.5.18"
