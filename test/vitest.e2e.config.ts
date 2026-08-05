@@ -32,6 +32,14 @@ export default defineConfig({
      */
     passWithNoTests: false,
     setupFiles: ['./test/setup.ts'],
+    /**
+     * ONE truncate + re-seed for the whole run. The specs create timesheets, leave and
+     * requests and tear down NOTHING, so without this a developer's database grows on every
+     * pass — and the leftovers then make list assertions count-dependent, or collide with
+     * the seed's own fixed ids under `onConflictDoNothing`, which reports nothing and leaves
+     * the fixture silently absent. Adopted from rally, which hit both.
+     */
+    globalSetup: ['./test/e2e/support/global-setup.ts'],
     testTimeout: 30_000,
     // Booting the real AppModule (Nest DI, Drizzle pool, Valkey) plus the fixture logins
     // runs well past the 30s default on a cold start.
