@@ -32,45 +32,46 @@ import { describe, expect, it } from 'vitest';
  *     access to authorize: `authz/delegations` (writes `fromUserId: user.sub`, reads
  *     `listFrom(user.sub)`), `notifications/*`, `notification-preferences/*`,
  *     `access-requests/grants/me/active`, `auth/me`, and both logout routes.
- *  3. Permission resolved at RUN TIME, so no static decorator can name it —
- *     `requests/:id/{approve,reject}` is the whole reason this bucket exists. The
- *     required permission comes from the request TYPE and the current approval STEP
- *     (`stepDef.requiredPermission ?? def.requiredApprovalPermission`), and the check
- *     unions the actor with an active delegator and enforces separation of duties. See
- *     `RequestEngine.approve` in libs/platform/src/requests/request-engine.service.ts.
+ *  3. Authorization resolved at RUN TIME, so no static decorator can name it. Two shapes
+ *     live here, and both are pinned by unit tests rather than by this counter:
+ *       - `requests/:id/{approve,reject}` — the required permission comes from the
+ *         request TYPE and the current approval STEP (`stepDef.requiredPermission ??
+ *         def.requiredApprovalPermission`), and the check unions the actor with an
+ *         active delegator and enforces separation of duties. See
+ *         `RequestEngine.approve`.
+ *       - `GET workforce/{timesheets,leave,overtime,shifts}` — the `employeeId` filter is
+ *         OPTIONAL, so a scope descriptor cannot work: with the filter omitted the guard
+ *         resolves no resource and `AuthzService.check` denies, which would 403 the
+ *         self-service case the SPA actually issues. `WorkforceService.narrowToActor`
+ *         decides the tier first and then applies the filter. See
+ *         `workforce-access-narrowing.spec.ts`.
  *
- * Everything else in the current count is a gap, not a design. Three are confirmed by
- * reading the service, and are the reason this file exists rather than a clean-up commit:
- *
- *  - `GET workforce/{timesheets,leave,overtime,shifts}` accept an `employeeId` QUERY
- *    filter and pass it to the repository untouched — no actor reaches the service at
- *    all. Any authenticated employee can read any other employee's HR records. The
- *    sibling `POST workforce/leave/:id/review` DOES carry `@RequirePermission`, so the
- *    module knows the pattern; the read paths were simply missed.
- *  - `POST workforce/timesheets/:id/submit` takes `_actor` and discards it, so anyone
- *    can submit anyone's draft.
- *  - `POST employees/:id/avatar/{presign,confirm}` take `employeeId` from the path behind
- *    a 404 guard only; `actor` is recorded as the uploader, never checked against the
- *    subject. Any authenticated user can replace any employee's photo. Both routes
- *    already document a 403 via `@ApiCommonErrors` that cannot be produced.
+ * Everything else in the count is a gap, not a design — the read paths of modules whose
+ * write paths are decorated. The list is not enumerated here because it goes stale; run
+ * the test and read the failure report, which prints file and line.
  *
  * The counter reads SOURCE TEXT. It cannot tell a correct permission code from a
- * misspelled one, and it cannot see authorization that lives inside a service. It is a
- * smoke detector, not an authorization test — the e2e suites are that.
+ * misspelled one, and it cannot see authorization that lives inside a service — the six
+ * workforce routes above pass this check by NOT being counted, which is exactly why a
+ * ratchet is a smoke detector and the e2e and unit suites are the authorization tests.
  */
 
 // ── Baseline — LOWER as routes get decorated, NEVER raise ─────────────────────
 //
+// 46 when the scanner was written; 43 after the three `employees/:id/avatar/*` routes were
+// decorated. Note what did NOT move it: the six workforce routes fixed in the same change
+// are still counted, because their authorization lives in the service (bucket 3). A
+// falling count is evidence of decorators added, never of authorization added.
+//
 // Raising this number is forbidden. If you are here because your change made the count
 // rise, the fix is to decorate the route, not to edit this line. The ONE shape that could
 // justify a rise is authorization MOVING INTO A SERVICE because no decorator can express
-// it (a run-time-resolved permission, as in bucket 3 above) — and then the move must be
-// pinned by an e2e spec asserting BOTH directions, and named in this docblock.
+// it — and then the move must be pinned by a test asserting BOTH directions, and named in
+// the docblock above.
 //
-// This baseline is a DEBT MARKER, not a target. It was set to the count that existed when
-// the scanner was written, so that the surface stops growing while the gaps listed above
-// are closed one module at a time.
-const MAX_UNPOLICED_ROUTES = 46;
+// This baseline is a DEBT MARKER, not a target: it exists so the unpoliced surface stops
+// growing while the remaining routes are closed one module at a time.
+const MAX_UNPOLICED_ROUTES = 43;
 
 /** Sanity floor: if the scanner stops finding routes, fail loudly, not silently. */
 const MIN_ROUTES_FOUND = 100;
