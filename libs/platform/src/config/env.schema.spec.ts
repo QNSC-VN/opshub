@@ -169,3 +169,59 @@ describe('EnvSchema — cache URL alias', () => {
     expect(result.data.REDIS_URL).toBe('rediss://cache:6379');
   });
 });
+
+describe('EnvSchema — object storage backend', () => {
+  // Unset is the default and must stay behaviour-identical: AWS S3 via the task role.
+  it('accepts no STORAGE_* at all', () => {
+    expect(EnvSchema.safeParse(env()).success).toBe(true);
+  });
+
+  it('accepts a complete R2-style configuration', () => {
+    const result = EnvSchema.safeParse(
+      env({
+        STORAGE_ENDPOINT: 'https://acct.r2.cloudflarestorage.com',
+        STORAGE_ACCESS_KEY_ID: 'id',
+        STORAGE_SECRET_ACCESS_KEY: 'secret',
+        STORAGE_FORCE_PATH_STYLE: 'true',
+      }),
+    );
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.STORAGE_FORCE_PATH_STYLE).toBe(true);
+  });
+
+  // Half a pair silently omits `credentials` from the S3Client, which for AWS quietly
+  // works via the task role and for R2 fails at the first request.
+  it.each([
+    ['STORAGE_ACCESS_KEY_ID', 'STORAGE_SECRET_ACCESS_KEY'],
+    ['STORAGE_SECRET_ACCESS_KEY', 'STORAGE_ACCESS_KEY_ID'],
+  ])('rejects %s without %s', (present, missing) => {
+    const result = EnvSchema.safeParse(env({ [present]: 'x' }));
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.some((i) => i.path.includes(missing))).toBe(true);
+  });
+
+  // An S3-compatible endpoint has no instance role to fall back on.
+  it('rejects STORAGE_ENDPOINT with no credentials', () => {
+    const result = EnvSchema.safeParse(
+      env({ STORAGE_ENDPOINT: 'https://acct.r2.cloudflarestorage.com' }),
+    );
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const issue = result.error.issues.find((i) => i.path.includes('STORAGE_ACCESS_KEY_ID'));
+    expect(issue?.message).toMatch(/no task role to fall back to/);
+  });
+
+  it('rejects a STORAGE_ENDPOINT that is not a URL', () => {
+    expect(EnvSchema.safeParse(env({ STORAGE_ENDPOINT: 'r2.example' })).success).toBe(false);
+  });
+
+  it('allows credentials WITHOUT an endpoint — static keys against AWS S3', () => {
+    // Legitimate: a task running outside AWS, or local development against real S3.
+    const result = EnvSchema.safeParse(
+      env({ STORAGE_ACCESS_KEY_ID: 'id', STORAGE_SECRET_ACCESS_KEY: 'secret' }),
+    );
+    expect(result.success).toBe(true);
+  });
+});
