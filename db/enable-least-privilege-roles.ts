@@ -60,6 +60,38 @@ const TARGETS: Target[] = [
 ];
 
 /**
+ * The env var NAMES this script reads, for the "nothing was supplied" message.
+ *
+ * A plain string list rather than `TARGETS.map(t => t.passwordEnv)`, because these are
+ * names and must be provably nothing else. CodeQL's `js/clear-text-logging` rule follows
+ * anything reached through a password-shaped property into a log call and flagged that map
+ * as high severity — correctly, by its own heuristic, since it cannot know the property
+ * holds a variable name rather than a value. Naming them here separates the two for the
+ * reader as much as for the scanner.
+ */
+const PASSWORD_ENV_NAMES = ['DATABASE_APP_PASSWORD', 'DATABASE_WORKER_PASSWORD'] as const;
+
+/**
+ * Remove every supplied password from a string before it is logged.
+ *
+ * This closes a narrow but real path, not just a scanner complaint. `ALTER ROLE ... PASSWORD
+ * '...'` cannot be parameterised — Postgres has no bind form for it — so the value is part
+ * of the statement text, and a server-side error can quote the statement it failed on. That
+ * would put a live credential into CI logs and CloudWatch, where it long outlives the
+ * failure that produced it.
+ *
+ * Applied at every point an error message is printed, rather than trusting the callers of
+ * `throw` to be careful: the messages we control already avoid the value, but a `pg` error
+ * or a future edit is not something a convention can cover.
+ */
+function redact(message: string, secrets: readonly string[]): string {
+  return secrets.reduce(
+    (acc, secret) => (secret ? acc.split(secret).join('[REDACTED]') : acc),
+    message,
+  );
+}
+
+/**
  * Attributes that must all be false on a least-privilege role. `rolsuper` and
  * `rolbypassrls` are the ones that would make the whole split decorative —
  * bypassrls in particular, since the point of moving off the owner is to stop
@@ -194,7 +226,25 @@ async function enableRole(
     );
   }
 
-  await admin.query(`ALTER ROLE ${role} LOGIN PASSWORD '${password}'`);
+  // `escapeIdentifier`/`escapeLiteral` rather than hand-quoting. Postgres has no bind form
+  // for `ALTER ROLE ... PASSWORD`, so the values must be part of the statement text — but
+  // that is a reason to use the driver's own quoting, not a reason to interpolate raw. The
+  // regex validation above stays as defence in depth: it constrains what can arrive here at
+  // all, while this constrains what the SQL can mean.
+  //
+  // Any failure is re-thrown WITHOUT the driver's message, because a server-side error can
+  // quote the statement it failed on — and this statement contains a live credential.
+  try {
+    await admin.query(
+      `ALTER ROLE ${admin.escapeIdentifier(role)} LOGIN PASSWORD ${admin.escapeLiteral(password)}`,
+    );
+  } catch {
+    throw new Error(
+      `ALTER ROLE failed for ${role}. The driver's message is withheld deliberately: it can ` +
+        'quote the failing statement, which carries the password. Check the role exists and ' +
+        'that the admin connection has rights to alter it.',
+    );
+  }
 
   // Assert the role gained LOGIN and nothing else. A role that is superuser or
   // bypasses RLS is WORSE than the master credential it replaces, because it looks
@@ -277,11 +327,14 @@ async function run(): Promise<void> {
 
   if (requested.length === 0) {
     console.error(
-      '❌  No role passwords supplied. Set at least one of: ' +
-        `${TARGETS.map((t) => t.passwordEnv).join(', ')}.`,
+      `❌  No role passwords supplied. Set at least one of: ${PASSWORD_ENV_NAMES.join(', ')}.`,
     );
     process.exit(1);
   }
+
+  // Every value that must never reach a log, gathered once so the error paths below cannot
+  // each be individually correct-or-not.
+  const secrets = requested.map((r) => r.password);
 
   const admin = new Client(pgOptions(adminUrl));
   await admin.connect();
@@ -290,7 +343,7 @@ async function run(): Promise<void> {
       await enableRole(adminUrl, admin, target, password);
     }
   } catch (err) {
-    console.error(`❌  ${(err as Error).message}`);
+    console.error(`❌  ${redact((err as Error).message, secrets)}`);
     process.exitCode = 1;
   } finally {
     await admin.end();
