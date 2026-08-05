@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.2.0](https://github.com/QNSC-VN/opshub/compare/v0.1.1...v0.2.0) (2026-08-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **infra:** tunnel ingress, idling, and floors that let an environment park ([#97](https://github.com/QNSC-VN/opshub/issues/97))
+* **web:** sign in through the BFF, and hold no token in the browser ([#88](https://github.com/QNSC-VN/opshub/issues/88))
+* **db,infra:** compose the DB URL from parts, derive the JWT public key ([#82](https://github.com/QNSC-VN/opshub/issues/82))
+* **infra:** one stack module for both environments, and a shared cache node ([#81](https://github.com/QNSC-VN/opshub/issues/81))
+* **authz:** `RoleGuard`, `RequireRoles` and `ROLES_KEY` are removed, and `Auth()` no longer accepts role arguments. `PERMISSION`/`PermissionKey` are no longer exported from `constants.ts` — import them from `@shared-kernel`, which now re-exports the catalogue. No route changes behaviour: every enforced code was already from the seeded vocabulary.
+
+### ✨ Features
+
+* adopt [@qnsc-vn](https://github.com/qnsc-vn) shared cache and identity primitives (rebased [#37](https://github.com/QNSC-VN/opshub/issues/37)) ([#62](https://github.com/QNSC-VN/opshub/issues/62)) ([a3846e8](https://github.com/QNSC-VN/opshub/commit/a3846e83c1012b08e0cc6cf94a98615aa3bd3757))
+* **auth:** put browser sessions behind an opaque BFF cookie ([#85](https://github.com/QNSC-VN/opshub/issues/85)) ([aa09d4f](https://github.com/QNSC-VN/opshub/commit/aa09d4f890a2bb220e9a8fce51cd1bcf6de439cb))
+* **authz:** one typed permission catalogue, and retire the RoleGuard ([#76](https://github.com/QNSC-VN/opshub/issues/76)) ([a6dd65a](https://github.com/QNSC-VN/opshub/commit/a6dd65a3fced9662eb2e71004db090b5b2e9ff2c))
+* **db,infra:** compose the DB URL from parts, derive the JWT public key ([#82](https://github.com/QNSC-VN/opshub/issues/82)) ([a7c55b5](https://github.com/QNSC-VN/opshub/commit/a7c55b574fa2306c999ec7f98539320dee71f6b1))
+* **infra:** bootstrap opshub's AWS foundations and align the shared module pins ([#79](https://github.com/QNSC-VN/opshub/issues/79)) ([72ae822](https://github.com/QNSC-VN/opshub/commit/72ae8222b1f5241804ac9f5334f5f073043e92c2))
+* **infra:** give opshub prod its own dedicated cache node ([#66](https://github.com/QNSC-VN/opshub/issues/66)) ([86fb985](https://github.com/QNSC-VN/opshub/commit/86fb985f57afeb45c8933bb116b87cfbec0e7e28))
+* **infra:** tunnel ingress, idling, and floors that let an environment park ([#97](https://github.com/QNSC-VN/opshub/issues/97)) ([1995ccb](https://github.com/QNSC-VN/opshub/commit/1995ccbda670e7443110308dfc74550188f193c6))
+* **platform:** make StorageService endpoint-aware for R2 (config-driven) ([#52](https://github.com/QNSC-VN/opshub/issues/52)) ([fa7f687](https://github.com/QNSC-VN/opshub/commit/fa7f687f67ac254052ce6aa3d7c47130801e34ab))
+* **web,infra:** adopt the Pages project and proxy /v1 same-origin ([#84](https://github.com/QNSC-VN/opshub/issues/84)) ([d2efb94](https://github.com/QNSC-VN/opshub/commit/d2efb94f5773537575cdf65e7a72b0b1b92cc2be))
+* **web:** sign in through the BFF, and hold no token in the browser ([#88](https://github.com/QNSC-VN/opshub/issues/88)) ([2c5f1f8](https://github.com/QNSC-VN/opshub/commit/2c5f1f8747c19dfa48f3471866ba7140fcd5717f))
+
+
+### 🐛 Bug Fixes
+
+* **docker:** drop the base image's global npm from the runtime stages ([#83](https://github.com/QNSC-VN/opshub/issues/83)) ([84189f2](https://github.com/QNSC-VN/opshub/commit/84189f2e63886561f0957bcdee736c2780b5ade6))
+* **platform:** bound the DB pool to the instance, and attribute request latency ([#86](https://github.com/QNSC-VN/opshub/issues/86)) ([20e7342](https://github.com/QNSC-VN/opshub/commit/20e73429ef92cd87b34dc56d61105424f22279b2))
+* **web:** stop dropping Set-Cookie, and make the defence testable ([#87](https://github.com/QNSC-VN/opshub/issues/87)) ([86a5c67](https://github.com/QNSC-VN/opshub/commit/86a5c6762bf2db146d258909a44fc457b9ad963b))
+
+
+### ♻️ Refactors
+
+* **infra:** one stack module for both environments, and a shared cache node ([#81](https://github.com/QNSC-VN/opshub/issues/81)) ([a9361f6](https://github.com/QNSC-VN/opshub/commit/a9361f61e8c081c2930323e628fabd85fc05907d))
+
+
+### 🔒 Security
+
+* **authz:** enforce scoped grants instead of silently widening them ([#77](https://github.com/QNSC-VN/opshub/issues/77)) ([1dfac1e](https://github.com/QNSC-VN/opshub/commit/1dfac1e76e9a594789b211a43ebd93105661c6c3))
+* **authz:** invalidate holders when a role's definition changes ([#78](https://github.com/QNSC-VN/opshub/issues/78)) ([a1e3b4b](https://github.com/QNSC-VN/opshub/commit/a1e3b4b91c1db559dad283b3e7f8fb7903537db6))
+* **deps:** clear the CVEs blocking Security · Scan, and match rally's base image ([0de1cee](https://github.com/QNSC-VN/opshub/commit/0de1ceeba73d6c8727d85addc086cca2baebd9df))
+
+
+### 📦 Dependencies
+
+* bump the production-dependencies group with 16 updates ([#47](https://github.com/QNSC-VN/opshub/issues/47)) ([acffb9b](https://github.com/QNSC-VN/opshub/commit/acffb9b7d4a8504969f4addf932afde400a5d3fa))
+
 ## [0.1.1](https://github.com/QNSC-VN/opshub/compare/v0.1.0...v0.1.1) (2026-07-18)
 
 
