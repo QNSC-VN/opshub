@@ -14,10 +14,12 @@ allowBuilds:
 overrides:
   # Kept from before: esbuild's dev-server request vulnerability.
   "esbuild@<0.25.0": ">=0.25.0"
-  # GHSA-mh99-v99m-4gvg — HIGH DoS (unbounded expansion OOM), vulnerable <=5.0.7,
-  # fixed 5.0.8 only. Upstream did not backport to the 1.x/2.x lines, so the range
-  # spans every published major and the whole tree has to move (leaf util).
-  "brace-expansion": "5.0.8"
+  # GHSA-rgw5-rvv9-x895 — brace-expansion, vulnerable <5.0.9, fixed 5.0.9. It
+  # explicitly BYPASSES the CVE-2026-14257 mitigation, which is what the previous pin
+  # here (5.0.8, GHSA-mh99-v99m-4gvg) was for — so 5.0.8 is no longer merely an older
+  # floor, it is no longer a safe one. The range spans every published major, so the
+  # whole tree has to move (leaf util).
+  "brace-expansion": "5.0.9"
   # GHSA-pm4m-ph32-ghv5 — js-yaml. Two live majors, each patched separately:
   # transitive via cosmiconfig (@nestjs/cli, commitlint) and @nestjs/swagger.
   "js-yaml@4": "^4.3.0"
@@ -25,9 +27,39 @@ overrides:
   # GHSA-c96f-x56v-gq3h — HIGH "DDoS with HTTP2", fixed 9.7.0. Transitive via
   # fastify / @nestjs/platform-fastify, whose declared ^9.6.0 already allows it.
   "find-my-way@<9.7.0": "9.7.0"
-  # GHSA-4c8g-83qw-93j6 / GHSA-v2hh-gcrm-f6hx — fast-uri host confusion via failed
-  # IDN canonicalization. Deep transitive (ajv-formats → fast-json-stringify).
-  "fast-uri@<3.1.4": "^3.1.4"
+  # fast-uri, FOUR advisories deep in the same parser: GHSA-4c8g-83qw-93j6 /
+  # GHSA-v2hh-gcrm-f6hx (IDN canonicalization), then one that resolved to exactly 3.1.4,
+  # then GHSA-7p8r-x3mc-p8w7 (CVSS 7.5, host confusion via a backslash authority
+  # introducer), fixed per major at 2.4.4 / 3.1.5 / 4.1.2.
+  #
+  # A BARE key, like brace-expansion above, and that is the point. A ranged key
+  # (`fast-uri@<3.1.5`) matches the range a dependency REQUESTS, not the version it
+  # resolves to — so `>=3.1.5` cheerfully admitted 4.1.1, pinned and vulnerable at the
+  # same time. Adding a second ranged key for the 4.x line did not help either:
+  # @fastify/ajv-compiler kept 4.1.1 while the rest of the tree moved to 4.1.2.
+  #
+  # This is the path that reaches PRODUCTION — fastify -> @fastify/ajv-compiler ->
+  # fast-uri — so a partially-applied pin is the worst outcome: the scanner is quiet on
+  # nine of ten paths and the tenth is the one serving traffic. The whole tree is already
+  # on 4.x, so a bare floor forces no major jump on anyone.
+  "fast-uri": ">=4.1.2"
   # GHSA-r28c-9q8g-f849 — postcss line-return parsing, fixed 8.5.18. Transitive
   # via the web build toolchain (vite / tailwind).
   "postcss@<8.5.18": ">=8.5.18"
+  # Five advisories against undici, worst GHSA-4cwx-7wf7-3272 (CVSS 7.4). Dev-only here —
+  # the reach is jsdom/vitest and testcontainers, not the running API — but an
+  # osv-scanner rejection blocks every unrelated PR, which is its own kind of outage.
+  #
+  # TWO ranges, one per major, and they must stay that way. jsdom declares
+  # `undici@^7.25.0` and reaches into the internal `undici/lib/handler/wrap-handler.js`,
+  # which 8.x DELETED — so a single `<8.9.0: >=8.9.0` floor drags jsdom onto 8.9.0 and
+  # every jsdom-environment suite dies at worker startup with MODULE_NOT_FOUND before a
+  # single test runs. Backend suites (node environment) are unaffected, which is exactly
+  # how that passes locally and fails in CI on the web tests. rally#380 paid for this
+  # lesson; opshub copies the shape, not the debugging.
+  #
+  # Keep each consumer inside the major it declares:
+  #   7.x — jsdom → vitest     (patched in 7.29.0)
+  #   8.x — testcontainers     (patched in 8.9.0)
+  "undici@>=7.0.0 <7.29.0": ">=7.29.0 <8.0.0"
+  "undici@>=8.0.0 <8.9.0": ">=8.9.0"
