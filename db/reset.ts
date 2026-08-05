@@ -1,0 +1,99 @@
+/**
+ * Truncate the operational tables so the demo-fixture seed lands on a known database.
+ *
+ * Why this exists. Nothing in the e2e suite tears down what it creates — every `afterAll`
+ * closes the Nest app and cleans nothing — while the specs insert timesheets, leave and
+ * requests on every pass. So a developer's database grows forever, and two things follow,
+ * both of which rally hit for real before this pattern was adopted there:
+ *
+ *   • Tests read each other's leftovers. A list assertion that holds on a clean database
+ *     becomes order- or count-dependent once fifty rows from earlier runs exist, and the
+ *     failure surfaces in an unrelated file.
+ *   • Unique keys collide with the seed's own fixed ids. The seed uses
+ *     `onConflictDoNothing`, which is safe against a re-run but NOT against a database
+ *     something else has written to — and it reports nothing, so the fixture is simply
+ *     absent and whatever depended on it fails somewhere else entirely.
+ *
+ * Truncate rather than per-test teardown: teardown means unwinding foreign keys in the right
+ * order in every file that creates anything, which is exactly the discipline that never
+ * holds. One `TRUNCATE ... CASCADE` at the start of the run is a single place to be correct.
+ *
+ * NOT wired into `pnpm db:migrate` or `seed()`. Only the explicit e2e global setup calls it.
+ * Truncating a deployed database because a migration ran would be catastrophic, and a shared
+ * helper is exactly what invites that, so the gate is that `seed()` never calls this itself.
+ */
+import { Pool } from 'pg';
+import { pgOptions } from './pg-ssl';
+import { resolveMigrationUrl } from './database-url';
+
+/**
+ * Every table holding operational data, listed EXPLICITLY.
+ *
+ * `TRUNCATE ... CASCADE` follows the foreign keys itself, which is the point — hand-ordering
+ * a safe delete across 28 tables is the discipline that never holds. Explicit rather than
+ * discovered from `information_schema`: a new table nobody adds here keeps its rows, which
+ * is a visible bug, where auto-discovery would silently wipe a table someone meant to keep.
+ *
+ * Deliberately absent — `identity.*` and `authz.*`:
+ *
+ *   • `identity.employees` IS the fixture set. The e2e specs authenticate as those rows
+ *     (`employee@opshub.local`, `hr@opshub.local`), so truncating them removes the very
+ *     thing the suite logs in as.
+ *   • `authz.*` holds the permission catalogue, the system roles, their grants and the
+ *     `user_role_assignments` that make `hr` an unconstrained `workforce.read` holder.
+ *     Dropping a role takes its assignments with it, and the tier fixtures stop meaning
+ *     anything.
+ *
+ * Both are reconciled idempotently by `seedRbacCatalog` / `seed`, so they need no reset.
+ */
+export const FIXTURE_TABLES = [
+  // workforce — what the isolation suite creates on every run
+  'workforce.timesheets',
+  'workforce.leave_requests',
+  'workforce.overtime_entries',
+  'workforce.shift_logs',
+  'workforce.attendance_logs',
+  // requests — the approval engine's rows, written by every workflow spec
+  'requests.request_approvals',
+  'requests.request_comments',
+  'requests.request_items',
+  // access requests and the grants they produce
+  'access.access_grants',
+  'access.access_requests',
+  // assets and their assignment history
+  'assets.asset_assignments',
+  'assets.assets',
+  // service catalogue, compliance, licences, posture
+  'catalog.catalog_items',
+  'compliance.compliance_findings',
+  'compliance.software_catalog',
+  'licenses.license_assignments',
+  'licenses.software_licenses',
+  'security_posture.baseline_checks',
+  'security_posture.secure_score_snapshots',
+  // outboxes and delivery state — a stale row here makes a relay spec see another's work
+  'messaging.notification_outbox',
+  'messaging.email_outbox',
+  'messaging.outbox_events',
+  'messaging.webhook_deliveries',
+  'messaging.webhook_subscriptions',
+  'notifications.in_app_notifications',
+  'notifications.notification_preferences',
+  // audit trail and uploaded file metadata
+  'audit.audit_logs',
+  'storage.stored_files',
+] as const;
+
+/** Truncate every fixture table. Takes a URL rather than a pool so callers need no setup. */
+export async function resetFixtureTables(connectionUrl?: string): Promise<void> {
+  // Prefers DATABASE_MIGRATION_URL: TRUNCATE is DDL-adjacent and the least-privilege
+  // application role is not guaranteed to hold it.
+  const url = connectionUrl ?? resolveMigrationUrl();
+
+  const pool = new Pool({ ...pgOptions(url), max: 1 });
+  try {
+    await pool.query(`TRUNCATE TABLE ${FIXTURE_TABLES.join(', ')} CASCADE`);
+  } finally {
+    await pool.end();
+  }
+}

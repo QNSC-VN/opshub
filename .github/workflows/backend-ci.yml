@@ -109,6 +109,11 @@ jobs:
       # can act as "the caller who holds nothing" and "the caller who holds it globally" —
       # and those come from `db:seed`. Without this step every e2e `beforeAll` fails at
       # dev-login with a 401 that looks nothing like the missing fixture it is.
+      #
+      # The e2e globalSetup truncates and re-seeds in-process as well, so for the e2e step
+      # this is belt-and-braces. It stays because it fails LOUDLY and by name, where the
+      # same failure inside a vitest globalSetup reads as a broken test file — and because
+      # `E2E_SKIP_RESET=true` turns the in-process reseed off.
       - name: Seed demo fixtures for e2e
         run: pnpm db:seed
         env:
