@@ -33,7 +33,7 @@ export class RoleAssignmentDrizzleRepository implements IRoleAssignmentRepositor
       .select()
       .from(userRoleAssignments)
       .where(eq(userRoleAssignments.userId, userId))
-      .orderBy(desc(userRoleAssignments.createdAt));
+      .orderBy(desc(userRoleAssignments.createdAt), desc(userRoleAssignments.id));
     return rows.map((r) => this.toDomain(r));
   }
 

@@ -55,7 +55,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .select()
       .from(accessRequests)
       .where(where)
-      .orderBy(desc(accessRequests.createdAt))
+      .orderBy(desc(accessRequests.createdAt), desc(accessRequests.id))
       .limit(limit)
       .offset(offset);
 
@@ -135,7 +135,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
           gt(accessGrants.expiresAt, new Date()),
         ),
       )
-      .orderBy(desc(accessGrants.grantedAt));
+      .orderBy(desc(accessGrants.grantedAt), desc(accessGrants.id));
     return rows;
   }
 }

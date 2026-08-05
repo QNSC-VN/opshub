@@ -453,7 +453,7 @@ export class RequestEngine {
       .select()
       .from(requestApprovals)
       .where(eq(requestApprovals.requestId, id))
-      .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt));
+      .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt), asc(requestApprovals.id));
 
     return { ...row, approvals: approvalRows };
   }
@@ -484,7 +484,7 @@ export class RequestEngine {
       .select()
       .from(requestItems)
       .where(where)
-      .orderBy(desc(requestItems.createdAt))
+      .orderBy(desc(requestItems.createdAt), desc(requestItems.id))
       .limit(limit)
       .offset(offset);
 
@@ -501,7 +501,7 @@ export class RequestEngine {
             .select()
             .from(requestApprovals)
             .where(inArray(requestApprovals.requestId, ids))
-            .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt))
+            .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt), asc(requestApprovals.id))
         : [];
 
     const approvalMap = new Map<string, RequestItemWithApprovals['approvals']>();
@@ -561,7 +561,7 @@ export class RequestEngine {
       .select()
       .from(requestComments)
       .where(eq(requestComments.requestId, requestId))
-      .orderBy(asc(requestComments.createdAt));
+      .orderBy(asc(requestComments.createdAt), asc(requestComments.id));
     return rows;
   }
 

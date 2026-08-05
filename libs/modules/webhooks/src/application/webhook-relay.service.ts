@@ -65,7 +65,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
           lte(webhookDeliveries.nextAttemptAt, new Date()),
         ),
       )
-      .orderBy(asc(webhookDeliveries.nextAttemptAt))
+      .orderBy(asc(webhookDeliveries.nextAttemptAt), asc(webhookDeliveries.id))
       .limit(this.batchSize)
       .for('update', { skipLocked: true });
   }

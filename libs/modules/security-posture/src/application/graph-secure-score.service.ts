@@ -165,7 +165,7 @@ export class GraphSecureScoreService {
       .select({ scoreDate: secureScoreSnapshots.scoreDate, percentageScore: secureScoreSnapshots.percentageScore })
       .from(secureScoreSnapshots)
       .where(gte(secureScoreSnapshots.scoreDate, cutoffDate))
-      .orderBy(secureScoreSnapshots.scoreDate)
+      .orderBy(secureScoreSnapshots.scoreDate, secureScoreSnapshots.id)
       .limit(days);
   }
 
@@ -173,7 +173,7 @@ export class GraphSecureScoreService {
     const rows = await this.db
       .select()
       .from(secureScoreSnapshots)
-      .orderBy(desc(secureScoreSnapshots.scoreDate))
+      .orderBy(desc(secureScoreSnapshots.scoreDate), secureScoreSnapshots.id)
       .limit(1);
     return rows[0] ?? null;
   }
@@ -182,7 +182,7 @@ export class GraphSecureScoreService {
     const query = this.db
       .select()
       .from(baselineChecks)
-      .orderBy(baselineChecks.category, baselineChecks.checkName);
+      .orderBy(baselineChecks.category, baselineChecks.checkName, baselineChecks.id);
 
     if (category) {
       return query.where(sql`${baselineChecks.category} = ${category}`);

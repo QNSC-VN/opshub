@@ -52,7 +52,7 @@ export class NotificationDrizzleRepository implements INotificationRepository {
       .select()
       .from(inAppNotifications)
       .where(and(...conditions))
-      .orderBy(desc(inAppNotifications.createdAt))
+      .orderBy(desc(inAppNotifications.createdAt), desc(inAppNotifications.id))
       .limit(filters.limit + 1);
 
     const hasMore = rows.length > filters.limit;

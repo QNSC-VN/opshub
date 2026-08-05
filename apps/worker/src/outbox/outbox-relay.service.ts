@@ -44,7 +44,7 @@ export class OutboxRelayService {
           .select()
           .from(outboxEvents)
           .where(and(eq(outboxEvents.status, 'pending'), lt(outboxEvents.attempts, MAX_ATTEMPTS)))
-          .orderBy(asc(outboxEvents.createdAt))
+          .orderBy(asc(outboxEvents.createdAt), asc(outboxEvents.id))
           .limit(BATCH_SIZE)
           .for('update', { skipLocked: true });
 

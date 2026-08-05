@@ -83,7 +83,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .select()
       .from(softwareCatalog)
       .where(where)
-      .orderBy(desc(softwareCatalog.updatedAt))
+      .orderBy(desc(softwareCatalog.updatedAt), desc(softwareCatalog.id))
       .limit(limit)
       .offset(offset);
 
@@ -138,7 +138,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .select()
       .from(complianceFindings)
       .where(where)
-      .orderBy(desc(complianceFindings.detectedAt))
+      .orderBy(desc(complianceFindings.detectedAt), desc(complianceFindings.id))
       .limit(limit)
       .offset(offset);
 
