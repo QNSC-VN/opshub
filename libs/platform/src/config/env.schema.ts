@@ -180,6 +180,40 @@ export const EnvSchema = z
     APP_URL: z.string().url().default('http://localhost:5173'),
   })
   .superRefine((env, ctx) => {
+    // BEFORE the database early-return below, and that placement is the point. This
+    // superRefine returns as soon as a complete DATABASE_URL is present, so anything
+    // written after that line is dead in exactly the configuration developers and CI run.
+    // (rally's equivalent storage-pair check sits after its return and is inert there.)
+    //
+    // Half a credential pair is a misconfiguration, not a partial feature. With only one
+    // half set, the S3Client silently omits `credentials` and falls back to the task
+    // role — which for AWS S3 quietly works and for R2 fails at the first request with a
+    // signature error naming nothing useful.
+    const keyId = Boolean(env.STORAGE_ACCESS_KEY_ID);
+    const keySecret = Boolean(env.STORAGE_SECRET_ACCESS_KEY);
+    if (keyId !== keySecret) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [keyId ? 'STORAGE_SECRET_ACCESS_KEY' : 'STORAGE_ACCESS_KEY_ID'],
+        message:
+          'STORAGE_ACCESS_KEY_ID and STORAGE_SECRET_ACCESS_KEY must be set together, or ' +
+          'both left unset to use the task role against AWS S3.',
+      });
+    }
+
+    // A non-AWS endpoint has no instance role to fall back on, so credentials are not
+    // optional there — omitting them produces a client that signs with nothing and fails
+    // on the first upload rather than at boot.
+    if (env.STORAGE_ENDPOINT && !(keyId && keySecret)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['STORAGE_ACCESS_KEY_ID'],
+        message:
+          'STORAGE_ENDPOINT requires STORAGE_ACCESS_KEY_ID and STORAGE_SECRET_ACCESS_KEY: ' +
+          'an S3-compatible backend has no task role to fall back to.',
+      });
+    }
+
     // Database credentials must arrive by exactly one of the two routes. Checked here
     // so a misconfigured task dies at boot with a precise message, rather than
     // surviving startup and failing on the first query — which is how a stale db-url
