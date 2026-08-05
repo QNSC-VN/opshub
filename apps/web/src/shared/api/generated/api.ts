@@ -935,7 +935,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List timesheets */
+    /**
+     * List timesheets
+     * @description Narrowed to the caller unless they hold `workforce.read` globally. Requesting another employee's records without it is a 403, not an empty page.
+     */
     get: operations['WorkforceController_listTimesheets'];
     put?: never;
     /** Create a draft timesheet for the current user */
@@ -955,7 +958,10 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Submit a timesheet for approval */
+    /**
+     * Submit a timesheet for approval
+     * @description The owner submits their own timesheet. `workforce.approve` held globally also permits it, for HR acting on an employee behalf.
+     */
     post: operations['WorkforceController_submitTimesheet'];
     delete?: never;
     options?: never;
@@ -987,7 +993,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List leave requests */
+    /**
+     * List leave requests
+     * @description Narrowed to the caller unless they hold `workforce.read` globally. Requesting another employee's records without it is a 403, not an empty page.
+     */
     get: operations['WorkforceController_listLeave'];
     put?: never;
     /** Request leave for the current user */
@@ -1024,7 +1033,10 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Cancel a leave request */
+    /**
+     * Cancel a leave request
+     * @description The requester withdraws their own leave. `workforce.approve` held globally also permits it, for HR acting on an employee behalf.
+     */
     post: operations['WorkforceController_cancelLeave'];
     delete?: never;
     options?: never;
@@ -1039,7 +1051,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List overtime entries */
+    /**
+     * List overtime entries
+     * @description Narrowed to the caller unless they hold `workforce.read` globally. Requesting another employee's records without it is a 403, not an empty page.
+     */
     get: operations['WorkforceController_listOvertime'];
     put?: never;
     /** Log overtime for the current user */
@@ -1074,7 +1089,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List night/on-call/weekend shift logs */
+    /**
+     * List night/on-call/weekend shift logs
+     * @description Narrowed to the caller unless they hold `workforce.read` globally. Requesting another employee's records without it is a 403, not an empty page.
+     */
     get: operations['WorkforceController_listShifts'];
     put?: never;
     /** Log a worked shift for the current user */
@@ -3223,6 +3241,13 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description Not Found */
       404: {
         headers: {
@@ -5121,6 +5146,13 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
     };
   };
   WorkforceController_createTimesheet: {
@@ -5181,6 +5213,13 @@ export interface operations {
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -5288,6 +5327,13 @@ export interface operations {
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -5425,6 +5471,13 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description Not Found */
       404: {
         headers: {
@@ -5474,6 +5527,13 @@ export interface operations {
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -5604,6 +5664,13 @@ export interface operations {
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
         headers: {
           [name: string]: unknown;
         };

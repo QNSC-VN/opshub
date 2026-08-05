@@ -107,16 +107,23 @@ export class WorkforceController {
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
   @Get('timesheets')
-  @ApiOperation({ summary: 'List timesheets' })
+  @ApiOperation({
+    summary: 'List timesheets',
+    description:
+      'Narrowed to the caller unless they hold `workforce.read` globally. Requesting ' +
+      "another employee's records without it is a 403, not an empty page.",
+  })
   @ApiPagedResponse(TimesheetResponseDto)
-  @ApiCommonErrors(401)
+  @ApiCommonErrors(401, 403)
   async listTimesheets(
     @Query() query: ListTimesheetsQueryDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<PagedResult<TimesheetResponseDto>> {
     const { rows, total } = await this.service.listTimesheets(
       { employeeId: query.employeeId, status: query.status },
       query.limit,
       query.offset,
+      user,
     );
     return buildPageResult(rows.map(toTimesheetDto), total, query.limit, query.offset);
   }
@@ -141,8 +148,13 @@ export class WorkforceController {
   }
 
   @Post('timesheets/:id/submit')
-  @ApiOperation({ summary: 'Submit a timesheet for approval' })
-  @ApiCommonErrors(401, 404, 412)
+  @ApiOperation({
+    summary: 'Submit a timesheet for approval',
+    description:
+      'The owner submits their own timesheet. `workforce.approve` held globally also ' +
+      'permits it, for HR acting on an employee behalf.',
+  })
+  @ApiCommonErrors(401, 403, 404, 412)
   async submitTimesheet(
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
@@ -180,14 +192,23 @@ export class WorkforceController {
 
   // ── Leave ──────────────────────────────────────────────────────────────────
   @Get('leave')
-  @ApiOperation({ summary: 'List leave requests' })
+  @ApiOperation({
+    summary: 'List leave requests',
+    description:
+      'Narrowed to the caller unless they hold `workforce.read` globally. Requesting ' +
+      "another employee's records without it is a 403, not an empty page.",
+  })
   @ApiPagedResponse(LeaveResponseDto)
-  @ApiCommonErrors(401)
-  async listLeave(@Query() query: ListLeaveQueryDto): Promise<PagedResult<LeaveResponseDto>> {
+  @ApiCommonErrors(401, 403)
+  async listLeave(
+    @Query() query: ListLeaveQueryDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PagedResult<LeaveResponseDto>> {
     const { rows, total } = await this.service.listLeave(
       { employeeId: query.employeeId, status: query.status },
       query.limit,
       query.offset,
+      user,
     );
     return buildPageResult(rows.map(toLeaveDto), total, query.limit, query.offset);
   }
@@ -232,8 +253,13 @@ export class WorkforceController {
   }
 
   @Post('leave/:id/cancel')
-  @ApiOperation({ summary: 'Cancel a leave request' })
-  @ApiCommonErrors(401, 404, 412)
+  @ApiOperation({
+    summary: 'Cancel a leave request',
+    description:
+      'The requester withdraws their own leave. `workforce.approve` held globally also ' +
+      'permits it, for HR acting on an employee behalf.',
+  })
+  @ApiCommonErrors(401, 403, 404, 412)
   async cancelLeave(
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
@@ -251,16 +277,23 @@ export class WorkforceController {
 
   // ── Overtime ───────────────────────────────────────────────────────────────
   @Get('overtime')
-  @ApiOperation({ summary: 'List overtime entries' })
+  @ApiOperation({
+    summary: 'List overtime entries',
+    description:
+      'Narrowed to the caller unless they hold `workforce.read` globally. Requesting ' +
+      "another employee's records without it is a 403, not an empty page.",
+  })
   @ApiPagedResponse(OvertimeResponseDto)
-  @ApiCommonErrors(401)
+  @ApiCommonErrors(401, 403)
   async listOvertime(
     @Query() query: ListOvertimeQueryDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<PagedResult<OvertimeResponseDto>> {
     const { rows, total } = await this.service.listOvertime(
       { employeeId: query.employeeId, status: query.status },
       query.limit,
       query.offset,
+      user,
     );
     return buildPageResult(rows.map(toOvertimeDto), total, query.limit, query.offset);
   }
@@ -306,16 +339,23 @@ export class WorkforceController {
 
   // ── Shift logs ─────────────────────────────────────────────────────────────
   @Get('shifts')
-  @ApiOperation({ summary: 'List night/on-call/weekend shift logs' })
+  @ApiOperation({
+    summary: 'List night/on-call/weekend shift logs',
+    description:
+      'Narrowed to the caller unless they hold `workforce.read` globally. Requesting ' +
+      "another employee's records without it is a 403, not an empty page.",
+  })
   @ApiPagedResponse(ShiftLogResponseDto)
-  @ApiCommonErrors(401)
+  @ApiCommonErrors(401, 403)
   async listShifts(
     @Query() query: ListShiftLogsQueryDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<PagedResult<ShiftLogResponseDto>> {
     const { rows, total } = await this.service.listShiftLogs(
       { employeeId: query.employeeId, shiftType: query.shiftType },
       query.limit,
       query.offset,
+      user,
     );
     return buildPageResult(rows.map(toShiftLogDto), total, query.limit, query.offset);
   }

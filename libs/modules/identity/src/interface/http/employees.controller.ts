@@ -165,7 +165,15 @@ export class EmployeesController {
 
   // ── Avatar ──────────────────────────────────────────────────────────────────
 
+  // The scope descriptor matters as much as the permission here. `:id` is the SUBJECT
+  // employee, not the caller — `EmployeeService.presignAvatar` loads it only as a 404
+  // guard and records the caller as the file's uploader, so without a check any
+  // authenticated caller could replace any employee's photo. Naming `employee` as the
+  // resource has ResourceScopeResolver load the row and supply `ownerId`, which is what
+  // lets a `self`-scoped grant match its holder and a `dept`-scoped one match their
+  // department. A global grant passes as before.
   @Post(':id/avatar/presign')
+  @RequirePermission('employee.write', { resource: 'employee', from: 'param', field: 'id' })
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an employee avatar' })
   @ApiOkResponse({
     schema: {
@@ -187,6 +195,7 @@ export class EmployeesController {
   }
 
   @Post(':id/avatar/confirm')
+  @RequirePermission('employee.write', { resource: 'employee', from: 'param', field: 'id' })
   @ApiOperation({ summary: 'Confirm avatar upload completed — links the photo to the employee' })
   @ApiOkResponse({
     schema: { properties: { avatarUrl: { type: 'string' } }, required: ['avatarUrl'] },
@@ -201,6 +210,7 @@ export class EmployeesController {
   }
 
   @Get(':id/avatar')
+  @RequirePermission('employee.read', { resource: 'employee', from: 'param', field: 'id' })
   @ApiOperation({ summary: 'Get a time-limited download URL for the employee avatar' })
   @ApiOkResponse({
     schema: {
@@ -208,7 +218,7 @@ export class EmployeesController {
       required: ['avatarUrl'],
     },
   })
-  @ApiCommonErrors(401, 404)
+  @ApiCommonErrors(401, 403, 404)
   async getAvatarUrl(@Param('id') id: string) {
     return this.employeeService.getAvatarUrl(id);
   }
