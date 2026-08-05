@@ -85,6 +85,13 @@
       "when": 1783000005000,
       "tag": "0011_shared_identity_adopt",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783000006000,
+      "tag": "0012_app_role_least_privilege",
+      "breakpoints": true
     }
   ]
 }

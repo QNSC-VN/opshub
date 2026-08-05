@@ -137,6 +137,73 @@ variable "graph_client_secret_set" {
   default     = false
 }
 
+variable "db_role_passwords_set" {
+  description = <<-EOT
+    Inject `db-app-password` / `db-worker-password` into the MIGRATOR, so the one-off
+    cutover task can run `ALTER ROLE ... LOGIN PASSWORD ...` against them.
+
+    A SEPARATE flag from `db_least_privilege`, and it has to be. The two steps are strictly
+    ordered — the roles need a password before anything can authenticate as them — and each
+    flag drives a different workload:
+
+      db_role_passwords_set = true   → migrator can read the passwords, so the cutover
+                                       task can set them on the roles
+      db_least_privilege    = true   → api and worker authenticate as those roles
+
+    Folding them into one flag makes the cutover impossible: a single apply would both hand
+    the migrator the passwords and point the runtime at roles that are still NOLOGIN, so api
+    and worker would fail with 28P01 before the cutover task could run. Hence two flags,
+    flipped in two applies.
+
+    OFF by default for the same reason `graph_client_secret_set` is: ECS cannot inject a
+    Secrets Manager secret that holds no value, so turning this on before populating the
+    secrets stops the migrator from starting at all.
+
+    Runbook: docs/runbooks/db-role-least-privilege.md
+  EOT
+  type        = bool
+  default     = false
+
+  validation {
+    # The one ordering mistake Terraform can actually observe. `db_least_privilege` without
+    # this flag means the cutover task never had the passwords to apply, so the roles are
+    # still NOLOGIN and both runtime tasks would fail authentication.
+    condition     = var.db_role_passwords_set || !var.db_least_privilege
+    error_message = "db_least_privilege requires db_role_passwords_set = true first: the roles need a password before api/worker can authenticate as them. Populate the secrets, set db_role_passwords_set, apply, run the cutover task, then set db_least_privilege."
+  }
+}
+
+variable "db_least_privilege" {
+  description = <<-EOT
+    Point the api and worker tasks at the least-privilege Postgres roles (`opshub_app` /
+    `opshub_worker`) instead of the RDS master credential.
+
+    OFF by default so merging this changes nothing that is running. Today all three tasks
+    connect as the master user, which OWNS every table: an ordinary HTTP request carries
+    rights to DROP the schema it is reading, and any row-level policy would be skipped,
+    because Postgres exempts a table's owner from RLS unless FORCE ROW LEVEL SECURITY is
+    also set. Moving the runtime off the owner is what makes an RLS layer possible at all.
+
+    This is the LAST of three steps, and the order is not fully enforceable in Terraform.
+    Before flipping it, in this environment:
+      1. `pnpm db:migrate` has run, so migration 0012 has created the roles;
+      2. the `db-app-password` / `db-worker-password` secrets hold a value and
+         `db_role_passwords_set` is true;
+      3. the cutover task has run, applying those values with
+         `ALTER ROLE ... LOGIN PASSWORD ...` — see `db_role_passwords_set`.
+    Flip it first and the tasks boot, fail to authenticate (28P01) and roll back. Step 2 is
+    enforced by the validation on `db_role_passwords_set`; step 3 cannot be, because
+    Terraform has no way to observe `pg_roles`.
+
+    The MIGRATOR is deliberately unaffected — it needs DDL, and narrowing it means
+    transferring schema ownership, a separate and more disruptive step.
+
+    Full sequence, verification and rollback: docs/runbooks/db-role-least-privilege.md
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "tunnel_enabled" {
   description = <<-EOT
     Serve this environment's api through a Cloudflare Tunnel sidecar instead of the
