@@ -137,6 +137,81 @@ variable "graph_client_secret_set" {
   default     = false
 }
 
+variable "tunnel_enabled" {
+  description = <<-EOT
+    Serve this environment's api through a Cloudflare Tunnel sidecar instead of the
+    shared ALB.
+
+    Not an optimisation any more — a requirement. The shared ALBs in
+    qnsc-infra/live/runtime-{dev,prod} were deleted once both products moved to tunnels,
+    so `runtime.outputs.https_listener_arn` is null and `attach_alb = true` has nothing
+    to attach to. Bringing an ALB back is `enable_alb = true` in that layer, at $18.40/mo
+    plus $3.65 per enabled AZ.
+
+    The saving is real but secondary: every request already arrives through Cloudflare
+    (the SPA is a Pages project whose Function proxies /v1/* to the API), so the load
+    balancer was a second TLS termination inside an already-proxied path.
+
+    Turning this ON turns OFF the ALB target-group attachment, because a tunnelled task
+    must not also be an ALB target — the target group would health-check a port the
+    connector owns, and traffic could arrive by two paths with different TLS termination.
+
+    REQUIRES `tunnel-token` to hold a value and `tunnel_id` to be set. Absent the token,
+    no sidecar is produced and the api has NO ingress at all, so those move together.
+
+    WHAT IS GIVEN UP: ALB access logs, the option of an origin-side AWS WAF, and
+    per-target-group CloudWatch alarms. Cloudflare's own analytics and a synthetic probe
+    have to replace them before production relies on this.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "tunnel_id" {
+  description = <<-EOT
+    Cloudflare Tunnel UUID, used to build the CNAME target `<id>.cfargotunnel.com`.
+
+    Not discoverable from the connector token — a tunnel and its token are separate reads
+    on the Cloudflare API — so it is passed in rather than derived. The tunnel itself is
+    created out of band, because Terraform cannot mint a token without also owning the
+    tunnel's lifecycle, and destroying a tunnel to recreate it invalidates every deployed
+    connector.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = !var.tunnel_enabled || var.tunnel_id != ""
+    error_message = "tunnel_enabled = true requires tunnel_id — the CNAME has no target without it."
+  }
+}
+
+variable "idle_schedule" {
+  description = <<-EOT
+    Cron/rate expression for an EventBridge Scheduler that IDLES this environment: stops
+    the RDS instance AND scales both services to zero. Null (the default) creates no
+    schedule, no role and no policy.
+
+    Both halves matter. Stopping only the database leaves Fargate tasks running against
+    an instance they cannot reach — still billed, unable to serve, and invisible, because
+    `/v1/healthz` answers 200 regardless of whether Postgres is reachable.
+
+    REQUIRED for any environment that is deliberately idle, because AWS FORCE-STARTS a
+    stopped RDS instance after seven days. Without a recurring re-stop the instance
+    quietly comes back and the saving disappears with nothing reporting it.
+
+    Expression is evaluated in Asia/Ho_Chi_Minh. Every Sunday 01:00 local — comfortably
+    inside the 7-day window:
+
+        cron(0 1 ? * SUN *)
+
+    Stopping an already-stopped instance fails with InvalidDBInstanceState, which is the
+    DESIRED state rather than an error, so the target takes no retries and no DLQ.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "cache" {
   description = <<-EOT
     Cache sizing. Encryption is NOT an option here: the module always enables KMS at
@@ -147,6 +222,12 @@ variable "cache" {
     environments; a single cache.t4g.micro is about $12/month.
   EOT
   type = object({
+    # Create the cache node at all. False is for an environment that is deliberately
+    # idle: ElastiCache cannot be stopped, only deleted, so the node is the one component
+    # of an idled environment that keeps billing (~$12/mo). Requires min_count = 0 on
+    # BOTH services — the `check` block in main.tf enforces it, because a task without a
+    # reachable cache does not fail loudly.
+    enabled   = optional(bool, true)
     mode      = optional(string, "node")
     node_type = optional(string, "cache.t4g.micro")
   })
@@ -223,22 +304,32 @@ variable "api" {
     explicit and reviewable.
   EOT
   type = object({
-    cpu               = number
-    memory            = number
+    cpu    = number
+    memory = number
+    # The FLOOR, and also the desired count at apply time. 0 parks the environment: it is
+    # what makes `idle_schedule` hold, because Application Auto Scaling restores a service
+    # within minutes of a scale-down when the floor is 1.
+    min_count         = optional(number, 1)
     max_count         = number
     use_spot          = optional(bool, false)
     cpu_target_pct    = optional(number, 65)
     memory_target_pct = optional(number, 75)
+    # Off for a schedule-driven environment, where autoscaling would fight
+    # `idle_schedule` by restoring the task it just scaled to zero. On by default,
+    # because a load-driven environment that silently stopped scaling is worse.
+    enable_autoscaling = optional(bool, true)
   })
 }
 
 variable "worker" {
   description = "Worker service sizing and scaling."
   type = object({
-    cpu       = number
-    memory    = number
-    max_count = number
-    use_spot  = optional(bool, false)
+    cpu                = number
+    memory             = number
+    min_count          = optional(number, 1)
+    max_count          = number
+    use_spot           = optional(bool, false)
+    enable_autoscaling = optional(bool, true)
   })
 }
 

@@ -74,6 +74,27 @@ module "stack" {
   // billed as custom CloudWatch metrics and nothing in this product queries them.
   container_insights = "disabled"
 
+  // ── Ingress: no ALB exists any more ─────────────────────────────────────────
+  // The shared ALBs in qnsc-infra/live/runtime-{dev,prod} were DELETED once both
+  // products moved to Cloudflare Tunnels, so `https_listener_arn` is null and there is
+  // nothing to attach to. The stack supports the tunnel path; turning it on needs three
+  // things done out of band first, in this order:
+  //
+  //   1. create the tunnel:  cloudflared tunnel create opshub-develop
+  //   2. put its connector token in opshub/develop/tunnel-token
+  //   3. set tunnel_id below and flip tunnel_enabled = true
+  //
+  // Until then this environment has NO ingress and must not be applied expecting one.
+  // The alternative is `enable_alb = true` in runtime-dev, at $18.40/mo + $3.65 per AZ.
+  tunnel_enabled = false
+  tunnel_id      = "" // set with tunnel_enabled
+
+  // ── Parked between deploys ──────────────────────────────────────────────────
+  // Twice daily, matching rally. Develop is exercised by CI deploys and the occasional
+  // manual poke, so the useful default is "down unless something just deployed": the
+  // deploy pipeline wakes RDS and restores the desired count, and this puts it back.
+  idle_schedule = "cron(0 21,3 * * ? *)"
+
   rds = {
     instance_class           = "db.t4g.micro"
     allocated_storage_gb     = 20
@@ -85,18 +106,29 @@ module "stack" {
   }
 
   // Fargate Spot: ~70% cheaper, and an interruption in develop is harmless.
+  // `min_count = 0` on both services is what makes `idle_schedule` hold: with a floor of
+  // 1, Application Auto Scaling puts the task back within minutes of the scale-down.
+  // Deploys and the schedule between them own the desired count.
+  //
+  // `enable_autoscaling = false` says out loud that this environment is schedule-driven,
+  // not load-driven — and stops autoscaling fighting the idler. `max_count` stays set: it
+  // no longer drives scaling, but it still sizes the DB connection pool.
   api = {
-    cpu       = 512
-    memory    = 1024
-    max_count = 3
-    use_spot  = true
+    cpu                = 512
+    memory             = 1024
+    min_count          = 0
+    max_count          = 3
+    use_spot           = true
+    enable_autoscaling = false
   }
 
   worker = {
-    cpu       = 256
-    memory    = 512
-    max_count = 2
-    use_spot  = true
+    cpu                = 256
+    memory             = 512
+    min_count          = 0
+    max_count          = 2
+    use_spot           = true
+    enable_autoscaling = false
   }
 
   uploads = {

@@ -98,6 +98,23 @@ module "stack" {
   // nothing. Treat any increase as PERMANENT — RDS refuses to shrink a volume and a
   // snapshot restore cannot land smaller, so coming back down needs the instance
   // replaced.
+  // ── Ingress: no ALB exists any more ─────────────────────────────────────────
+  // Same as develop — see ../develop/main.tf for the three out-of-band steps. Production
+  // has never been applied, so there is nothing to migrate: whenever it first runs, it
+  // runs tunnelled or not at all.
+  tunnel_enabled = false
+  tunnel_id      = ""
+
+  // ── Provisioned but idle, until go-live ─────────────────────────────────────
+  // Weekly, comfortably inside the window that matters: AWS FORCE-STARTS a stopped RDS
+  // instance after SEVEN DAYS, so without a recurring re-stop the saving silently
+  // evaporates and nothing reports it.
+  //
+  // REMOVE THIS AT GO-LIVE, in the same change that restores min_count and re-enables the
+  // cache. A schedule that stops production every Sunday is precisely wrong once there
+  // are users.
+  idle_schedule = "cron(0 1 ? * SUN *)"
+
   rds = {
     instance_class           = "db.t4g.micro"
     allocated_storage_gb     = 30
@@ -110,20 +127,38 @@ module "stack" {
 
   // On-demand, not Spot: an interruption here is user-visible. Tighter autoscale
   // targets than develop, so it scales out earlier.
+  // Floors at 0 and autoscaling off while production is idle. RESTORE BOTH AT GO-LIVE,
+  // in the same change that removes `idle_schedule` and re-enables the cache — they are
+  // one decision, and applying them separately produces an environment that is either
+  // paying for nothing or serving nothing.
   api = {
-    cpu               = 1024
-    memory            = 2048
-    max_count         = 6
-    use_spot          = false
-    cpu_target_pct    = 60
-    memory_target_pct = 70
+    cpu                = 1024
+    memory             = 2048
+    min_count          = 0
+    max_count          = 6
+    use_spot           = false
+    cpu_target_pct     = 60
+    memory_target_pct  = 70
+    enable_autoscaling = false
   }
 
   worker = {
-    cpu       = 512
-    memory    = 1024
-    max_count = 4
-    use_spot  = false
+    cpu                = 512
+    memory             = 1024
+    min_count          = 0
+    max_count          = 4
+    use_spot           = false
+    enable_autoscaling = false
+  }
+
+  // ElastiCache cannot be stopped, only deleted, so the node is the one component of an
+  // idled environment that keeps billing (~$12/mo). The `check` block in the stack module
+  // enforces that this requires min_count = 0 on both services: a task without a
+  // reachable cache does NOT fail loudly — REDIS_URL is optional and both the token
+  // denylist and the rate limiter fail open — so "no cache, tasks running" would degrade
+  // two security controls silently. RE-ENABLE AT GO-LIVE.
+  cache = {
+    enabled = false
   }
 
   // `force_destroy` stays false and no extra CORS origin is allowed: production
