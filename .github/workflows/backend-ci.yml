@@ -156,6 +156,15 @@ jobs:
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api-test
 
+      # The coverage thresholds are a ratchet the config asks for in a comment — "raise these
+      # as suites are added" — and a comment is not a gate. They had drifted 5-8 points behind
+      # actual, far enough that a third of the suite could be deleted with `test:cov` still
+      # green. This fails when any floor falls more than 3 points behind measured coverage, so
+      # raising them stops being a thing to remember. Reads the json-summary report the step
+      # above just wrote, so it never runs coverage twice.
+      - name: Coverage floors track actual coverage
+        run: pnpm check:coverage-floors
+
       - name: E2E tests
         run: pnpm test:e2e
         env:

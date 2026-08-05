@@ -59,17 +59,26 @@ export default defineConfig({
     exclude: ['node_modules', 'dist'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'lcov'],
+      // `json-summary` writes coverage/coverage-summary.json, which
+      // `pnpm check:coverage-floors` reads to enforce the ratchet described below.
+      reporter: ['text', 'lcov', 'json-summary'],
       include: ['libs/**/*.ts', 'apps/api/**/*.ts', 'apps/worker/**/*.ts'],
       exclude: ['**/*.spec.ts', '**/*.module.ts', '**/index.ts'],
-      // Coverage ratchet: floors set just below current coverage so CI stays
-      // green while preventing regressions. Raise these as suites are added —
-      // never lower them. (Current ~lines 16% / funcs 11% / branches 12% / stmts 16%.)
+      // Coverage ratchet: floors sit just below current coverage so CI stays green while a
+      // regression fails. Raise them as suites are added — never lower them.
+      //
+      // That instruction used to be a comment and nothing else, so it rotted: the note here
+      // claimed ~16% while measured coverage had reached 22%, leaving 5-8 points of slack on
+      // every metric — enough that a third of the suite could be deleted with CI still
+      // green. `pnpm check:coverage-floors` now fails when any floor falls more than 3 points
+      // behind actual, so raising these is no longer a thing to remember.
+      //
+      // Measured 2026-08-05: lines 22.22 / statements 22.15 / branches 18.26 / functions 15.48.
       thresholds: {
-        lines: 15,
-        functions: 10,
-        branches: 10,
-        statements: 15,
+        lines: 21,
+        functions: 14,
+        branches: 17,
+        statements: 21,
       },
     },
   },
