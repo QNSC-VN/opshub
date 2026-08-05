@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  AuthzService,
   ConflictException,
   NotFoundException,
+  PermissionDeniedException,
   PreconditionFailedException,
   ErrorCodes,
   RequestEngine,
@@ -40,7 +42,73 @@ export class WorkforceService {
     private readonly audit: AuditService,
     private readonly engine: RequestEngine,
     private readonly storage: StorageService,
+    private readonly authz: AuthzService,
   ) {}
+
+  // ── Access narrowing ───────────────────────────────────────────────────────
+
+  /**
+   * Constrain a list query to what `actor` may actually read.
+   *
+   * The four workforce collections all expose an OPTIONAL `employeeId` filter, and
+   * they hold HR records: hours worked, leave reasons, overtime, shift history. That
+   * combination is why the check lives here and not in a `@RequirePermission` scope
+   * descriptor. A descriptor reads the attribute off the request, so it can only
+   * answer "may I act on employee X" once X is named — when `employeeId` is omitted
+   * the guard resolves no resource and, per {@link AuthzService.check}, denies. A
+   * self-service caller listing their own timesheets sends no filter at all (the SPA
+   * never sends one), so the decorator would 403 the common case while still leaving
+   * an unfiltered global read for anyone holding the permission broadly.
+   *
+   * So the tier is decided first, then the filter is applied:
+   *
+   *  - holding `workforce.read` UNCONSTRAINED (a `global` grant — `check` with no
+   *    resource returns true only for those) means HR-wide read: the filter passes
+   *    through untouched, including "no filter" for a full listing;
+   *  - everyone else is pinned to their own records. `employeeId` is set to
+   *    `actor.sub`, which is the same identifier the create paths stamp
+   *    (`createTimesheet` writes `employeeId: actor.sub`) and the same one
+   *    `ScopeEvaluator`'s `self` matcher compares against.
+   *
+   * Asking for someone else's records without the permission is DENIED rather than
+   * silently narrowed to your own. Silent narrowing would return a plausible page of
+   * the wrong person's data — indistinguishable, to the caller, from "that employee
+   * has no records", which is a worse answer than a 403.
+   */
+  private async narrowToActor<T extends { employeeId?: string }>(
+    filters: T,
+    actor: Actor,
+  ): Promise<T> {
+    if (await this.authz.check(actor.sub, 'workforce.read')) return filters;
+
+    if (filters.employeeId && filters.employeeId !== actor.sub) {
+      throw new PermissionDeniedException(
+        'Missing permission: workforce.read — you may only list your own records',
+      );
+    }
+    return { ...filters, employeeId: actor.sub };
+  }
+
+  /**
+   * Assert `actor` may act on a record owned by `ownerId`.
+   *
+   * Used by the two transitions that are the owner's own act — submitting a timesheet
+   * for approval, and withdrawing a leave request. Both previously took the actor and
+   * discarded it (`_actor`), so any authenticated user could submit another employee's
+   * draft or cancel their approved leave, with the audit trail naming the wrong person
+   * as having done it.
+   *
+   * `workforce.approve` held unconstrained also passes: an HR administrator acting on
+   * an employee's behalf is a real workflow, and that permission already gates the
+   * review routes next door.
+   */
+  private async assertOwnerOrApprover(ownerId: string, actor: Actor): Promise<void> {
+    if (ownerId === actor.sub) return;
+    if (await this.authz.check(actor.sub, 'workforce.approve')) return;
+    throw new PermissionDeniedException(
+      'Missing permission: workforce.approve — this record belongs to another employee',
+    );
+  }
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
   async createTimesheet(
@@ -60,12 +128,14 @@ export class WorkforceService {
     filters: TimesheetFilters,
     limit: number,
     offset: number,
+    actor: Actor,
   ): Promise<{ rows: Timesheet[]; total: number }> {
-    return this.repo.listTimesheets(filters, limit, offset);
+    return this.repo.listTimesheets(await this.narrowToActor(filters, actor), limit, offset);
   }
 
-  async submitTimesheet(id: string, _actor: Actor): Promise<Timesheet> {
+  async submitTimesheet(id: string, actor: Actor): Promise<Timesheet> {
     const t = await this.getTimesheet(id);
+    await this.assertOwnerOrApprover(t.employeeId, actor);
     if (t.status !== 'draft' && t.status !== 'rejected') {
       throw new PreconditionFailedException(
         ErrorCodes.TIMESHEET_NOT_EDITABLE,
@@ -100,18 +170,17 @@ export class WorkforceService {
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────────
-  async createLeave(input: Omit<CreateLeaveInput, 'employeeId'>, actor: Actor): Promise<LeaveRequest> {
+  async createLeave(
+    input: Omit<CreateLeaveInput, 'employeeId'>,
+    actor: Actor,
+  ): Promise<LeaveRequest> {
     if (input.startDate > input.endDate) {
       throw new PreconditionFailedException(
         ErrorCodes.PRECONDITION_FAILED,
         'startDate must be on or before endDate',
       );
     }
-    const overlaps = await this.repo.hasOverlappingLeave(
-      actor.sub,
-      input.startDate,
-      input.endDate,
-    );
+    const overlaps = await this.repo.hasOverlappingLeave(actor.sub, input.startDate, input.endDate);
     if (overlaps) {
       throw new ConflictException(
         ErrorCodes.LEAVE_OVERLAPPING,
@@ -142,14 +211,20 @@ export class WorkforceService {
       action: 'leave.requested',
       resourceType: 'leave_request',
       resourceId: leave.id,
-      metadata: { leaveType: leave.leaveType, startDate: leave.startDate, endDate: leave.endDate, engineRequestId: engineItem.id },
+      metadata: {
+        leaveType: leave.leaveType,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        engineRequestId: engineItem.id,
+      },
     });
     return { ...leave, requestId: engineItem.id };
   }
 
   async getLeave(id: string): Promise<LeaveRequest> {
     const l = await this.repo.findLeaveById(id);
-    if (!l) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+    if (!l)
+      throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
     return l;
   }
 
@@ -157,8 +232,9 @@ export class WorkforceService {
     filters: LeaveFilters,
     limit: number,
     offset: number,
+    actor: Actor,
   ): Promise<{ rows: LeaveRequest[]; total: number }> {
-    return this.repo.listLeave(filters, limit, offset);
+    return this.repo.listLeave(await this.narrowToActor(filters, actor), limit, offset);
   }
 
   async reviewLeave(id: string, approve: boolean, actor: Actor): Promise<LeaveRequest> {
@@ -178,7 +254,11 @@ export class WorkforceService {
       }
     } else {
       // Legacy path
-      const updated = await this.repo.setLeaveStatus(id, approve ? 'approved' : 'rejected', actor.sub);
+      const updated = await this.repo.setLeaveStatus(
+        id,
+        approve ? 'approved' : 'rejected',
+        actor.sub,
+      );
       void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
@@ -192,8 +272,9 @@ export class WorkforceService {
     return this.getLeave(id);
   }
 
-  async cancelLeave(id: string, _actor: Actor): Promise<LeaveRequest> {
+  async cancelLeave(id: string, actor: Actor): Promise<LeaveRequest> {
     const l = await this.getLeave(id);
+    await this.assertOwnerOrApprover(l.employeeId, actor);
     if (l.status !== 'pending' && l.status !== 'approved') {
       throw new PreconditionFailedException(
         ErrorCodes.LEAVE_REQUEST_NOT_PENDING,
@@ -237,8 +318,9 @@ export class WorkforceService {
     filters: OvertimeFilters,
     limit: number,
     offset: number,
+    actor: Actor,
   ): Promise<{ rows: OvertimeEntry[]; total: number }> {
-    return this.repo.listOvertime(filters, limit, offset);
+    return this.repo.listOvertime(await this.narrowToActor(filters, actor), limit, offset);
   }
 
   async reviewOvertime(id: string, approve: boolean, actor: Actor): Promise<OvertimeEntry> {
@@ -258,7 +340,11 @@ export class WorkforceService {
       }
     } else {
       // Legacy path
-      const updated = await this.repo.setOvertimeStatus(id, approve ? 'approved' : 'rejected', actor.sub);
+      const updated = await this.repo.setOvertimeStatus(
+        id,
+        approve ? 'approved' : 'rejected',
+        actor.sub,
+      );
       void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
@@ -296,8 +382,9 @@ export class WorkforceService {
     filters: ShiftLogFilters,
     limit: number,
     offset: number,
+    actor: Actor,
   ): Promise<{ rows: ShiftLog[]; total: number }> {
-    return this.repo.listShiftLogs(filters, limit, offset);
+    return this.repo.listShiftLogs(await this.narrowToActor(filters, actor), limit, offset);
   }
 
   // ── Onboarding ─────────────────────────────────────────────────────────────
@@ -383,7 +470,8 @@ export class WorkforceService {
     actor: Actor,
   ): Promise<PresignUploadResult> {
     const leave = await this.repo.findLeaveById(leaveId);
-    if (!leave) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+    if (!leave)
+      throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
     return this.storage.presignUpload(
       {
         fileName: input.fileName,
@@ -404,7 +492,8 @@ export class WorkforceService {
     actor: Actor,
   ): Promise<{ documentUrl: string }> {
     const leave = await this.repo.findLeaveById(leaveId);
-    if (!leave) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+    if (!leave)
+      throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
 
     const result = await this.storage.confirmUpload(fileId, actor.sub);
 
@@ -430,7 +519,8 @@ export class WorkforceService {
   /** Returns a time-limited download URL for the leave supporting document. */
   async getLeaveDocumentUrl(leaveId: string): Promise<{ documentUrl: string | null }> {
     const leave = await this.repo.findLeaveById(leaveId);
-    if (!leave) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+    if (!leave)
+      throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
     if (!leave.documentStorageKey) return { documentUrl: null };
     const url = await this.storage.presignGet(leave.documentStorageKey);
     return { documentUrl: url };
