@@ -122,7 +122,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .select()
       .from(employees)
       .where(where)
-      .orderBy(desc(employees.createdAt))
+      .orderBy(desc(employees.createdAt), desc(employees.id))
       .limit(limit)
       .offset(offset);
 

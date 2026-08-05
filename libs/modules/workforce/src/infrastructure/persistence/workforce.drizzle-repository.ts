@@ -66,7 +66,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select()
       .from(timesheets)
       .where(where)
-      .orderBy(desc(timesheets.workDate))
+      .orderBy(desc(timesheets.workDate), desc(timesheets.id))
       .limit(limit)
       .offset(offset);
     const [{ count }] = await this.db
@@ -135,7 +135,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select()
       .from(leaveRequests)
       .where(where)
-      .orderBy(desc(leaveRequests.startDate))
+      .orderBy(desc(leaveRequests.startDate), desc(leaveRequests.id))
       .limit(limit)
       .offset(offset);
     const [{ count }] = await this.db
@@ -236,7 +236,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select()
       .from(overtimeEntries)
       .where(where)
-      .orderBy(desc(overtimeEntries.workDate))
+      .orderBy(desc(overtimeEntries.workDate), desc(overtimeEntries.id))
       .limit(limit)
       .offset(offset);
     const [{ count }] = await this.db
@@ -307,7 +307,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select()
       .from(shiftLogs)
       .where(where)
-      .orderBy(desc(shiftLogs.startsAt))
+      .orderBy(desc(shiftLogs.startsAt), desc(shiftLogs.id))
       .limit(limit)
       .offset(offset);
     const [{ count }] = await this.db

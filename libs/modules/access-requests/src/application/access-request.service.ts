@@ -130,7 +130,7 @@ export class AccessRequestService {
       .select()
       .from(accessGrants)
       .where(eq(accessGrants.requestId, requestId))
-      .orderBy(desc(accessGrants.grantedAt))
+      .orderBy(desc(accessGrants.grantedAt), desc(accessGrants.id))
       .limit(1);
 
     return grantRow;

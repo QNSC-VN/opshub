@@ -63,7 +63,7 @@ export class AssetDrizzleRepository implements IAssetRepository {
       .select()
       .from(assets)
       .where(where)
-      .orderBy(desc(assets.createdAt))
+      .orderBy(desc(assets.createdAt), desc(assets.id))
       .limit(limit)
       .offset(offset);
 
@@ -116,7 +116,7 @@ export class AssetDrizzleRepository implements IAssetRepository {
       .select()
       .from(assetAssignments)
       .where(eq(assetAssignments.assetId, assetId))
-      .orderBy(desc(assetAssignments.assignedAt));
+      .orderBy(desc(assetAssignments.assignedAt), desc(assetAssignments.id));
     return rows;
   }
 

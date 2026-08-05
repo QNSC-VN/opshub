@@ -37,7 +37,7 @@ export class CatalogDrizzleRepository implements ICatalogRepository {
   }
 
   async list(includeInactive: boolean): Promise<CatalogItem[]> {
-    const query = this.db.select().from(catalogItems).orderBy(asc(catalogItems.sortOrder), asc(catalogItems.name));
+    const query = this.db.select().from(catalogItems).orderBy(asc(catalogItems.sortOrder), asc(catalogItems.name), asc(catalogItems.id));
     if (!includeInactive) {
       return query.where(eq(catalogItems.isActive, true));
     }

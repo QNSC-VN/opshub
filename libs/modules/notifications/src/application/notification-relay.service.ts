@@ -93,7 +93,7 @@ export class NotificationRelayService
       })
       .from(notificationOutbox)
       .where(and(eq(notificationOutbox.status, 'pending'), lt(notificationOutbox.attempts, this.maxAttempts), lte(notificationOutbox.scheduledAt, new Date())))
-      .orderBy(asc(notificationOutbox.scheduledAt))
+      .orderBy(asc(notificationOutbox.scheduledAt), asc(notificationOutbox.id))
       .limit(this.batchSize)
       .for('update', { skipLocked: true });
   }

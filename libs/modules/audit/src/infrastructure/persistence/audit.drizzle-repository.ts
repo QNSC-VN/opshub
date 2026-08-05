@@ -39,7 +39,7 @@ export class AuditDrizzleRepository implements IAuditRepository {
       .select()
       .from(auditLogs)
       .where(where)
-      .orderBy(desc(auditLogs.occurredAt))
+      .orderBy(desc(auditLogs.occurredAt), desc(auditLogs.id))
       .limit(limit)
       .offset(offset);
 

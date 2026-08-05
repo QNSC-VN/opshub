@@ -267,7 +267,7 @@ export class AiService {
       })
       .from(complianceFindings)
       .where(eq(complianceFindings.status, status as 'open' | 'acknowledged' | 'resolved' | 'risk_accepted'))
-      .orderBy(desc(complianceFindings.detectedAt))
+      .orderBy(desc(complianceFindings.detectedAt), desc(complianceFindings.id))
       .limit(limit);
     return { count: rows.length, items: rows };
   }
@@ -291,7 +291,7 @@ export class AiService {
           gte(accessGrants.expiresAt, now),
         ),
       )
-      .orderBy(desc(accessGrants.grantedAt))
+      .orderBy(desc(accessGrants.grantedAt), desc(accessGrants.id))
       .limit(20);
     return { employeeId, activeGrantCount: rows.length, grants: rows };
   }
@@ -310,7 +310,7 @@ export class AiService {
       })
       .from(employees)
       .where(status ? eq(employees.status, status as 'active' | 'on_leave' | 'offboarded') : undefined)
-      .orderBy(desc(employees.createdAt))
+      .orderBy(desc(employees.createdAt), desc(employees.id))
       .limit(limit);
     // Client-side filter by query if provided (simple contains)
     const query = (input.query as string | undefined)?.toLowerCase();

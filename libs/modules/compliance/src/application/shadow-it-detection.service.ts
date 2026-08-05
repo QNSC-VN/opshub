@@ -149,7 +149,7 @@ export class ShadowItDetectionService {
       .select()
       .from(complianceFindings)
       .where(like(complianceFindings.source, 'shadow-it:%'))
-      .orderBy(complianceFindings.detectedAt)
+      .orderBy(complianceFindings.detectedAt, complianceFindings.id)
       .limit(limit);
   }
 }

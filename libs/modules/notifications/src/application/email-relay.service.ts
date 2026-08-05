@@ -77,7 +77,7 @@ export class EmailRelayService
       })
       .from(emailOutbox)
       .where(and(eq(emailOutbox.status, 'pending'), lt(emailOutbox.attempts, this.maxAttempts), lte(emailOutbox.scheduledAt, new Date())))
-      .orderBy(asc(emailOutbox.scheduledAt))
+      .orderBy(asc(emailOutbox.scheduledAt), asc(emailOutbox.id))
       .limit(this.batchSize)
       .for('update', { skipLocked: true });
   }
