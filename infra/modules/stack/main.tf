@@ -86,7 +86,11 @@ locals {
   # unconditionally, so a plaintext scheme would simply fail to connect. ioredis turns
   # TLS on from the scheme alone, so the app needs no configuration. Not a secret — an
   # endpoint address grants nothing on its own — so it travels as plain env.
-  valkey_url = "rediss://${module.cache.endpoint}:${module.cache.port}"
+  # `.invalid` is reserved by RFC 2606 and can never resolve, so an idled environment
+  # that somehow runs a task fails with a loud DNS error naming the cause rather than
+  # quietly degrading. The real guard is the `check` block at the bottom of this file:
+  # with the cache off, no task may run at all.
+  valkey_url = var.cache.enabled ? "rediss://${module.cache[0].endpoint}:${module.cache[0].port}" : "rediss://cache-disabled.invalid:6379"
 
   tags = { Environment = var.env }
 
@@ -172,7 +176,7 @@ locals {
 # signal — a task injected with an empty secret fails to boot, so a forgotten secret
 # is a failed deploy rather than an app running on a blank credential.
 module "secrets" {
-  source      = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/secrets?ref=secrets-v1.1.0"
+  source      = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/secrets?ref=secrets-v2.1.0"
   prefix      = "${var.product}/${var.env}"
   kms_key_arn = local.kms_key_arn
 
@@ -182,9 +186,15 @@ module "secrets" {
   # RDS-managed secret AWS rotates (see local.app_secrets) — and so is `jwt-public-key`,
   # which the app derives from the private half at boot.
   secret_names = {
-    "jwt-private"         = "JWT ES256 private key, EC P-256 (PEM or base64-encoded PEM). The public half is derived from it."
-    "cookie-secret"       = "Fastify cookie signing secret (min 32 chars)"
-    "csrf-secret"         = "HMAC key binding a CSRF token to its session (min 32 chars). Distinct from cookie-secret so the two rotate independently."
+    "jwt-private"   = "JWT ES256 private key, EC P-256 (PEM or base64-encoded PEM). The public half is derived from it."
+    "cookie-secret" = "Fastify cookie signing secret (min 32 chars)"
+    "csrf-secret"   = "HMAC key binding a CSRF token to its session (min 32 chars). Distinct from cookie-secret so the two rotate independently."
+    # Cloudflare Tunnel connector token (cloudflared TUNNEL_TOKEN). Created out of band
+    # with the tunnel itself — Terraform cannot mint a token without owning the tunnel's
+    # lifecycle, and destroying a tunnel to recreate it invalidates every deployed
+    # connector. Present unconditionally so `secret_arns["tunnel-token"]` resolves; the
+    # sidecar is what is gated, not the container.
+    "tunnel-token"        = "Cloudflare Tunnel connector token (cloudflared TUNNEL_TOKEN)"
     "entra-client-secret" = "Entra confidential-client secret for the BFF server-side code exchange"
     "graph-client-secret" = "Microsoft Graph app client secret (client-credentials flow for Graph sync jobs)"
   }
@@ -233,6 +243,7 @@ module "rds" {
 # into the task is not. At-rest KMS and transit encryption are both on, which is why
 # the URL above is `rediss://`.
 module "cache" {
+  count  = var.cache.enabled ? 1 : 0
   source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/cache?ref=cache-v1.0.0"
 
   name              = "${local.name}-valkey"
@@ -311,7 +322,7 @@ module "ecs_cluster" {
 
 # ── ECS service — API ─────────────────────────────────────────────────────────
 module "api" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v2.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v2.1.0"
 
   service_name = "api"
   cluster_name = module.ecs_cluster.cluster_name
@@ -330,10 +341,13 @@ module "api" {
   # One task at rest in both environments; autoscaling adds more on load. Production
   # buys redundancy through `max_count` and the ALB health check rather than by
   # standing a second task up permanently.
-  desired_count      = 1
-  min_count          = 1
-  max_count          = var.api.max_count
-  use_spot           = var.api.use_spot
+  desired_count = 1
+  min_count     = 1
+  max_count     = var.api.max_count
+  use_spot      = var.api.use_spot
+  # Off for an environment driven by a schedule rather than by load: autoscaling would
+  # fight `idle_schedule`, restoring the task it just scaled to zero.
+  enable_autoscaling = var.api.enable_autoscaling
   cpu_target_pct     = var.api.cpu_target_pct
   memory_target_pct  = var.api.memory_target_pct
   log_retention_days = var.log_retention_days
@@ -342,12 +356,23 @@ module "api" {
   # Priority 200 is opshub's slot in both environments (rally holds 100) — a constant,
   # not a variable, because two products colliding on a priority is a deploy failure
   # and the value has to be reasoned about across repos, not per environment.
-  attach_alb        = true
-  alb_listener_arn  = data.terraform_remote_state.runtime.outputs.https_listener_arn
+  # Tunnel and ALB are mutually exclusive. A task served by a tunnel must not also be an
+  # ALB target: the target group would health-check a port the connector already owns,
+  # and traffic could arrive by two paths with different TLS termination.
+  #
+  # `try()` on the listener ARN because the output is NULL now that the shared ALBs are
+  # gone — referencing it directly fails the plan even on the tunnelled path, where the
+  # value is never used.
+  attach_alb        = !var.tunnel_enabled
+  alb_listener_arn  = try(data.terraform_remote_state.runtime.outputs.https_listener_arn, "")
   alb_priority      = 200
   alb_path_patterns = ["/*"]
   alb_host_headers  = [var.api_domain]
   health_check_path = "/v1/healthz"
+
+  # Merged into the task definition; the connector reaches the app at 127.0.0.1:3000
+  # through the shared task network namespace. Empty list while the tunnel is off.
+  additional_containers = module.tunnel_api.container_definitions
 
   # Includes the AWS-managed RDS secret: the execution role needs GetSecretValue on it
   # to inject DATABASE_USER/PASSWORD. Omit it and the task cannot start at all ("unable
@@ -374,7 +399,7 @@ module "api" {
 
 # ── ECS service — worker ──────────────────────────────────────────────────────
 module "worker" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v2.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-service?ref=ecs-service-v2.1.0"
 
   service_name = "worker"
   cluster_name = module.ecs_cluster.cluster_name
@@ -389,10 +414,11 @@ module "worker" {
   subnet_ids        = data.terraform_remote_state.runtime.outputs.private_subnet_ids
   security_group_id = data.terraform_remote_state.runtime.outputs.sg_app_id
 
-  desired_count      = 1
-  min_count          = 1
+  desired_count      = var.worker.min_count
+  min_count          = var.worker.min_count
   max_count          = var.worker.max_count
   use_spot           = var.worker.use_spot
+  enable_autoscaling = var.worker.enable_autoscaling
   log_retention_days = var.log_retention_days
 
   # No listener rule: the worker serves no HTTP traffic.
@@ -459,6 +485,30 @@ module "migrator" {
   tags = merge(local.tags, { Service = "migrator" })
 }
 
+# ── Cloudflare Tunnel connector (api ingress without a load balancer) ─────────
+# A cloudflared sidecar dials OUT to the Cloudflare edge, so the api serves with no
+# inbound listener, no target group and no public IPv4.
+#
+# This is not merely cheaper, it is now REQUIRED: the shared ALBs in
+# qnsc-infra/live/runtime-{dev,prod} were deleted once both products moved to tunnels,
+# so `runtime.outputs.https_listener_arn` is null and there is nothing left to attach
+# to. An ALB was also a second TLS termination inside an already-Cloudflare-proxied
+# path — the SPA is a Pages project whose Function proxies /v1/* here, and the old ALB
+# security group admitted only Cloudflare edge ranges.
+#
+# Gated on `tunnel_enabled`: with it false the module produces no container, so this is
+# inert until a tunnel and its token exist for the environment.
+#
+# The WORKER gets none — it is a relay with no HTTP surface.
+module "tunnel_api" {
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/tunnel-agent?ref=tunnel-agent-v1.0.0"
+
+  tunnel_token_secret_arn = var.tunnel_enabled ? module.secrets.secret_arns["tunnel-token"] : ""
+  app_port                = 3000
+  log_group               = "/ecs/${local.name}-api"
+  region                  = var.region
+}
+
 # ── Web SPA — Cloudflare Pages ────────────────────────────────────────────────
 # The SPA is served from Cloudflare Pages (zero egress, native SPA routing) and the
 # API from its own Cloudflare-proxied subdomain, so the ALB is never directly
@@ -499,7 +549,12 @@ module "dns_api" {
   zone_id = local.cloudflare_zone_id
   name    = var.api_record
   type    = "CNAME"
-  content = data.terraform_remote_state.runtime.outputs.alb_dns_name
+  # Tunnel or ALB, and the CNAME target is the whole difference:
+  #   tunnel — <tunnel-id>.cfargotunnel.com, a Cloudflare-internal name that resolves
+  #            only through the edge. It CANNOT be grey-clouded: an orange-cloud record
+  #            is the only way traffic reaches a connector.
+  #   ALB    — the load balancer's public DNS name (null today; see module.tunnel_api).
+  content = var.tunnel_enabled ? "${var.tunnel_id}.cfargotunnel.com" : try(data.terraform_remote_state.runtime.outputs.alb_dns_name, "")
   proxied = true
   comment = "${local.name} API → ALB via Cloudflare proxy (managed by ${var.product}-infra ${var.env})"
 }
@@ -523,6 +578,164 @@ check "db_pool_fits_instance_class" {
       "+ worker ${var.worker.max_count}x${local.worker_pool_max}",
       "> ${local.db_pool_budget} usable of ${local.db_max_connections}.",
       "Lower a max_count or move to a larger instance class.",
+    ])
+  }
+}
+
+# ── Idling: stop the database AND scale the services to zero ──────────────────
+# One mechanism, two uses: an environment parked before go-live, and off-hours on
+# develop if that is ever wanted.
+#
+# BOTH halves, because stopping only the database leaves Fargate tasks running against
+# an instance they cannot reach — still billed, unable to serve, and invisible, since
+# `/v1/healthz` answers 200 whether or not Postgres is reachable.
+#
+# EventBridge Scheduler's universal target calls the AWS API directly: no Lambda to own,
+# patch or pay for.
+resource "aws_iam_role" "idler" {
+  count = var.idle_schedule == null ? 0 : 1
+  name  = "${local.name}-idler"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      # Confused-deputy guard: without it, any other account's schedule could assume this
+      # role. Scoped to this account's schedules only.
+      Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
+    }]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "idler" {
+  count = var.idle_schedule == null ? 0 : 1
+  name  = "idle-environment"
+  role  = aws_iam_role.idler[0].id
+
+  # Stop only — not Start, not Reboot. The schedule's whole job is to REMOVE capacity, and
+  # a role that can also start an instance turns a scheduling mistake into a cost
+  # increase. Waking is the deploy pipeline's job and carries its own grant.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "StopDatabase"
+        Effect   = "Allow"
+        Action   = "rds:StopDBInstance"
+        Resource = module.rds.instance_arn
+      },
+      {
+        Sid    = "ScaleServicesToZero"
+        Effect = "Allow"
+        Action = "ecs:UpdateService"
+        Resource = [
+          module.api.service_arn,
+          module.worker.service_arn,
+        ]
+      },
+    ]
+  })
+}
+
+resource "aws_scheduler_schedule" "rds_stop" {
+  count       = var.idle_schedule == null ? 0 : 1
+  name        = "${local.name}-rds-stop"
+  description = "Stops ${module.rds.identifier}; see var.idle_schedule for why this exists"
+
+  schedule_expression          = var.idle_schedule
+  schedule_expression_timezone = "Asia/Ho_Chi_Minh"
+
+  # OFF, not a window: this is not load-sensitive work, and an exact time keeps the
+  # relationship between a run and its CloudTrail entry unambiguous.
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:rds:stopDBInstance"
+    role_arn = aws_iam_role.idler[0].arn
+    input    = jsonencode({ DbInstanceIdentifier = module.rds.identifier })
+
+    # No retries and no dead-letter queue ON PURPOSE. The common outcome is
+    # InvalidDBInstanceState because the instance is ALREADY STOPPED — the desired state,
+    # not an error. Retrying would generate noise for a success and a DLQ would collect
+    # messages nobody should act on. A genuine permissions failure still shows in
+    # CloudTrail and in the schedule's own metrics.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+# Scale the services to zero on the same cadence as the database stop.
+#
+# `desired_count` is under `ignore_changes` in the ecs-service module, so setting it out
+# of band is the sanctioned, non-drifting mechanism — which is why this uses
+# ecs:UpdateService rather than an autoscaling scheduled action. A scheduled action would
+# mutate the scalable target's min/max, and `aws_appautoscaling_target` has no
+# `ignore_changes` on those, so every plan would show drift and any apply during the idle
+# window would silently wake the environment.
+#
+# A floor of 0 is what makes this hold: with min_count = 1, Application Auto Scaling
+# restores the service within minutes. `enable_autoscaling = false` is the other way.
+resource "aws_scheduler_schedule" "ecs_scale_down" {
+  for_each = var.idle_schedule == null ? {} : {
+    api    = module.api.service_name
+    worker = module.worker.service_name
+  }
+
+  name        = "${local.name}-${each.key}-scale-down"
+  description = "Scales ${each.value} to zero; see var.idle_schedule"
+
+  schedule_expression          = var.idle_schedule
+  schedule_expression_timezone = "Asia/Ho_Chi_Minh"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ecs:updateService"
+    role_arn = aws_iam_role.idler[0].arn
+    input = jsonencode({
+      Cluster      = module.ecs_cluster.cluster_name
+      Service      = each.value
+      DesiredCount = 0
+    })
+
+    # Idempotent — scaling an already-zero service to zero succeeds — so unlike the RDS
+    # stop there is no expected-failure case. Retries stay off for consistency; a missed
+    # run is corrected by the next tick.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+# ── Guard: an environment without a cache must run no tasks ───────────────────
+# `cache.enabled = false` deletes the node, and ElastiCache has no stopped state, so it
+# is the only way to stop an idled environment paying for one. But a task that cannot
+# reach its cache does NOT fail loudly here: REDIS_URL is optional in the app's env
+# schema, and the token denylist and the rate limiter both FAIL OPEN when Valkey is
+# unreachable. So the dangerous state is not "no cache" — it is "no cache, tasks
+# running", which degrades two security controls silently.
+#
+# Asserting it here makes that combination unreachable through Terraform: the plan fails
+# instead of producing an environment that looks healthy. Waking an idled environment is
+# therefore one coherent change — cache back on, floors back to 1 — rather than two that
+# can be applied in the wrong order.
+check "idled_environment_runs_no_tasks" {
+  assert {
+    condition = var.cache.enabled || (var.api.min_count == 0 && var.worker.min_count == 0)
+    error_message = join(" ", [
+      "cache.enabled = false requires min_count = 0 on BOTH services (api is",
+      "${var.api.min_count}, worker is ${var.worker.min_count}).",
+      "Without a cache, tasks do not fail — REDIS_URL is optional and the token denylist",
+      "and rate limiter fail open. Set the floors to 0, or re-enable the cache.",
     ])
   }
 }
