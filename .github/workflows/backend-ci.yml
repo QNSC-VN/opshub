@@ -104,6 +104,17 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
 
+      # `db:migrate` seeds only the prod-safe RBAC catalogue (permissions, roles, grants).
+      # The e2e suite authenticates as the DEMO EMPLOYEES — one per system role, so a spec
+      # can act as "the caller who holds nothing" and "the caller who holds it globally" —
+      # and those come from `db:seed`. Without this step every e2e `beforeAll` fails at
+      # dev-login with a 401 that looks nothing like the missing fixture it is.
+      - name: Seed demo fixtures for e2e
+        run: pnpm db:seed
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
+
       - name: Generate ephemeral JWT keypair for tests
         # Generates a fresh EC P-256 keypair per CI run — never reuse a static secret.
         # Keys are exported as base64-encoded PEM to $GITHUB_ENV for use in test steps.
