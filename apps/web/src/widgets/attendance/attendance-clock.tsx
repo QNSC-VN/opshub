@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/utils';
-import { getToken } from '@/shared/api/auth-store';
+import { sessionFetch } from '@/shared/api/session-fetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,32 +21,23 @@ interface AttendanceStatus {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
-const headers = () => ({
-  Authorization: `Bearer ${getToken() ?? ''}`,
-  'Content-Type': 'application/json',
-});
-
 async function fetchStatus(): Promise<AttendanceStatus> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/status`, {
-    headers: headers(),
-  });
+  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/status`);
   if (!res.ok) throw new Error('Failed to load attendance status');
   return res.json() as Promise<AttendanceStatus>;
 }
 
 async function clockIn(isRemote: boolean): Promise<void> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/clock-in`, {
+  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/clock-in`, {
     method: 'POST',
-    headers: headers(),
     body: JSON.stringify({ isRemote }),
   });
   if (!res.ok) throw new Error('Clock-in failed');
 }
 
 async function clockOut(): Promise<void> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/clock-out`, {
+  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/workforce/attendance/clock-out`, {
     method: 'POST',
-    headers: headers(),
     body: JSON.stringify({}),
   });
   if (!res.ok) throw new Error('Clock-out failed');

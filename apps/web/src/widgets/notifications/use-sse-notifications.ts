@@ -1,10 +1,13 @@
 /**
  * useSSENotifications — fetch-based Server-Sent Events hook.
  *
- * Why fetch instead of native EventSource:
- *   EventSource does not support custom headers.  Our API requires
- *   `Authorization: Bearer <token>`.  The fetch + ReadableStream approach
- *   gives us full header control while behaving identically to SSE.
+ * Why fetch and not native EventSource: the original reason was that EventSource cannot
+ * send custom headers and the API needed `Authorization: Bearer <token>`. That reason is
+ * gone — authentication is now an ambient cookie, which EventSource sends with
+ * `withCredentials`. fetch + ReadableStream is kept for a different reason worth stating:
+ * it gives an AbortController for deterministic teardown on unmount and full control of
+ * the reconnect back-off, where EventSource reconnects on its own schedule and cannot be
+ * cancelled as precisely.
  *
  * Reconnect strategy: exponential back-off (1 s → 2 s → 4 s … capped at 30 s).
  * On reconnect the `connected` event returns the current unread count so the
@@ -12,7 +15,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { ENV } from '@/shared/config/env';
-import { getToken } from '@/shared/api/auth-store';
+import { isAuthenticated } from '@/shared/api/auth-store';
+import { sessionFetch } from '@/shared/api/session-fetch';
 
 export interface SSENotificationPayload {
   notificationId: string;
@@ -66,15 +70,17 @@ export function useSSENotifications(): UseSSENotificationsResult {
     mountedRef.current = true;
 
     async function connect() {
-      const token = getToken();
-      if (!token) return; // not yet authenticated
+      // The session cookie travels automatically, so there is no token to check — but
+      // opening a stream before the bootstrap has resolved would just 401 and burn a
+      // back-off cycle.
+      if (!isAuthenticated()) return;
 
       const controller = new AbortController();
       abortRef.current = controller;
 
       try {
-        const res = await fetch(`${ENV.API_BASE_URL}/v1/notifications/stream`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/notifications/stream`, {
+          headers: { accept: 'text/event-stream' },
           signal: controller.signal,
         });
 

@@ -16,7 +16,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getToken } from '@/shared/api/auth-store';
+import { sessionFetch } from '@/shared/api/session-fetch';
 import { PageHeader } from '@/shared/ui/page-header';
 import { UpgradeGate } from '@/shared/ui/upgrade-gate';
 import { FEATURES } from '@/shared/config/features';
@@ -55,21 +55,16 @@ interface ScoreLatest {
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-const headers = () => ({
-  Authorization: `Bearer ${getToken() ?? ''}`,
-  'Content-Type': 'application/json',
-});
-
 async function fetchSecureScore(): Promise<{ latest: ScoreLatest | null }> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/score`, { headers: headers() });
+  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/security-posture/score`);
   if (!res.ok) throw new Error('Failed to load score');
   return res.json() as Promise<{ latest: ScoreLatest | null }>;
 }
 
 async function fetchScoreHistory(days: number): Promise<{ history: ScoreSnapshot[] }> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/score/history?days=${days}`, {
-    headers: headers(),
-  });
+  const res = await sessionFetch(
+    `${ENV.API_BASE_URL}/v1/security-posture/score/history?days=${days}`,
+  );
   if (!res.ok) throw new Error('Failed to load history');
   return res.json() as Promise<{ history: ScoreSnapshot[] }>;
 }
@@ -78,9 +73,7 @@ async function fetchBaseline(): Promise<{
   checks: BaselineCheck[];
   summary: Record<string, BaselineSummary>;
 }> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/baseline`, {
-    headers: headers(),
-  });
+  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/security-posture/baseline`);
   if (!res.ok) throw new Error('Failed to load baseline');
   return res.json() as Promise<{
     checks: BaselineCheck[];
@@ -89,9 +82,8 @@ async function fetchBaseline(): Promise<{
 }
 
 async function triggerSync(): Promise<void> {
-  const res = await fetch(`${ENV.API_BASE_URL}/v1/security-posture/sync`, {
+  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/security-posture/sync`, {
     method: 'POST',
-    headers: headers(),
   });
   if (!res.ok) throw new Error('Sync failed');
 }

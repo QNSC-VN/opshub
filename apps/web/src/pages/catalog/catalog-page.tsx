@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ENV } from '@/shared/config/env';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, X, Check, Clock, Package } from 'lucide-react';
-import { getToken } from '@/shared/api/auth-store';
+import { sessionFetch } from '@/shared/api/session-fetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,17 +19,13 @@ interface CatalogItem {
   createdAt: string;
 }
 
-function authHeader(): Record<string, string> {
-  return { Authorization: `Bearer ${getToken() ?? ''}` };
-}
-
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
 function useCatalogItems() {
   return useQuery({
     queryKey: ['catalog', 'items'],
     queryFn: async () => {
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/catalog`, { headers: authHeader() });
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/catalog`);
       if (!res.ok) throw new Error('Failed to load catalog');
       return res.json() as Promise<CatalogItem[]>;
     },
@@ -50,18 +46,20 @@ function RequestModal({ item, onClose, onSuccess }: RequestModalProps) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${ENV.API_BASE_URL}/v1/catalog/${item.id}/request`, {
+      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/catalog/${item.id}/request`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify({ reason }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { message?: string };
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(body.message ?? 'Failed to submit request');
       }
       return res.json() as Promise<{ requestId: string }>;
     },
-    onSuccess: () => { onSuccess(); onClose(); },
+    onSuccess: () => {
+      onSuccess();
+      onClose();
+    },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -82,9 +80,7 @@ function RequestModal({ item, onClose, onSuccess }: RequestModalProps) {
         </div>
 
         <div className="space-y-4 p-5">
-          {item.description && (
-            <p className="text-sm text-fg-subtle">{item.description}</p>
-          )}
+          {item.description && <p className="text-sm text-fg-subtle">{item.description}</p>}
           {item.slaHours && (
             <div className="flex items-center gap-1.5 text-xs text-fg-muted">
               <Clock className="h-3.5 w-3.5" />
@@ -143,7 +139,13 @@ function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () =
 
 // ── Catalog Item Card ─────────────────────────────────────────────────────────
 
-function ItemCard({ item, onRequest }: { item: CatalogItem; onRequest: (item: CatalogItem) => void }) {
+function ItemCard({
+  item,
+  onRequest,
+}: {
+  item: CatalogItem;
+  onRequest: (item: CatalogItem) => void;
+}) {
   return (
     <button
       onClick={() => onRequest(item)}
@@ -198,7 +200,9 @@ export function CatalogPage() {
     <div className="flex flex-1 flex-col overflow-auto">
       <div className="sticky top-0 z-10 border-b border-border bg-app px-6 py-3">
         <h1 className="text-base font-semibold text-fg">Service Catalog</h1>
-        <p className="text-xs text-fg-subtle">Request hardware, software, access, and more from IT</p>
+        <p className="text-xs text-fg-subtle">
+          Request hardware, software, access, and more from IT
+        </p>
       </div>
 
       <div className="p-6">
@@ -210,7 +214,9 @@ export function CatalogPage() {
           <div className="flex flex-col items-center justify-center py-20">
             <Package className="mb-3 h-10 w-10 text-fg-muted/40" />
             <p className="text-sm font-medium text-fg">No catalog items yet</p>
-            <p className="mt-1 text-xs text-fg-muted">Ask your IT administrator to set up the service catalog.</p>
+            <p className="mt-1 text-xs text-fg-muted">
+              Ask your IT administrator to set up the service catalog.
+            </p>
           </div>
         ) : (
           <div className="space-y-8">
@@ -239,18 +245,15 @@ export function CatalogPage() {
           onClose={() => setRequesting(null)}
           onSuccess={() => {
             void qc.invalidateQueries({ queryKey: ['requests'] });
-            setSuccessMsg(`Request submitted for "${requesting.name}". You'll be notified when it's approved.`);
+            setSuccessMsg(
+              `Request submitted for "${requesting.name}". You'll be notified when it's approved.`,
+            );
             setRequesting(null);
           }}
         />
       )}
 
-      {successMsg && (
-        <SuccessToast
-          message={successMsg}
-          onDismiss={() => setSuccessMsg('')}
-        />
-      )}
+      {successMsg && <SuccessToast message={successMsg} onDismiss={() => setSuccessMsg('')} />}
     </div>
   );
 }
