@@ -97,19 +97,41 @@ locals {
   # Injected into api AND worker. One list, because a secret the api can read and the
   # worker cannot is a runtime failure discovered in production, and the two lists
   # drifted apart exactly that way while they were maintained per environment.
-  app_secrets = concat([
-    # The database credential, read LIVE from the secret AWS owns and rotates. `:key::`
-    # selects one field of that secret's JSON.
-    #
-    # This replaced a hand-populated `db-url` secret. RDS is created with
-    # `manage_master_user_password = true`, so that copy went stale on every rotation
-    # and the next deploy would die with 28P01 (password authentication failed for
-    # "app_admin") with nothing drifting in Terraform to explain it. Host/port/name are
-    # not secret and travel as plain env below; the app composes the URL
-    # (db/database-url.ts). It is also what makes least-privilege roles possible — while
-    # the whole credential arrived as one URL there was nothing to point at another role.
+  # ── Database credential, per service ────────────────────────────────────────
+  # Read LIVE from the secret AWS owns and rotates; `:key::` selects one field of that
+  # secret's JSON.
+  #
+  # This replaced a hand-populated `db-url` secret. RDS is created with
+  # `manage_master_user_password = true`, so that copy went stale on every rotation and the
+  # next deploy would die with 28P01 (password authentication failed for "app_admin") with
+  # nothing drifting in Terraform to explain it. Host/port/name are not secret and travel as
+  # plain env below; the app composes the URL (db/database-url.ts). Splitting the credential
+  # into parts is also what makes least-privilege roles possible — while the whole thing
+  # arrived as one URL there was nothing to point at another role.
+  #
+  # Now per-service rather than shared, because api and worker authenticate as DIFFERENT
+  # roles once `db_least_privilege` is on. Under the flag the username stops being a secret
+  # field — `opshub_app` is not a credential — so it moves to plain env alongside
+  # host/port/name, and only the password comes from Secrets Manager.
+  api_db_secrets = var.db_least_privilege ? [
+    { name = "DATABASE_PASSWORD", secret_arn = module.secrets.secret_arns["db-app-password"] },
+    ] : [
     { name = "DATABASE_USER", secret_arn = "${module.rds.master_secret_arn}:username::" },
     { name = "DATABASE_PASSWORD", secret_arn = "${module.rds.master_secret_arn}:password::" },
+  ]
+
+  worker_db_secrets = var.db_least_privilege ? [
+    { name = "DATABASE_PASSWORD", secret_arn = module.secrets.secret_arns["db-worker-password"] },
+    ] : [
+    { name = "DATABASE_USER", secret_arn = "${module.rds.master_secret_arn}:username::" },
+    { name = "DATABASE_PASSWORD", secret_arn = "${module.rds.master_secret_arn}:password::" },
+  ]
+
+  api_db_env    = var.db_least_privilege ? [{ name = "DATABASE_USER", value = "opshub_app" }] : []
+  worker_db_env = var.db_least_privilege ? [{ name = "DATABASE_USER", value = "opshub_worker" }] : []
+
+  # Secrets both services share. The DATABASE_* pair is NOT here — see the two locals above.
+  app_secrets = concat([
     # The public half is DERIVED from this at boot, so there is no second secret to fall
     # out of step with it. A mismatched pair is the one failure a keypair cannot
     # otherwise have: signing succeeds, every verification rejects, and both values look
@@ -197,6 +219,12 @@ module "secrets" {
     "tunnel-token"        = "Cloudflare Tunnel connector token (cloudflared TUNNEL_TOKEN)"
     "entra-client-secret" = "Entra confidential-client secret for the BFF server-side code exchange"
     "graph-client-secret" = "Microsoft Graph app client secret (client-credentials flow for Graph sync jobs)"
+    # Passwords for the least-privilege roles migration 0012 creates. The CONTAINERS exist
+    # unconditionally so `secret_arns["db-app-password"]` always resolves and the IAM list
+    # keeps a plan-time-known length; what is gated is the INJECTION — see
+    # `db_role_passwords_set` and `db_least_privilege`. Empty until step 2 of the runbook.
+    "db-app-password"    = "Password for the opshub_app Postgres role (api). [A-Za-z0-9_-], 24+ chars."
+    "db-worker-password" = "Password for the opshub_worker Postgres role (worker). [A-Za-z0-9_-], 24+ chars."
   }
 
   tags = local.tags
@@ -380,9 +408,9 @@ module "api" {
   # api's roles, so it is covered by the api's copy of this list too.
   secret_arns = concat(values(module.secrets.secret_arns), [module.rds.master_secret_arn])
   kms_key_arn = local.kms_key_arn
-  secrets     = local.app_secrets
+  secrets     = concat(local.app_secrets, local.api_db_secrets)
 
-  environment_vars = concat(local.shared_env, [
+  environment_vars = concat(local.shared_env, local.api_db_env, [
     { name = "PORT", value = "3000" },
     # Per-task pool ceiling, derived from the RDS class — see local.api_pool_max.
     { name = "DATABASE_POOL_MAX", value = tostring(local.api_pool_max) },
@@ -430,11 +458,11 @@ module "worker" {
   # api's roles, so it is covered by the api's copy of this list too.
   secret_arns = concat(values(module.secrets.secret_arns), [module.rds.master_secret_arn])
   kms_key_arn = local.kms_key_arn
-  secrets     = local.app_secrets
+  secrets     = concat(local.app_secrets, local.worker_db_secrets)
 
   # Not plain `local.shared_env`: the pool ceiling is per-SERVICE, because it divides
   # the shared budget by this service's own autoscaling ceiling.
-  environment_vars = concat(local.shared_env, [
+  environment_vars = concat(local.shared_env, local.worker_db_env, [
     { name = "DATABASE_POOL_MAX", value = tostring(local.worker_pool_max) },
   ])
 
@@ -477,10 +505,24 @@ module "migrator" {
   #
   # Read live from the AWS-managed secret so a rotation can never leave the migrator
   # holding a stale password — the failure that made this worth changing.
-  secrets = {
+  #
+  # The two role passwords ride along once `db_role_passwords_set` is on, because the
+  # migrator task definition is what the one-off cutover task overrides: it is the only
+  # workload holding the master credential AND sitting in the database's subnets, and
+  # `ALTER ROLE ... LOGIN PASSWORD ...` needs both the admin connection and the new
+  # passwords in the same process. RDS is not publicly accessible and ECS Exec is off, so
+  # there is no other path in.
+  #
+  # Gated rather than unconditional: ECS cannot inject a Secrets Manager secret that holds
+  # no value, and injecting these while empty would stop the migrator from starting — which
+  # blocks every deploy, since the migrator runs before the services roll.
+  secrets = merge({
     DATABASE_USER     = "${module.rds.master_secret_arn}:username::"
     DATABASE_PASSWORD = "${module.rds.master_secret_arn}:password::"
-  }
+    }, var.db_role_passwords_set ? {
+    DATABASE_APP_PASSWORD    = module.secrets.secret_arns["db-app-password"]
+    DATABASE_WORKER_PASSWORD = module.secrets.secret_arns["db-worker-password"]
+  } : {})
 
   tags = merge(local.tags, { Service = "migrator" })
 }
