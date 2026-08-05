@@ -46,6 +46,19 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'   # semver only — no -rc suffix
 
+  # Manual re-run, matching rally. Needed because a deploy can fail for reasons that have
+  # nothing to do with the commit — an expired token, a throttled ECS API, a registry
+  # hiccup — and without it the only way to retry is an empty commit, which rewrites
+  # history to work around an infrastructure problem.
+  #
+  # Safe on both refs, and the gates below are why: nothing here branches on the TRIGGER,
+  # only on the ref. `wait-for-infra` keys off whether this sha touched infra/**;
+  # `wait-for-ci` skips entirely on a tag and otherwise waits on the Backend · CI run for
+  # this sha — which, for an already-merged commit, is complete, so `gh run watch` returns
+  # at once. It fails CLOSED when no run exists, so dispatching a commit that never passed
+  # CI blocks rather than deploys.
+  workflow_dispatch:
+
 concurrency:
   # Serialize by ENVIRONMENT, not raw ref: all prod (tag) deploys share one
   # group so prod DB migrations never run concurrently; develop shares another.
