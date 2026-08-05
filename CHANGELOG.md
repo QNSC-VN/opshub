@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/QNSC-VN/opshub/compare/v0.2.0...v0.2.1) (2026-08-05)
+
+
+### ✨ Features
+
+* **db:** least-privilege postgres roles, created but not yet cut over ([#106](https://github.com/QNSC-VN/opshub/issues/106)) ([f010fb3](https://github.com/QNSC-VN/opshub/commit/f010fb3d2260036de62a24758dcc9da16e941705))
+
+
+### 🐛 Bug Fixes
+
+* **workforce:** scope HR record reads and self-service transitions to the caller ([#105](https://github.com/QNSC-VN/opshub/issues/105)) ([fceac07](https://github.com/QNSC-VN/opshub/commit/fceac07ae619845eddc9c575eb74cade27017ab1))
+
 ## [0.2.0](https://github.com/QNSC-VN/opshub/compare/v0.1.1...v0.2.0) (2026-08-05)
 
 
