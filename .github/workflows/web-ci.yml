@@ -10,7 +10,14 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    types: [opened, synchronize, reopened, edited]
+    # NOT `edited`. That action exists only for the PR-title check, which now lives in
+    # pr-title.yml — and listening for it here was actively harmful: combined with
+    # `cancel-in-progress: true` below and the `if: action != 'edited'` guards this workflow
+    # used to carry, editing a PR title or body CANCELLED the in-flight real run and replaced
+    # it with one where every heavy job skipped. GitHub counts a skipped required check as
+    # passing, so the PR went green having executed nothing. Every run of this workflow is now
+    # a real one.
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: ci-web-${{ github.ref }}
@@ -28,8 +35,6 @@ env:
 jobs:
   quality:
     name: Lint & typecheck
-    # Skip the heavy gates on PR title/body edits; build cascade-skips via `needs`.
-    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -53,7 +58,6 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────
   test:
     name: Unit tests
-    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -124,32 +128,3 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────
   # 4. PR title — enforce Conventional Commits format on PR titles.
   #    Required because release-please derives CHANGELOG from PR titles.
-  # ─────────────────────────────────────────────────────────────────────────
-  pr-title:
-    name: PR title (conventional commits)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 5
-    steps:
-      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50  # v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            chore
-            docs
-            style
-            refactor
-            perf
-            security
-            test
-            build
-            ci
-            deps
-            revert
-          requireScope: false
-          subjectPattern: ^(?![A-Z]).+$
-          subjectPatternError: |
-            The subject "{subject}" must start with a lowercase letter.
