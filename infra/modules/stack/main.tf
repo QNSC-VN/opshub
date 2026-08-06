@@ -672,17 +672,38 @@ module "dns_api" {
 # Worth an assertion rather than a comment because the failure is invisible in a plan
 # and indirect at runtime — requests stall for `connectionTimeoutMillis` rather than
 # anything reporting "out of connections".
-check "db_pool_fits_instance_class" {
-  assert {
-    condition = (var.api.max_count * local.api_pool_max
-    + var.worker.max_count * local.worker_pool_max) <= local.db_pool_budget
-    error_message = join(" ", [
-      "DB pool ceiling exceeds the budget for ${var.rds.instance_class}:",
-      "api ${var.api.max_count}x${local.api_pool_max}",
-      "+ worker ${var.worker.max_count}x${local.worker_pool_max}",
-      "> ${local.db_pool_budget} usable of ${local.db_max_connections}.",
-      "Lower a max_count or move to a larger instance class.",
-    ])
+# ENFORCED as a resource precondition, not a `check` block. A violated check emits
+# `Warning: Check block assertion failed` and the plan exits 0 — so as a check this guard
+# reported a problem nobody would see in CI output and applied anyway. The condition reads
+# `local.*`, which a variable validation cannot, hence `terraform_data` rather than moving it
+# to variables.tf with the other three.
+#
+# `input` is bound to the guarded values so the precondition is re-evaluated whenever they
+# change, rather than only on first create — verified that a violation fails a plan even when
+# the resource already exists in state.
+#
+# Left as a check in #116 on the grounds that it "needs a lifecycle precondition and is worth
+# its own change"; rally then did exactly that in QNSC-VN/rally#392, so this closes the gap
+# rather than leaving the two repos with different mechanisms for the same guard.
+resource "terraform_data" "db_pool_fits_instance_class" {
+  input = {
+    api    = var.api.max_count * local.api_pool_max
+    worker = var.worker.max_count * local.worker_pool_max
+    budget = local.db_pool_budget
+  }
+
+  lifecycle {
+    precondition {
+      condition = (var.api.max_count * local.api_pool_max
+      + var.worker.max_count * local.worker_pool_max) <= local.db_pool_budget
+      error_message = join(" ", [
+        "DB pool ceiling exceeds the budget for ${var.rds.instance_class}:",
+        "api ${var.api.max_count}x${local.api_pool_max}",
+        "+ worker ${var.worker.max_count}x${local.worker_pool_max}",
+        "> ${local.db_pool_budget} usable of ${local.db_max_connections}.",
+        "Lower a max_count or move to a larger instance class.",
+      ])
+    }
   }
 }
 
