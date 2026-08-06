@@ -1,5 +1,5 @@
 // OTel must be imported before any other module — registers auto-instrumentation
-import { shutdownOtel } from '@platform/observability/otel';
+import { shutdownOtel } from './otel';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,

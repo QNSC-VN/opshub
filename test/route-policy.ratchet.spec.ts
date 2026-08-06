@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -100,7 +100,10 @@ function scanRoutes(): { all: Route[]; unpoliced: Route[] } {
     encoding: 'utf8',
   })
     .split('\n')
-    .filter(Boolean);
+    .filter(Boolean)
+    // See the note in query-ordering.ratchet.spec.ts: a tracked path is not necessarily a
+    // path on disk, and reading a missing one crashes the ratchet instead of reporting.
+    .filter((f) => existsSync(join(ROOT, f)));
 
   const all: Route[] = [];
   const unpoliced: Route[] = [];
