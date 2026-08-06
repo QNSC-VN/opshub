@@ -30,5 +30,34 @@ services:
       timeout: 5s
       retries: 5
 
+  localstack:
+    image: localstack/localstack:4
+    container_name: opshub-localstack
+    environment:
+      AWS_DEFAULT_REGION: ap-southeast-1
+      PERSISTENCE: 1
+      # Standard fake credentials — the AWS SDK v3 requires credentials to sign
+      # with even when the endpoint is an emulator that ignores them.
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    ports:
+      # 4567 avoids conflict with other local LocalStack instances (rally on 4566),
+      # matching how postgres and valkey are offset above. AWS_ENDPOINT_URL and
+      # SQS_OUTBOX_URL in .env must carry this port, not 4566.
+      - '4567:4566'
+    volumes:
+      - opshub_localstack:/var/lib/localstack
+      # Init hook: runs every time LocalStack becomes ready, creating the SQS
+      # queue, its DLQ and the files bucket. Mirrors how db/init bootstraps
+      # Postgres above.
+      - ./scripts/localstack:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test: ['CMD', 'awslocal', 'sqs', 'list-queues']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
 volumes:
   opshub_pgdata:
+  opshub_localstack:

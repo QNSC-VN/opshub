@@ -21,6 +21,16 @@ opshub/
 
 Workspace model, develop, build, and deploy conventions mirror [`rally`](https://github.com/QNSC-VN/rally): NestJS backend is the pnpm root, `apps/web` is a workspace member; deploy is push-based to ECS via `qnsc-ci`.
 
+## Local stack
+
+```bash
+cp .env.example .env                          # ports below are already wired in
+docker compose -f docker-compose.dev.yml up -d
+pnpm db:migrate                               # migrations + seed
+```
+
+Three containers, each on a port offset from rally's so both stacks can run at once: Postgres `5433`, Valkey `6380`, LocalStack `4567`. LocalStack creates the outbox queue, its DLQ and the uploads bucket on every start via `scripts/localstack/01-bootstrap.sh` — without it the outbox relay only logs events and uploads presign against a bucket that does not exist.
+
 ## Build status
 
 Backend (`api` + `worker`) and web **build clean**. Consolidation is faithful (identical file counts to source); the Dockerfile now exposes the `api`/`worker`/`migrator` targets the CI expects (previously missing).
