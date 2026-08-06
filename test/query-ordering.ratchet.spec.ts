@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -108,7 +108,12 @@ function scanOrderBys(): { all: Ordering[]; partial: Ordering[] } {
     encoding: 'utf8',
   })
     .split('\n')
-    .filter((f) => f.endsWith('.ts') && !f.includes('.spec.') && !f.includes('.test.'));
+    .filter((f) => f.endsWith('.ts') && !f.includes('.spec.') && !f.includes('.test.'))
+    // `git ls-files` lists TRACKED paths, which is not the same as paths on disk: a file
+    // deleted but not yet staged, or absent mid-rebase, is listed and unreadable. Reading it
+    // threw ENOENT and took the whole ratchet down — a crash rather than a verdict, which is
+    // the one outcome a smoke detector must not have. An absent file cannot hold a violation.
+    .filter((f) => existsSync(join(ROOT, f)));
 
   const all: Ordering[] = [];
   const partial: Ordering[] = [];
