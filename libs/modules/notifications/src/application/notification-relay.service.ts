@@ -19,14 +19,11 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { and, asc, eq, lt, lte } from 'drizzle-orm';
-import { InjectDrizzle } from '@platform';
+import { InjectDrizzle, Span } from '@platform';
 import type { DrizzleDB, DrizzleTx } from '@platform';
 import { AbstractOutboxRelay } from '@platform';
 import type { PostCommitTask } from '@platform';
-import {
-  renderNotification,
-  NotificationPubSubService,
-} from '@platform/notifications';
+import { renderNotification, NotificationPubSubService } from '@platform/notifications';
 import type { NotificationTemplateName, NotificationTemplateVars } from '@platform/notifications';
 import { notificationOutbox } from '../../../../../db/schema';
 import { NotificationsService } from './notifications.service';
@@ -73,6 +70,7 @@ export class NotificationRelayService
   }
 
   @Cron('*/5 * * * * *', { name: 'notification-relay' })
+  @Span('notification.relay')
   override async relay(): Promise<void> {
     return super.relay();
   }
@@ -82,17 +80,23 @@ export class NotificationRelayService
   protected async fetchBatch(tx: DrizzleTx): Promise<NotificationOutboxRow[]> {
     return tx
       .select({
-        id:             notificationOutbox.id,
-        recipientId:    notificationOutbox.recipientId,
-        actorId:        notificationOutbox.actorId,
-        type:           notificationOutbox.type,
-        vars:           notificationOutbox.vars,
-        resourceId:     notificationOutbox.resourceId,
-        attempts:       notificationOutbox.attempts,
+        id: notificationOutbox.id,
+        recipientId: notificationOutbox.recipientId,
+        actorId: notificationOutbox.actorId,
+        type: notificationOutbox.type,
+        vars: notificationOutbox.vars,
+        resourceId: notificationOutbox.resourceId,
+        attempts: notificationOutbox.attempts,
         idempotencyKey: notificationOutbox.idempotencyKey,
       })
       .from(notificationOutbox)
-      .where(and(eq(notificationOutbox.status, 'pending'), lt(notificationOutbox.attempts, this.maxAttempts), lte(notificationOutbox.scheduledAt, new Date())))
+      .where(
+        and(
+          eq(notificationOutbox.status, 'pending'),
+          lt(notificationOutbox.attempts, this.maxAttempts),
+          lte(notificationOutbox.scheduledAt, new Date()),
+        ),
+      )
       .orderBy(asc(notificationOutbox.scheduledAt), asc(notificationOutbox.id))
       .limit(this.batchSize)
       .for('update', { skipLocked: true });
@@ -102,21 +106,24 @@ export class NotificationRelayService
     // Check in-app preference before dispatching.
     const inAppEnabled = await this.prefs.isInAppEnabled(row.recipientId, row.type);
     if (!inAppEnabled) {
-      this.logger.debug({ recipientId: row.recipientId, type: row.type }, 'In-app notification suppressed by preference');
+      this.logger.debug(
+        { recipientId: row.recipientId, type: row.type },
+        'In-app notification suppressed by preference',
+      );
       return; // AbstractOutboxRelay marks the row as sent (dispatched)
     }
 
-    const type    = row.type as NotificationTemplateName;
-    const vars    = row.vars as NotificationTemplateVars[typeof type];
+    const type = row.type as NotificationTemplateName;
+    const vars = row.vars as NotificationTemplateVars[typeof type];
     const rendered = renderNotification(type, vars as never);
 
     const notification = await this.notificationsService.send({
-      recipientId:   row.recipientId,
-      actorId:       row.actorId    ?? undefined,
+      recipientId: row.recipientId,
+      actorId: row.actorId ?? undefined,
       type,
-      title:         rendered.title,
-      body:          rendered.body,
-      resourceId:    row.resourceId ?? undefined,
+      title: rendered.title,
+      body: rendered.body,
+      resourceId: row.resourceId ?? undefined,
       sourceEventId: row.idempotencyKey ?? row.id,
     });
 
@@ -126,11 +133,11 @@ export class NotificationRelayService
     return async () => {
       await this.pubSub.notifyUser({
         notificationId: notification.id,
-        recipientId:    row.recipientId,
+        recipientId: row.recipientId,
         type,
-        title:          rendered.title,
-        body:           rendered.body,
-        resourceId:     row.resourceId ?? undefined,
+        title: rendered.title,
+        body: rendered.body,
+        resourceId: row.resourceId ?? undefined,
       });
     };
   }

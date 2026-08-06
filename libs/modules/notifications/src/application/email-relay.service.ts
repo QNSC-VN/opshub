@@ -12,7 +12,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { and, asc, eq, lt, lte } from 'drizzle-orm';
-import { InjectDrizzle } from '@platform';
+import { InjectDrizzle, Span } from '@platform';
 import type { DrizzleDB, DrizzleTx } from '@platform';
 import { AbstractOutboxRelay } from '@platform';
 import type { PostCommitTask } from '@platform';
@@ -59,6 +59,7 @@ export class EmailRelayService
   }
 
   @Cron('*/5 * * * * *', { name: 'email-relay' })
+  @Span('email.relay')
   override async relay(): Promise<void> {
     return super.relay();
   }
@@ -68,15 +69,21 @@ export class EmailRelayService
   protected async fetchBatch(tx: DrizzleTx): Promise<EmailOutboxRow[]> {
     return tx
       .select({
-        id:             emailOutbox.id,
-        to:             emailOutbox.to,
-        template:       emailOutbox.template,
-        vars:           emailOutbox.vars,
-        attempts:       emailOutbox.attempts,
+        id: emailOutbox.id,
+        to: emailOutbox.to,
+        template: emailOutbox.template,
+        vars: emailOutbox.vars,
+        attempts: emailOutbox.attempts,
         idempotencyKey: emailOutbox.idempotencyKey,
       })
       .from(emailOutbox)
-      .where(and(eq(emailOutbox.status, 'pending'), lt(emailOutbox.attempts, this.maxAttempts), lte(emailOutbox.scheduledAt, new Date())))
+      .where(
+        and(
+          eq(emailOutbox.status, 'pending'),
+          lt(emailOutbox.attempts, this.maxAttempts),
+          lte(emailOutbox.scheduledAt, new Date()),
+        ),
+      )
       .orderBy(asc(emailOutbox.scheduledAt), asc(emailOutbox.id))
       .limit(this.batchSize)
       .for('update', { skipLocked: true });

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, asc, eq, lt, lte } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 import { createHmac } from 'crypto';
-import { InjectDrizzle, AbstractOutboxRelay } from '@platform';
+import { InjectDrizzle, AbstractOutboxRelay, Span } from '@platform';
 import type { DrizzleDB, DrizzleTx, PostCommitTask } from '@platform';
 import { webhookDeliveries, webhookSubscriptions } from '../../../../../db/schema';
 
@@ -35,6 +35,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
   }
 
   @Cron('*/10 * * * * *', { name: 'webhook-relay' })
+  @Span('webhook.relay')
   override async relay(): Promise<void> {
     return super.relay();
   }

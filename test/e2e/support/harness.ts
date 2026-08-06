@@ -21,6 +21,9 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { CacheService } from '@qnsc-vn/platform-cache';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { PlatformModule, DRIZZLE, type DrizzleDB } from '@platform';
+import { OutboxRelayService } from '../../../apps/worker/src/outbox/outbox-relay.service';
 import { AppModule } from '../../../apps/api/src/app.module';
 import { bootstrapApp } from '../../../apps/api/src/bootstrap/app.bootstrap';
 
@@ -132,4 +135,36 @@ export async function login(
 /** Bearer authorization header for a session. */
 export function bearer(session: Session): Record<string, string> {
   return { authorization: `Bearer ${session.accessToken}` };
+}
+
+/**
+ * Boot the outbox relay against the real database and the real SQS endpoint, with no API
+ * and no scheduler.
+ *
+ * `ScheduleModule.forRoot()` is deliberately NOT imported: the `@Cron` decorator on
+ * `relay()` then has nothing to register against, so the 5s timer never fires on its own
+ * and a spec calls `.relay()` when it means to, rather than racing a background tick for
+ * its own row.
+ *
+ * A live `pnpm start:dev:worker` is a COMPETING CONSUMER of `outbox_events` — it claims
+ * rows via `FOR UPDATE SKIP LOCKED` and the spec's row simply vanishes from its own
+ * query. Stop the worker before running these.
+ */
+export async function bootOutboxRelay(): Promise<{
+  module: TestingModule;
+  relay: OutboxRelayService;
+  db: DrizzleDB;
+}> {
+  const module = await Test.createTestingModule({
+    imports: [PlatformModule],
+    providers: [OutboxRelayService],
+  }).compile();
+
+  await module.init();
+
+  return {
+    module,
+    relay: module.get(OutboxRelayService),
+    db: module.get<DrizzleDB>(DRIZZLE),
+  };
 }
