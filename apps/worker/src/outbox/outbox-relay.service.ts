@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { and, asc, eq, lt } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB, AppConfigService } from '@platform';
+import { InjectDrizzle, type DrizzleDB, AppConfigService, buildAwsClientConfig } from '@platform';
 import { outboxEvents } from '../../../../db/schema';
 
 const BATCH_SIZE = 50;
@@ -30,7 +30,9 @@ export class OutboxRelayService {
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly config: AppConfigService,
   ) {
-    this.sqs = new SQSClient({ region: this.config.get('AWS_REGION') });
+    // Region-only against real AWS; endpoint + static credentials when
+    // AWS_ENDPOINT_URL points at LocalStack. See buildAwsClientConfig.
+    this.sqs = new SQSClient(buildAwsClientConfig(this.config));
     this.queueUrl = this.config.get('SQS_OUTBOX_URL');
   }
 

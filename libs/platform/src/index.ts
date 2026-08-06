@@ -1,5 +1,6 @@
 export * from './platform.module';
 export * from './config/index';
+export * from './aws/index';
 export * from './context/index';
 export * from './database/index';
 export * from './errors/index';
