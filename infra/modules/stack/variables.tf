@@ -279,6 +279,73 @@ variable "idle_schedule" {
   default     = null
 }
 
+variable "wake_schedule" {
+  type        = string
+  default     = null
+  description = <<-EOT
+    Cron/rate expression for the REVERSE of `idle_schedule`: starts the RDS instance and
+    scales both services back up. Null (the default) creates no wake schedules, no role and
+    no policy — which is the correct setting for production, where the only intended wake is
+    a release.
+
+    This exists because "the deploy pipeline is the wake signal" is not sufficient on its
+    own. It is right that develop should be up on the days it is being CHANGED, but it also
+    has to be up on the days it is merely USED — finding it stopped on a morning nobody
+    merged reads as an outage rather than as a saving, and RDS takes 4-5 minutes to become
+    available, so it cannot be waited out.
+
+    WEEKDAYS ONLY is the intended shape. A 7-day wake pays for two days a week nobody works,
+    which is most of what idling this environment was worth:
+
+        cron(0 8 ? * MON-FRI *)
+
+    Evaluated in Asia/Ho_Chi_Minh, like `idle_schedule`.
+
+    A SEPARATE IAM role from the idler, deliberately. The idler's policy is stop-only on the
+    documented grounds that "a role that can also start an instance turns a scheduling
+    mistake into a cost increase". That reasoning survives here by keeping the grants split:
+    the waker holds rds:StartDBInstance and ecs:UpdateService, and the idler still holds no
+    start permission of any kind. A fault in the wake cron can cost money and a fault in the
+    idle cron can cost availability, but neither can now cause the other.
+
+    THE WAKE COUNT IS A LITERAL 1, NOT min_count. This is the subtle part. `min_count = 0` is
+    exactly what lets an idled service STAY at zero — with a floor of 1, Application Auto
+    Scaling restores it within minutes and the idle never holds. So the floors cannot be
+    raised to describe the woken state and this schedule cannot read them. 1 is also the
+    count the deploy pipeline sets, so a wake and a deploy converge on one answer.
+
+    Consequence worth stating: `desired_count` now has THREE out-of-band writers — the
+    deploy, `idle_schedule`, and this. That is sanctioned because `desired_count` is under
+    `ignore_changes` in the ecs-service module. A fourth writer in the form of a scheduled
+    autoscaling action would NOT be, which is why this is built as ecs:UpdateService.
+  EOT
+
+  # `validation`, not a `check` block. A violated check emits
+  # `Warning: Check block assertion failed` and the plan exits 0 — measured on OpenTofu
+  # 1.12.3 — so a guard written that way would let exactly the state it forbids apply
+  # cleanly. A cross-variable validation exits 1. Same reason the `cache` validation below
+  # replaced a check.
+  validation {
+    # Waking an environment that nothing stops is strictly worse than not scheduling it:
+    # it is started on a cron, never idled, and it LOOKS deliberate. The reverse is
+    # legitimate — production idles and is woken only by a release — so this is asserted in
+    # one direction only.
+    condition     = var.wake_schedule == null || var.idle_schedule != null
+    error_message = "wake_schedule is set but idle_schedule is null, so this environment would be started on a schedule and never stopped by one. Set idle_schedule as well, or remove wake_schedule. (idle without wake is fine — that is production today.)"
+  }
+
+  validation {
+    # The mirror of the cache/floors rule. That one stops an idled environment from RUNNING
+    # tasks with no cache; this stops a schedule being created that would START them.
+    # Without it the two settings are individually valid and jointly produce the exact
+    # state the other forbids — tasks up, no cache, VALKEY_URL resolving nowhere, token
+    # denylist and rate limiter failing open — except on a timer, at 08:00, unattended.
+    condition     = var.wake_schedule == null || var.cache.enabled
+    error_message = "wake_schedule is set but cache.enabled is false. Waking would start tasks with no cache to reach: VALKEY_URL resolves nowhere and both the token denylist and the rate limiter fail open. Enable the cache, or remove wake_schedule."
+  }
+}
+
+
 variable "cache" {
   description = <<-EOT
     Cache sizing. Encryption is NOT an option here: the module always enables KMS at
@@ -299,6 +366,20 @@ variable "cache" {
     node_type = optional(string, "cache.t4g.micro")
   })
   default = {}
+
+  # Moved here from a `check` block in main.tf, which did NOT enforce it. That block's
+  # comment claimed "the plan fails instead of producing an environment that looks healthy";
+  # a violated check actually emits `Warning: Check block assertion failed` and exits 0, so
+  # the forbidden combination would have applied with a warning nobody reads in CI output.
+  #
+  # The combination matters because it fails QUIETLY: `VALKEY_URL` points at an unresolvable
+  # host, and the token denylist and rate limiter both fail OPEN rather than erroring. So the
+  # dangerous state is not "no cache" — it is "no cache, tasks running", which degrades two
+  # security controls while every health check still answers 200.
+  validation {
+    condition     = var.cache.enabled || (var.api.min_count == 0 && var.worker.min_count == 0)
+    error_message = "cache.enabled = false requires min_count = 0 on BOTH services. Without a cache, tasks do not fail loudly — VALKEY_URL resolves nowhere and the token denylist and rate limiter fail open. Set both floors to 0, or re-enable the cache."
+  }
 }
 
 // ── Per-environment tuning ──────────────────────────────────────────────────────
