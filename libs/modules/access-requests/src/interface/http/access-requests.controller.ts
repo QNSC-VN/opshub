@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -77,7 +77,7 @@ export class AccessRequestsController {
   @ApiOperation({ summary: 'Get an access request by id' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 404)
-  async getById(@Param('id') id: string): Promise<AccessRequestResponseDto> {
+  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<AccessRequestResponseDto> {
     return toDto(await this.service.getById(id));
   }
 
@@ -107,24 +107,32 @@ export class AccessRequestsController {
 
   @Post(':id/approve')
   @RequirePermission('access_request.security_approve')
-  @ApiOperation({ summary: 'Approve a request and issue a time-boxed grant' })
-  @ApiCreatedResponse({ type: AccessGrantResponseDto })
+  /**
+   * Returns the REQUEST as it now stands, not a grant: approval advances one step of a
+   * multi-step workflow, and an intermediate step issues no grant — the request stays
+   * `pending` for the next approver. Returning a grant here 500'd on exactly that case.
+   * The resulting `status` is what tells the caller whether anything further is needed.
+   */
+  @ApiOperation({ summary: 'Approve one step of a request; issues a grant on the final step' })
+  @ApiCreatedResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async approve(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewAccessRequestDto,
     @CurrentUser() user: JwtPayload,
-  ): Promise<AccessGrantResponseDto> {
-    const grant = await this.service.approve(id, dto.note ?? null, user);
+  ): Promise<AccessRequestResponseDto> {
+    const request = await this.service.approve(id, dto.note ?? null, user);
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
       action: 'access_request.approved',
       resourceType: 'access_request',
       resourceId: id,
-      metadata: { grantId: grant.id, note: dto.note ?? null },
+      // `status` rather than a grant id: an intermediate step has no grant, and recording
+      // the state the approval produced is what makes the trail readable either way.
+      metadata: { status: request.status, note: dto.note ?? null },
     });
-    return toGrantDto(grant);
+    return toDto(request);
   }
 
   @Post(':id/reject')
@@ -133,7 +141,7 @@ export class AccessRequestsController {
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async reject(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewAccessRequestDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessRequestResponseDto> {
@@ -155,7 +163,7 @@ export class AccessRequestsController {
   @ApiOkResponse({ schema: { type: 'object', properties: { status: { type: 'string' } } } })
   @ApiCommonErrors(401, 403, 404, 412)
   async revoke(
-    @Param('grantId') grantId: string,
+    @Param('grantId', ParseUUIDPipe) grantId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<{ status: string }> {
     await this.service.revokeGrant(grantId, user);

@@ -124,7 +124,23 @@ export class NotificationRelayService
       title: rendered.title,
       body: rendered.body,
       resourceId: row.resourceId ?? undefined,
-      sourceEventId: row.idempotencyKey ?? row.id,
+      // The OUTBOX ROW ID, never the idempotency key. These are two different dedup
+      // mechanisms on two different columns and conflating them broke every notification
+      // that wanted deduplication:
+      //
+      //   notification_outbox.idempotency_key  TEXT, unique  → dedups at ENQUEUE
+      //     ('ar_step1_notify:<uuid>', 'sla_breach:<uuid>', 'request_submitted:<uuid>')
+      //   in_app_notifications.source_event_id UUID, unique  → dedups at DELIVERY
+      //
+      // Passing the text key into the uuid column made Postgres reject it with
+      // `invalid input syntax for type uuid`, so the row burned all five attempts and
+      // dead-lettered. SLA-breach, request-submitted and access-request step
+      // notifications were all silently lost; notifications with no key fell back to
+      // row.id and worked, which is why it went unnoticed.
+      //
+      // row.id is one uuid per outbox row, so delivery stays exactly-once per row while
+      // the outbox's own unique index keeps duplicate ENQUEUES out in the first place.
+      sourceEventId: row.id,
     });
 
     // If notification was deduplicated (already exists), no SSE push needed.

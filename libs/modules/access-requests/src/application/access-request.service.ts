@@ -9,8 +9,8 @@ import {
 } from '@platform';
 import { AuditService } from '@modules/audit';
 import { newId, MS_PER_HOUR } from '@shared-kernel';
-import { desc, eq } from 'drizzle-orm';
-import { accessGrants, accessRequests } from '../../../../../db/schema';
+import { eq } from 'drizzle-orm';
+import { accessRequests } from '../../../../../db/schema';
 import {
   ACCESS_REQUEST_REPOSITORY,
   type IAccessRequestRepository,
@@ -86,11 +86,28 @@ export class AccessRequestService {
     return this.repo.list(filters, limit, offset);
   }
 
+  /**
+   * Approve one step of a request, returning the request as it now stands.
+   *
+   * NOT the grant, and that is the fix: with the engine path, approving advances a
+   * MULTI-STEP workflow, and an intermediate step creates no grant at all — the request
+   * stays `pending`, awaiting the next approver's `access_request.security_approve`. This
+   * used to be declared `Promise<AccessGrant>` and ended with a query for a grant row that
+   * does not exist yet, so it returned undefined and the controller threw
+   * `TypeError: Cannot read properties of undefined (reading 'id')` — a 500 on an approval
+   * that had in fact succeeded.
+   *
+   * TypeScript could not catch it: `const [row] = await query` is typed `T`, not
+   * `T | undefined`, without `noUncheckedIndexedAccess`.
+   *
+   * The issued grant, when the final step completes one, is read through the grants
+   * endpoints; the caller's own next step is driven by the returned `status`.
+   */
   async approve(
     requestId: string,
     note: string | null,
     actor: { sub: string; email: string },
-  ): Promise<AccessGrant> {
+  ): Promise<AccessRequest> {
     const request = await this.getById(requestId);
     if (request.status !== 'pending') {
       throw new PreconditionFailedException(
@@ -126,14 +143,10 @@ export class AccessRequestService {
       });
     }
 
-    const [grantRow] = await this.db
-      .select()
-      .from(accessGrants)
-      .where(eq(accessGrants.requestId, requestId))
-      .orderBy(desc(accessGrants.grantedAt), desc(accessGrants.id))
-      .limit(1);
-
-    return grantRow;
+    // Re-read rather than returning the pre-transition row: the engine may have advanced
+    // the step, resolved the request, or issued a grant, and the caller needs the state
+    // that actually resulted.
+    return this.getById(requestId);
   }
 
   async reject(
