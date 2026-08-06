@@ -31,6 +31,20 @@
 # talks to a queue or bucket that does not exist.
 set -euo pipefail
 
+# `awslocal` exists only inside the LocalStack container, where the init hook runs it.
+# CI starts LocalStack as a service container and executes THIS SAME FILE from the
+# runner, which has plain `aws` — so fall back to it with the endpoint pinned.
+#
+# One script, two callers, deliberately: rally's audit pipeline dropped 100% of events in
+# every deployed environment for months because its local bootstrap and its Terraform
+# described different topologies, and only the permissive one was ever exercised. A CI
+# copy of these commands would be the same mistake in a smaller form.
+if command -v awslocal >/dev/null 2>&1; then
+  aws_cmd() { awslocal "$@"; }
+else
+  aws_cmd() { aws --endpoint-url "${AWS_ENDPOINT_URL:-http://localhost:4566}" "$@"; }
+fi
+
 REGION="ap-southeast-1"
 QUEUE_NAME="opshub-outbox"
 BUCKET="opshub-files-dev"
@@ -50,16 +64,16 @@ dlq="${QUEUE_NAME}-dlq"
 # from the queue we just created rather than hand-assembling an ARN string — a
 # typo in a hand-built ARN produces a queue whose redrive silently targets
 # nothing.
-awslocal sqs create-queue --queue-name "$dlq" >/dev/null
-dlq_arn="$(awslocal sqs get-queue-attributes \
-  --queue-url "$(awslocal sqs get-queue-url --queue-name "$dlq" --output text --query 'QueueUrl')" \
+aws_cmd sqs create-queue --queue-name "$dlq" >/dev/null
+dlq_arn="$(aws_cmd sqs get-queue-attributes \
+  --queue-url "$(aws_cmd sqs get-queue-url --queue-name "$dlq" --output text --query 'QueueUrl')" \
   --attribute-names QueueArn --output text --query 'Attributes.QueueArn')"
 
 # RedrivePolicy's value is itself a JSON string, so it must be escaped inside the
 # --attributes JSON map (the shorthand form cannot express nested JSON).
 # VisibilityTimeout 60 matches `queues = { outbox = { visibility_timeout = 60 } }`.
 redrive="{\"deadLetterTargetArn\":\"${dlq_arn}\",\"maxReceiveCount\":\"${MAX_RECEIVE}\"}"
-awslocal sqs create-queue \
+aws_cmd sqs create-queue \
   --queue-name "$QUEUE_NAME" \
   --attributes "{\"VisibilityTimeout\":\"60\",\"RedrivePolicy\":\"${redrive//\"/\\\"}\"}" \
   >/dev/null
@@ -71,7 +85,7 @@ echo "[localstack-init] provisioning S3…"
 # create-bucket is not idempotent the way create-queue is: it returns
 # BucketAlreadyOwnedByYou on re-run, which `set -e` would otherwise treat as
 # fatal on every restart.
-awslocal s3api create-bucket \
+aws_cmd s3api create-bucket \
   --bucket "$BUCKET" \
   --region "$REGION" \
   --create-bucket-configuration "LocationConstraint=$REGION" \
@@ -82,7 +96,7 @@ awslocal s3api create-bucket \
 # into the presigned PUT (ContentLength is set by the browser automatically and
 # is a forbidden header name, so CORS does not govern it). Signing a header the
 # browser is not allowed to send fails every upload at preflight.
-awslocal s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "{
+aws_cmd s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "{
   \"CORSRules\": [{
     \"AllowedMethods\": [\"PUT\", \"GET\", \"HEAD\"],
     \"AllowedOrigins\": [\"${WEB_ORIGIN}\"],
@@ -93,7 +107,7 @@ awslocal s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "{
 }" >/dev/null
 
 # Abort incomplete multipart uploads so abandoned uploads do not accrue storage.
-awslocal s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
+aws_cmd s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
   --lifecycle-configuration '{
     "Rules": [{
       "ID": "abort-incomplete-multipart",

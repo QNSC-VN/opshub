@@ -1,112 +1,151 @@
-import { Injectable, Logger } from '@nestjs/common';
+/**
+ * OutboxRelayService — polls `messaging.outbox_events` for pending domain events and
+ * forwards them to SQS.
+ *
+ * Extends AbstractOutboxRelay, which owns the polling loop, the coalescing guard,
+ * transaction management, and the retry / dead-letter logic. This class provides only
+ * the SQS-specific behaviour: what to SELECT, how to publish, and how to mark rows.
+ *
+ * It used to hand-roll all of that, and the base class it should have been the archetype
+ * of was already being used by the email, notification and webhook relays. Three things
+ * came back with it:
+ *
+ *   - `outboxDeadLetter` on the TERMINAL failure. A domain event that exhausted its five
+ *     attempts was previously invisible to the CloudWatch metric filter that watches
+ *     every other relay, so the one relay whose failures nobody could see was this one.
+ *   - Wake-on-complete. A row inserted while a batch was already running waited a full
+ *     5s tick instead of being picked up as soon as the pass finished.
+ *   - An honest success count. The old log line counted
+ *     `batch.filter((e) => e.attempts < MAX_ATTEMPTS).length`, which is the WHERE clause
+ *     of the query that produced the batch — always the whole batch, and unaffected by
+ *     failures, because a failure never mutates the in-memory row. "Relayed 50 outbox
+ *     event(s)" printed even when all 50 publishes threw.
+ *
+ * Delivery guarantee: at-least-once. Consumers must be idempotent on the event `id`.
+ *
+ * NOTE: nothing consumes `opshub-outbox` yet, so a published message expires unread at
+ * the queue's 4-day retention. That is a topology decision recorded in
+ * `docs/DIVERGENCE.md`, not a defect in this relay — but it does mean this code path has
+ * never delivered anything to anybody, which is exactly the situation in which the
+ * defects above went unnoticed.
+ */
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { and, asc, eq, lt } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB, AppConfigService, buildAwsClientConfig } from '@platform';
+import {
+  InjectDrizzle,
+  type DrizzleDB,
+  type DrizzleTx,
+  AppConfigService,
+  AbstractOutboxRelay,
+  buildAwsClientConfig,
+  Span,
+} from '@platform';
 import { outboxEvents } from '../../../../db/schema';
 
-const BATCH_SIZE = 50;
-const MAX_ATTEMPTS = 5;
+type OutboxEventRow = {
+  id: string;
+  aggregateType: string;
+  aggregateId: string;
+  eventType: string;
+  payload: unknown;
+  attempts: number;
+};
 
-/**
- * Outbox relay — polls pending domain events and forwards them to SQS,
- * then marks them sent. Guarantees at-least-once delivery.
- *
- * Retry: up to MAX_ATTEMPTS retries with last_error recorded.
- * After MAX_ATTEMPTS failures the row moves to 'failed' and is excluded
- * from future polls (ops alert or manual replay required).
- *
- * FOR UPDATE SKIP LOCKED: safe for multiple worker replicas — each relay
- * instance claims its own exclusive batch without blocking peers.
- */
 @Injectable()
-export class OutboxRelayService {
-  private readonly logger = new Logger(OutboxRelayService.name);
+export class OutboxRelayService
+  extends AbstractOutboxRelay<OutboxEventRow>
+  implements OnModuleInit
+{
   private readonly sqs: SQSClient;
   private readonly queueUrl?: string;
-  private running = false;
 
   constructor(
-    @InjectDrizzle() private readonly db: DrizzleDB,
+    @InjectDrizzle() db: DrizzleDB,
     private readonly config: AppConfigService,
   ) {
+    super(db);
     // Region-only against real AWS; endpoint + static credentials when
     // AWS_ENDPOINT_URL points at LocalStack. See buildAwsClientConfig.
     this.sqs = new SQSClient(buildAwsClientConfig(this.config));
     this.queueUrl = this.config.get('SQS_OUTBOX_URL');
   }
 
-  @Cron('*/5 * * * * *', { name: 'outbox-relay' })
-  async relay(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
-      await this.db.transaction(async (tx) => {
-        const batch = await tx
-          .select()
-          .from(outboxEvents)
-          .where(and(eq(outboxEvents.status, 'pending'), lt(outboxEvents.attempts, MAX_ATTEMPTS)))
-          .orderBy(asc(outboxEvents.createdAt), asc(outboxEvents.id))
-          .limit(BATCH_SIZE)
-          .for('update', { skipLocked: true });
-
-        if (batch.length === 0) return;
-
-        for (const event of batch) {
-          try {
-            await this.#publish(event);
-            await tx
-              .update(outboxEvents)
-              .set({ status: 'sent', sentAt: new Date() })
-              .where(eq(outboxEvents.id, event.id));
-          } catch (err) {
-            const newAttempts = event.attempts + 1;
-            await tx
-              .update(outboxEvents)
-              .set({
-                attempts: newAttempts,
-                lastError: String(err),
-                status: newAttempts >= MAX_ATTEMPTS ? 'failed' : 'pending',
-              })
-              .where(eq(outboxEvents.id, event.id));
-            this.logger.warn(
-              { eventId: event.id, eventType: event.eventType, attempt: newAttempts, err },
-              `Outbox event publish failed (attempt ${newAttempts}/${MAX_ATTEMPTS})`,
-            );
-          }
-        }
-
-        const sent = batch.filter((e) => e.attempts < MAX_ATTEMPTS).length;
-        if (sent > 0) {
-          this.logger.log(`Relayed ${sent} outbox event(s)`);
-        }
-      });
-    } catch (err) {
-      this.logger.error({ err }, 'Outbox relay transaction failed');
-    } finally {
-      this.running = false;
+  onModuleInit(): void {
+    // ONCE, at boot, at warn level. Without a queue URL every event is acked without
+    // being published, and the old code said so per-event at `debug` — invisible under
+    // the default LOG_LEVEL=info, so an environment silently discarding its whole event
+    // stream looked identical to one delivering it. rally's relay warns the same way.
+    if (!this.queueUrl) {
+      this.logger.warn(
+        'SQS_OUTBOX_URL not set — outbox events will be acked WITHOUT publishing (dev mode)',
+      );
+    } else {
+      this.logger.log(`Outbox relay → SQS ${this.queueUrl}`);
     }
   }
 
-  async #publish(event: typeof outboxEvents.$inferSelect): Promise<void> {
-    if (!this.queueUrl) {
-      this.logger.debug(
-        { eventType: event.eventType, aggregateId: event.aggregateId },
-        'No SQS queue configured — logging event only',
-      );
-      return;
-    }
+  /** Runs every 5 seconds. */
+  @Cron('*/5 * * * * *', { name: 'outbox-relay' })
+  @Span('outbox.relay')
+  override async relay(): Promise<void> {
+    return super.relay();
+  }
+
+  // ── AbstractOutboxRelay implementation ────────────────────────────────────
+
+  protected async fetchBatch(tx: DrizzleTx): Promise<OutboxEventRow[]> {
+    return tx
+      .select({
+        id: outboxEvents.id,
+        aggregateType: outboxEvents.aggregateType,
+        aggregateId: outboxEvents.aggregateId,
+        eventType: outboxEvents.eventType,
+        payload: outboxEvents.payload,
+        attempts: outboxEvents.attempts,
+      })
+      .from(outboxEvents)
+      .where(and(eq(outboxEvents.status, 'pending'), lt(outboxEvents.attempts, this.maxAttempts)))
+      .orderBy(asc(outboxEvents.createdAt), asc(outboxEvents.id))
+      .limit(this.batchSize)
+      .for('update', { skipLocked: true });
+  }
+
+  protected async processRow(row: OutboxEventRow): Promise<void> {
+    if (!this.queueUrl) return; // acked without publishing; warned about at boot
+
     await this.sqs.send(
       new SendMessageCommand({
         QueueUrl: this.queueUrl,
         MessageBody: JSON.stringify({
-          id: event.id,
-          aggregateType: event.aggregateType,
-          aggregateId: event.aggregateId,
-          eventType: event.eventType,
-          payload: event.payload,
+          id: row.id,
+          aggregateType: row.aggregateType,
+          aggregateId: row.aggregateId,
+          eventType: row.eventType,
+          payload: row.payload,
         }),
       }),
     );
+  }
+
+  protected async markSent(tx: DrizzleTx, rowId: string): Promise<void> {
+    await tx
+      .update(outboxEvents)
+      .set({ status: 'sent', sentAt: new Date() })
+      .where(eq(outboxEvents.id, rowId));
+  }
+
+  protected async markFailed(
+    tx: DrizzleTx,
+    rowId: string,
+    newAttempts: number,
+    newStatus: 'pending' | 'failed',
+    lastError: string,
+  ): Promise<void> {
+    await tx
+      .update(outboxEvents)
+      .set({ status: newStatus, attempts: newAttempts, lastError })
+      .where(eq(outboxEvents.id, rowId));
   }
 }

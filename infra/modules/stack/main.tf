@@ -1181,6 +1181,51 @@ resource "aws_cloudwatch_metric_alarm" "security_fail_open" {
   ok_actions    = [module.observability.alarm_topic_arn]
 }
 
+# ── Outbox dead-letter ────────────────────────────────────────────────────────
+#
+# The WORKER's log group, not the api's: every relay runs there. `outboxDeadLetter` is
+# emitted by AbstractOutboxRelay when a row exhausts maxAttempts, which is silent work
+# loss — an email nobody receives, a notification nobody sees, a webhook that never
+# fired. The field exists so a metric filter can match a STRUCTURED key; matching prose
+# would break the day someone rewords the log line.
+#
+# Until this existed the field was greppable and nothing more: three relays emitted it
+# and no alarm watched it. Ported from rally, where it is the same pair.
+resource "aws_cloudwatch_log_metric_filter" "outbox_dead_letter" {
+  name           = "${local.name}-outbox-dead-letter"
+  log_group_name = module.worker.log_group_name
+  pattern        = "{ $.outboxDeadLetter = \"*\" }"
+
+  metric_transformation {
+    name          = "OutboxDeadLetter"
+    namespace     = "${var.product}/${var.env}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_dead_letter" {
+  alarm_name        = "${local.name}-outbox-dead-letter"
+  alarm_description = "A relay gave up on a row after exhausting its retries — work has been lost. Query the relevant outbox table for status = 'failed'."
+
+  namespace           = "${var.product}/${var.env}"
+  metric_name         = "OutboxDeadLetter"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  # A metric filter emits no data points when nothing matches, which is the healthy
+  # state — treat that as OK rather than INSUFFICIENT_DATA noise.
+  treat_missing_data = "notBreaching"
+
+  # NOT gated on `environment_idle`. A dead-lettered row is lost work whether or not the
+  # environment is serving traffic, and the metric does not vanish when a service scales
+  # to zero — the worker had to be running to emit it in the first place.
+  alarm_actions = [module.observability.alarm_topic_arn]
+  ok_actions    = [module.observability.alarm_topic_arn]
+}
+
 # The cache/floors invariant is enforced by a `validation` block on `var.cache` in
 # variables.tf, NOT by a `check` block here.
 #
