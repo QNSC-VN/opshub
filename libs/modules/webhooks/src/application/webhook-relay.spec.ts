@@ -32,7 +32,10 @@ class TestableRelayService extends WebhookRelayService {
     newStatus: 'pending' | 'failed',
     error: string,
   ) {
-    return this.markFailed(tx, rowId, newAttempts, newStatus, error);
+    // The base class's generic backoff, which this relay ignores in favour of its own
+    // RETRY_DELAYS_SECONDS curve. A recognisable sentinel keeps that visible: if epoch 0 ever
+    // shows up in an assertion below, the relay stopped honouring its own schedule.
+    return this.markFailed(tx, rowId, newAttempts, newStatus, error, new Date(0));
   }
 
   public exposedFetchBatch(tx: DrizzleTx) {
@@ -67,8 +70,13 @@ function makeMockDb() {
 
   return {
     update: updateChain.update,
-    // eslint-disable-next-line @typescript-eslint/require-await
-    transaction: vi.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(updateChain)),
+    // NOT `async`, and no eslint-disable: the callback already returns the promise the
+    // relay awaits, so `async` added nothing but a require-await violation to suppress.
+    // The suppression was worse than it looked — prettier reflows this call across lines
+    // and carries the `eslint-disable-next-line` away from the arrow it was written for,
+    // so the pre-commit hook (eslint --fix, THEN prettier --write) could turn a clean
+    // lint into two errors after eslint had already approved the file.
+    transaction: vi.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(updateChain)),
   };
 }
 

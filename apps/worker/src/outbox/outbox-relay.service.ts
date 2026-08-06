@@ -142,6 +142,10 @@ export class OutboxRelayService
     newAttempts: number,
     newStatus: 'pending' | 'failed',
     lastError: string,
+    // outbox_events has no scheduled_at / next_attempt_at column, so this relay cannot defer
+    // a retry — it re-reads on the next 5s tick. Adding the column is the way to give it
+    // real backoff; until then the base class's value has nowhere to go.
+    _nextAttemptAt: Date,
   ): Promise<void> {
     await tx
       .update(outboxEvents)

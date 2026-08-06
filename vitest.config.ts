@@ -73,12 +73,16 @@ export default defineConfig({
       // green. `pnpm check:coverage-floors` now fails when any floor falls more than 3 points
       // behind actual, so raising these is no longer a thing to remember.
       //
-      // Measured 2026-08-05: lines 22.22 / statements 22.15 / branches 18.26 / functions 15.48.
+      // Measured 2026-08-06: lines 24.1 / statements 24.05 / branches 19.56 / functions 16.64.
+      // Raised from 21/14/17/21 when abstract-outbox-relay.spec.ts landed — `pnpm
+      // check:coverage-floors` refused the commit until they moved, which is the entire point
+      // of that gate: floors that trail actual coverage by more than 3 points would let a
+      // large regression pass while still reading as a ratchet.
       thresholds: {
-        lines: 21,
-        functions: 14,
-        branches: 17,
-        statements: 21,
+        lines: 24,
+        functions: 16,
+        branches: 19,
+        statements: 24,
       },
     },
   },

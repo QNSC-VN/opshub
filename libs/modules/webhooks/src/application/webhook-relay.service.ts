@@ -117,6 +117,10 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
     newAttempts: number,
     newStatus: 'pending' | 'failed',
     error: string,
+    // Deliberately IGNORED: webhook deliveries follow their own RETRY_DELAYS_SECONDS curve,
+    // which is a per-endpoint contract rather than a generic backoff. The base class passes
+    // its default so a relay that has no opinion gets one for free; this one has an opinion.
+    _nextAttemptAt: Date,
   ): Promise<void> {
     const delaySeconds =
       RETRY_DELAYS_SECONDS[Math.min(newAttempts - 1, RETRY_DELAYS_SECONDS.length - 1)] ?? 3600;
