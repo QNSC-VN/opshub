@@ -540,6 +540,45 @@ variable "observability" {
   }
 }
 
+variable "monitor_ingress" {
+  description = <<-EOT
+    Create the Route 53 health check plus its us-east-1 alarm, probing the public api
+    hostname from OUTSIDE AWS. Only meaningful when `tunnel_enabled` — with an ALB that job
+    belongs to `monitor_target_health`.
+
+    Why it is worth anything: a tunnelled environment has NO other ingress alarm. ECS reports
+    a task RUNNING whether or not cloudflared holds edge connections, `essential = true`
+    catches the sidecar CRASHING but not it sitting up with zero connections, and an ECS
+    healthCheck cannot probe it because the cloudflared image is distroless and has no shell.
+    So without this, an ingress outage is visible only when a person reports it.
+
+    THE ZERO-TASK CASE IS HANDLED FOR YOU, so this variable is only for an environment that
+    IS serving and still does not want the probe. `local.monitor_ingress` also requires
+    `!local.environment_idle`, so an environment whose service floors are 0 creates no check
+    at all — the same rule this stack already applies to the load alarms. Raising the floors
+    re-arms it in the same change, rather than leaving a note asking someone to remember.
+
+    That matters because a health check against a hostname with no tasks behind it sits in
+    ALARM permanently: it pages for a condition that IS the intended state, and bills every
+    month for that non-signal. rally hit exactly that — its develop had floors of 0, an idle
+    schedule taking it to zero tasks nightly and all weekend, and this variable unset, so it
+    paid for a probe that was red most of the week (fixed in QNSC-VN/rally#393, which is
+    where this derivation comes from).
+
+    Default true, matching rally, because the idle gate makes true SAFE: it cannot create a
+    check against an environment that is not serving.
+
+    Cost, since this is the one guard here that bills per month rather than per alarm: one
+    health check on a non-AWS endpoint, with `measure_latency = false` and no string match,
+    so no optional-feature charge — plus one CloudWatch alarm and an SNS topic that costs
+    nothing until it notifies. Worth stating precisely because rally's own comment quotes
+    "$0.75 base + $2.00 for the string-match/latency option" while its resource enables
+    NEITHER option, so that arithmetic describes something it did not build.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "monitor_target_health" {
   description = <<-EOT
     Create the per-service UnHealthyHostCount alarm.
