@@ -25,7 +25,11 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read  # required by amannn/action-semantic-pull-request
+  # No longer for the semantic-PR action — that moved to pr-title.yml, which declares its
+  # own. Kept because it is read-only and removing a permission is a bigger claim than
+  # this change is making: nothing here needs it today (the openapi job reads
+  # `github.event.pull_request.base.sha` straight off the payload, which needs no grant).
+  pull-requests: read
   packages: read       # pull @qnsc-vn/* from GitHub Packages
 
 env:
@@ -124,7 +128,3 @@ jobs:
           name: dist-${{ github.sha }}
           path: apps/web/dist/
           retention-days: 3
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 4. PR title — enforce Conventional Commits format on PR titles.
-  #    Required because release-please derives CHANGELOG from PR titles.
