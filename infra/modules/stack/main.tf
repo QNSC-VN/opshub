@@ -925,6 +925,132 @@ resource "aws_sns_topic_subscription" "ingress_alarms_email" {
 
 
 
+# ── Waking (the reverse of idling) ────────────────────────────────────────────
+# Starts the database and restores both services on a cron. See var.wake_schedule for why
+# this exists at all — the short version is that "the deploy pipeline is the wake signal"
+# covers the days the environment is CHANGED but not the days it is merely USED, and RDS
+# takes 4-5 minutes to come up, so someone who finds it stopped cannot wait it out.
+#
+# A SEPARATE ROLE from the idler, which is the whole point. The idler's policy says in its
+# own comment that it is stop-only because "a role that can also start an instance turns a
+# scheduling mistake into a cost increase". That is still true, so the start grants live here
+# rather than being added there: a fault in the wake cron can cost money, a fault in the idle
+# cron can cost availability, and neither can now cause the other.
+resource "aws_iam_role" "waker" {
+  count = var.wake_schedule == null ? 0 : 1
+  name  = "${local.name}-waker"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      # Same confused-deputy guard as the idler.
+      Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
+    }]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "waker" {
+  count = var.wake_schedule == null ? 0 : 1
+  name  = "wake-environment"
+  role  = aws_iam_role.waker[0].id
+
+  # Start only, mirroring the idler's stop-only. No rds:StopDBInstance here, and no
+  # DeleteDBInstance or RebootDBInstance — this role's entire job is to add capacity back.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "StartDatabase"
+        Effect   = "Allow"
+        Action   = "rds:StartDBInstance"
+        Resource = module.rds.instance_arn
+      },
+      {
+        Sid    = "RestoreServices"
+        Effect = "Allow"
+        Action = "ecs:UpdateService"
+        Resource = [
+          module.api.service_arn,
+          module.worker.service_arn,
+        ]
+      },
+    ]
+  })
+}
+
+resource "aws_scheduler_schedule" "rds_start" {
+  count       = var.wake_schedule == null ? 0 : 1
+  name        = "${local.name}-rds-start"
+  description = "Starts ${module.rds.identifier}; see var.wake_schedule for why this exists"
+
+  schedule_expression          = var.wake_schedule
+  schedule_expression_timezone = "Asia/Ho_Chi_Minh"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:rds:startDBInstance"
+    role_arn = aws_iam_role.waker[0].arn
+    input    = jsonencode({ DbInstanceIdentifier = module.rds.identifier })
+
+    # Mirror of the stop schedule: starting an already-started instance fails with
+    # InvalidDBInstanceState, which is the DESIRED state and not an error. No retries and no
+    # DLQ, for the same reason.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+# Restore both services on the same cadence as the database start.
+#
+# DesiredCount is a literal 1, NOT var.api.min_count — see var.wake_schedule. The floors are
+# 0 in an idled environment and have to stay 0, or Application Auto Scaling undoes the idle
+# within minutes. 1 is the count the deploy pipeline sets, so a wake and a deploy agree on
+# one answer.
+#
+# The tasks come up before RDS finishes starting and will fail readiness for a few minutes.
+# That is accepted: ECS keeps replacing them and they settle once postgres answers, which is
+# the same behaviour a deploy-triggered wake already produces. Sequencing the two would need
+# a state machine, for a few minutes of 503 on an environment nobody is paged for.
+resource "aws_scheduler_schedule" "ecs_scale_up" {
+  for_each = var.wake_schedule == null ? {} : {
+    api    = module.api.service_name
+    worker = module.worker.service_name
+  }
+
+  name        = "${local.name}-${each.key}-scale-up"
+  description = "Restores ${each.value} to 1 task; see var.wake_schedule"
+
+  schedule_expression          = var.wake_schedule
+  schedule_expression_timezone = "Asia/Ho_Chi_Minh"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ecs:updateService"
+    role_arn = aws_iam_role.waker[0].arn
+    input = jsonencode({
+      Cluster      = module.ecs_cluster.cluster_name
+      Service      = each.value
+      DesiredCount = 1
+    })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
 # ── Guard: an environment without a cache must run no tasks ───────────────────
 # `cache.enabled = false` deletes the node, and ElastiCache has no stopped state, so it
 # is the only way to stop an idled environment paying for one. But a task that cannot
@@ -1034,14 +1160,12 @@ resource "aws_cloudwatch_metric_alarm" "security_fail_open" {
   ok_actions    = [module.observability.alarm_topic_arn]
 }
 
-check "idled_environment_runs_no_tasks" {
-  assert {
-    condition = var.cache.enabled || (var.api.min_count == 0 && var.worker.min_count == 0)
-    error_message = join(" ", [
-      "cache.enabled = false requires min_count = 0 on BOTH services (api is",
-      "${var.api.min_count}, worker is ${var.worker.min_count}).",
-      "Without a cache, tasks do not fail — REDIS_URL is optional and the token denylist",
-      "and rate limiter fail open. Set the floors to 0, or re-enable the cache.",
-    ])
-  }
-}
+# The cache/floors invariant is enforced by a `validation` block on `var.cache` in
+# variables.tf, NOT by a `check` block here.
+#
+# It WAS a check, and the difference is not cosmetic: a violated check assertion emits
+# `Warning: Check block assertion failed` and the plan exits 0. Measured on OpenTofu
+# 1.12.3 — a check exits 0, a cross-variable variable validation exits 1. The comment this
+# replaces claimed "the plan fails instead of producing an environment that looks healthy",
+# which described enforcement that did not exist: the forbidden combination would have
+# applied cleanly behind a warning nobody reads in CI output.
