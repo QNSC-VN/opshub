@@ -95,6 +95,24 @@ module "stack" {
   // deploy pipeline wakes RDS and restores the desired count, and this puts it back.
   idle_schedule = "cron(0 21,3 * * ? *)"
 
+  // 08:00 local, MON-FRI. The weekday restriction is the entire cost control here: a 7-day
+  // wake would pay for two days a week nobody works, which is a large share of what idling
+  // develop was worth in the first place.
+  //
+  // 08:00 rather than 09:00 because RDS takes 4-5 minutes to reach `available` and the api
+  // tasks then need to pass readiness, so the environment is serving by roughly 08:10 —
+  // before the working day rather than during its first minutes.
+  //
+  // This does NOT conflict with the 03:00 stop above. 03:00 fires while develop is already
+  // down (a no-op: InvalidDBInstanceState, deliberately not retried) and 08:00 brings it up
+  // five hours later. The 21:00 stop then ends the day. A deploy landing at any hour still
+  // wakes it independently — that path is unchanged.
+  //
+  // Net effect: develop moves from "up on merge days only" to roughly 13h/day on weekdays
+  // and 0h at weekends. So this BUYS availability rather than saving money; the saving comes
+  // from the weekends and the 21:00-08:00 window, which the idle schedule already owned.
+  wake_schedule = "cron(0 8 ? * MON-FRI *)"
+
   rds = {
     instance_class           = "db.t4g.micro"
     allocated_storage_gb     = 20
