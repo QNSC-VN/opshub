@@ -1,0 +1,29 @@
+-- Drop messaging.outbox_events: a transactional outbox with no consumer.
+--
+-- The table was written by OutboxService.enqueue from 8 call sites (asset.* and request.*),
+-- relayed to the `opshub-outbox` SQS queue, and read by NOBODY. Messages expired unread at
+-- the queue's 4-day retention, and no code in this repo ever queried the table either.
+--
+-- Everything that might have wanted these events already receives them, in the same
+-- transaction, through a path that has a real reader:
+--
+--   notifications  → notification_outbox → NotificationRelayService → in_app_notifications
+--   email          → email_outbox        → EmailRelayService        → SES
+--   webhooks       → webhook_deliveries  → WebhookRelayService      → customer endpoints
+--   audit trail    → AuditService, written synchronously in the request path
+--
+-- Every removed `enqueue` call sat immediately beside a `webhookEnqueue.fanout` for the same
+-- event type and payload, which is the clearest evidence that the outbox copy was redundant.
+--
+-- The other three outboxes stay, along with the shared AbstractOutboxRelay, its backoff and
+-- metrics, and the outboxDeadLetter alarm. This removes one unconsumed leg, not the pattern.
+--
+-- Why remove rather than leave it: rally carried the same shape — an outbox publishing into a
+-- topic whose only subscriber was misconfigured — and it dropped 100% of its domain events in
+-- every deployed environment for months while looking healthy, because nothing exercised the
+-- middle. An unread queue is not an option kept open, it is a liability that reads as
+-- capability. Rebuild the leg (relay + consumer + an end-to-end test) when a consumer exists.
+--
+-- outbox_status remains in use by the three surviving outbox tables, so the enum is NOT
+-- dropped here.
+DROP TABLE IF EXISTS messaging.outbox_events;

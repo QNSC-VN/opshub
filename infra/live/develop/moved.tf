@@ -25,11 +25,6 @@ moved {
 }
 
 moved {
-  from = module.messaging
-  to   = module.stack.module.messaging
-}
-
-moved {
   from = module.app_bucket
   to   = module.stack.module.app_bucket
 }

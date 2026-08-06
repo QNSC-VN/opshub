@@ -125,21 +125,6 @@ export const EnvSchema = z
 
     // ── AWS (optional in dev) ──────────────────────────────────────────────────
     AWS_REGION: z.string().default('ap-southeast-1'),
-    /**
-     * Custom AWS service endpoint. Set ONLY in local dev to target an emulator
-     * such as LocalStack (http://localhost:4566, see docker-compose.dev.yml).
-     * Leave UNSET in real AWS so the SDK uses the default regional endpoints.
-     */
-    AWS_ENDPOINT_URL: z.string().url().optional(),
-    /**
-     * Static AWS credentials. Set ONLY alongside AWS_ENDPOINT_URL for local dev
-     * (LocalStack accepts any value, conventionally "test"). In real AWS the ECS
-     * task role supplies credentials — leave these UNSET so nothing long-lived
-     * exists to leak.
-     */
-    AWS_ACCESS_KEY_ID: z.string().optional(),
-    AWS_SECRET_ACCESS_KEY: z.string().optional(),
-    SQS_OUTBOX_URL: z.string().optional(),
     /** S3 bucket for all stored files — injected by infra as S3_FILES_BUCKET. Optional in dev (uploads stubbed when unset). */
     S3_FILES_BUCKET: z.string().optional(),
     /** CloudFront base URL for file downloads. When set, overrides presigned S3 GET URLs. */

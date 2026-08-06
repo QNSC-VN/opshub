@@ -8,7 +8,6 @@ import {
   PreconditionFailedException,
   PermissionDeniedException,
 } from '../errors/exceptions';
-import { OutboxService } from '../outbox/outbox.service';
 import { WebhookEnqueueService } from '../webhooks/webhook-enqueue.service';
 import { requestItems, requestApprovals, requestComments } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
@@ -30,7 +29,7 @@ import type {
  * Responsibilities:
  *  - SoD enforcement (requester ≠ approver, configurable per type)
  *  - Permission check via AuthzService before any approval
- *  - Atomic transactions: state update + TypeDef hook + outbox event
+ *  - Atomic transactions: state update + TypeDef hook + webhook fan-out
  *  - Unified inbox queries via `list()`
  *
  * TypeDef hooks are called INSIDE the transaction so domain side-effects
@@ -44,7 +43,6 @@ export class RequestEngine {
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly registry: RequestRegistry,
     private readonly authz: AuthzService,
-    private readonly outbox: OutboxService,
     private readonly delegation: DelegationService,
     private readonly notifScheduler: NotificationSchedulerService,
     private readonly webhookEnqueue: WebhookEnqueueService,
@@ -101,12 +99,6 @@ export class RequestEngine {
         requesterId: actor.sub,
         priority: row.priority,
       };
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: row.id,
-        eventType: 'request.submitted',
-        payload: submitPayload,
-      });
       await this.webhookEnqueue.fanout(tx, 'request.submitted', submitPayload);
 
       // Notify the initial assignee (if any) that a new request awaits review.
@@ -254,12 +246,6 @@ export class RequestEngine {
         isFinalStep,
         totalSteps: maxStep,
       };
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: approvalEventType,
-        payload: approvalPayload,
-      });
       await this.webhookEnqueue.fanout(tx, approvalEventType, approvalPayload);
 
       return row;
@@ -349,12 +335,6 @@ export class RequestEngine {
       });
 
       const rejectedPayload = { requestId, type: request.type, approverId: actor.sub, note };
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: 'request.rejected',
-        payload: rejectedPayload,
-      });
       await this.webhookEnqueue.fanout(tx, 'request.rejected', rejectedPayload);
 
       return row;
@@ -397,12 +377,6 @@ export class RequestEngine {
       }
 
       const cancelledPayload = { requestId, type: request.type, cancelledBy: actor.sub };
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: 'request.cancelled',
-        payload: cancelledPayload,
-      });
       await this.webhookEnqueue.fanout(tx, 'request.cancelled', cancelledPayload);
 
       return row;
@@ -431,12 +405,6 @@ export class RequestEngine {
       }
 
       const expiredPayload = { requestId, type: request.type };
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: 'request.expired',
-        payload: expiredPayload,
-      });
       await this.webhookEnqueue.fanout(tx, 'request.expired', expiredPayload);
     });
 

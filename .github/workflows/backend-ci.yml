@@ -103,29 +103,6 @@ jobs:
           --health-timeout 3s
           --health-retries 5
 
-      # The outbox relay's SendMessage target. Without this the DB→SQS leg could only be
-      # tested with a stubbed client, which proves the command is built and nothing about
-      # whether a message lands on a queue — and that untested middle is exactly where
-      # rally lost 100% of its domain events for months.
-      #
-      # No init hook here: service containers start BEFORE the checkout, so there is
-      # nothing to mount yet. The "Provision LocalStack" step below runs the same
-      # scripts/localstack/01-bootstrap.sh the compose file mounts, so CI and local dev
-      # cannot describe different topologies.
-      localstack:
-        image: localstack/localstack:4
-        env:
-          AWS_DEFAULT_REGION: ap-southeast-1
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-        ports: ['4566:4566']
-        options: >-
-          --health-cmd "curl -sf http://localhost:4566/_localstack/health"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
-          --health-start-period 15s
-
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
@@ -227,16 +204,6 @@ jobs:
           # for a role with write access to every application table, even here.
           DATABASE_APP_PASSWORD: ci-opshub-app-least-privilege
 
-      # The SAME script docker-compose.dev.yml mounts as LocalStack's init hook. It falls
-      # back from `awslocal` to `aws --endpoint-url` when run outside the container.
-      - name: Provision LocalStack (SQS queue + DLQ, S3 bucket)
-        run: bash scripts/localstack/01-bootstrap.sh
-        env:
-          AWS_ENDPOINT_URL: http://localhost:4566
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: ap-southeast-1
-
       - name: E2E tests
         run: pnpm test:e2e
         env:
@@ -259,15 +226,6 @@ jobs:
           LOG_LEVEL: fatal
           OTEL_ENABLED: 'false'
           OTEL_SERVICE_NAME: opshub-api-test
-          # Port 4566 here, not the 4567 the compose file offsets to locally — a service
-          # container publishes on its own port. The queue URL is deterministic because
-          # LocalStack's account is always 000000000000, and the name must match
-          # QUEUE_NAME in scripts/localstack/01-bootstrap.sh.
-          AWS_REGION: ap-southeast-1
-          AWS_ENDPOINT_URL: http://localhost:4566
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          SQS_OUTBOX_URL: http://localhost:4566/000000000000/opshub-outbox
 
       - name: Upload coverage
         if: always()

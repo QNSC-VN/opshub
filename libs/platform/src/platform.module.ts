@@ -16,7 +16,6 @@ import { AuthzService } from './auth/authz.service';
 import { PolicyGuard } from './auth/policy.guard';
 import { RequestRegistry } from './requests/request-registry';
 import { RequestEngine } from './requests/request-engine.service';
-import { OutboxService } from './outbox/outbox.service';
 import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
 import { ResilienceService } from './resilience/resilience.service';
@@ -86,7 +85,6 @@ import { StorageService } from './storage/storage.service';
     PolicyGuard,
     RequestRegistry,
     RequestEngine,
-    OutboxService,
     HttpLoggingInterceptor,
     AuthTokenCache,
     ResilienceService,
@@ -124,7 +122,6 @@ import { StorageService } from './storage/storage.service';
     PolicyGuard,
     RequestRegistry,
     RequestEngine,
-    OutboxService,
     HttpLoggingInterceptor,
     AuthTokenCache,
     ResilienceService,

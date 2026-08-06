@@ -9,7 +9,6 @@ output "ecs_migrator_task_def" { value = module.stack.ecs_migrator_task_def }
 output "rds_endpoint" { value = module.stack.rds_endpoint }
 output "rds_master_secret_arn" { value = module.stack.rds_master_secret_arn }
 output "cache_endpoint" { value = module.stack.cache_endpoint }
-output "outbox_queue_url" { value = module.stack.outbox_queue_url }
 output "secret_arns" { value = module.stack.secret_arns }
 output "private_subnet_ids" { value = module.stack.private_subnet_ids }
 output "sg_app_id" { value = module.stack.sg_app_id }

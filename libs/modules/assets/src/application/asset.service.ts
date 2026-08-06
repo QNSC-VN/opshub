@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   InjectDrizzle,
   type DrizzleDB,
-  OutboxService,
   NotFoundException,
   ConflictException,
   PreconditionFailedException,
@@ -20,7 +19,6 @@ export class AssetService {
   constructor(
     @Inject(ASSET_REPOSITORY) private readonly assetRepo: IAssetRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
-    private readonly outbox: OutboxService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly employees: EmployeeService,
@@ -75,12 +73,6 @@ export class AssetService {
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.assign(assetId, employeeId, notes, tx);
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'asset',
-        aggregateId: assetId,
-        eventType: 'asset.assigned',
-        payload: { assetId, employeeId },
-      });
     });
 
     void this.audit.record({
@@ -102,12 +94,6 @@ export class AssetService {
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.unassign(assetId, tx);
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'asset',
-        aggregateId: assetId,
-        eventType: 'asset.unassigned',
-        payload: { assetId, previousEmployeeId: asset.assignedTo },
-      });
     });
 
     void this.audit.record({
@@ -129,14 +115,6 @@ export class AssetService {
       throw new PreconditionFailedException(ErrorCodes.ASSET_ALREADY_ASSIGNED, 'Cannot retire an assigned asset — unassign it first');
     }
     await this.assetRepo.retire(assetId);
-    await this.db.transaction(async (tx) => {
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'asset',
-        aggregateId: assetId,
-        eventType: 'asset.retired',
-        payload: { assetId },
-      });
-    });
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
