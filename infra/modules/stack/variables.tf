@@ -467,6 +467,23 @@ variable "api" {
     # because a load-driven environment that silently stopped scaling is worse.
     enable_autoscaling = optional(bool, true)
   })
+
+  # Target tracking scales on CPU and memory, and a service sitting at ZERO tasks publishes
+  # neither — so nothing can ever scale it back out. `enable_autoscaling = true` with a floor
+  # of 0 therefore describes a service that can reach zero and stay there, with the autoscaler
+  # present and powerless.
+  #
+  # Both combinations that DO work are allowed: a floor of 1 with autoscaling on (production
+  # shape), or a floor of 0 with autoscaling off, which is what lets `idle_schedule` hold and
+  # leaves the count owned by the deploy and the wake schedule.
+  #
+  # A `validation`, so it fails a plan. Both environments already pair floor 0 with autoscaling
+  # off, so this changes nothing today — it exists so the broken pairing cannot be introduced
+  # while every plan stays green. Ported from rally, which had it and opshub did not.
+  validation {
+    condition     = !var.api.enable_autoscaling || var.api.min_count >= 1
+    error_message = "api.enable_autoscaling = true requires min_count >= 1 (got ${var.api.min_count}). Target tracking scales on CPU and memory, which a service at zero tasks does not publish, so nothing can scale it back out — a floor of at least 1 is what restores capacity. Raise the floor, or set enable_autoscaling = false and let the deploy and idle_schedule own the count."
+  }
 }
 
 variable "worker" {
@@ -479,6 +496,23 @@ variable "worker" {
     use_spot           = optional(bool, false)
     enable_autoscaling = optional(bool, true)
   })
+
+  # Target tracking scales on CPU and memory, and a service sitting at ZERO tasks publishes
+  # neither — so nothing can ever scale it back out. `enable_autoscaling = true` with a floor
+  # of 0 therefore describes a service that can reach zero and stay there, with the autoscaler
+  # present and powerless.
+  #
+  # Both combinations that DO work are allowed: a floor of 1 with autoscaling on (production
+  # shape), or a floor of 0 with autoscaling off, which is what lets `idle_schedule` hold and
+  # leaves the count owned by the deploy and the wake schedule.
+  #
+  # A `validation`, so it fails a plan. Both environments already pair floor 0 with autoscaling
+  # off, so this changes nothing today — it exists so the broken pairing cannot be introduced
+  # while every plan stays green. Ported from rally, which had it and opshub did not.
+  validation {
+    condition     = !var.worker.enable_autoscaling || var.worker.min_count >= 1
+    error_message = "worker.enable_autoscaling = true requires min_count >= 1 (got ${var.worker.min_count}). Target tracking scales on CPU and memory, which a service at zero tasks does not publish, so nothing can scale it back out — a floor of at least 1 is what restores capacity. Raise the floor, or set enable_autoscaling = false and let the deploy and idle_schedule own the count."
+  }
 }
 
 variable "uploads" {
