@@ -459,6 +459,38 @@ variable "observability" {
   }
 }
 
+variable "monitor_ingress" {
+  description = <<-EOT
+    Create the Route 53 health check plus its us-east-1 alarm, probing the public api
+    hostname from OUTSIDE AWS. Only meaningful when `tunnel_enabled` — with an ALB that job
+    belongs to `monitor_target_health`.
+
+    Why it is worth anything: a tunnelled environment has NO other ingress alarm. ECS reports
+    a task RUNNING whether or not cloudflared holds edge connections, `essential = true`
+    catches the sidecar CRASHING but not it sitting up with zero connections, and an ECS
+    healthCheck cannot probe it because the cloudflared image is distroless and has no shell.
+    So without this, an ingress outage is visible only when a person reports it.
+
+    DEFAULT false, which is DIFFERENT from rally's default of true. That is deliberate, not
+    drift. This environment runs `min_count = 0`, and a health check against a hostname with
+    no tasks behind it sits in ALARM permanently — it bills every month to report the state
+    the environment is deliberately in, and it trains whoever reads the alerts to ignore the
+    one alarm that replaces every ALB target-group alarm. rally hit exactly that: its
+    production probe "sat in ALARM continuously from the day it was created".
+
+    TURN IT ON IN THE SAME CHANGE THAT RAISES min_count. Not before, and not separately.
+
+    Cost, since this is the one guard here that bills per month rather than per alarm: one
+    health check on a non-AWS endpoint, with `measure_latency = false` and no string match,
+    so no optional-feature charge — plus one CloudWatch alarm and an SNS topic that costs
+    nothing until it notifies. Worth stating precisely because rally's own comment quotes
+    "$0.75 base + $2.00 for the string-match/latency option" while its resource enables
+    NEITHER option, so that arithmetic describes something it did not build.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "monitor_target_health" {
   description = <<-EOT
     Create the per-service UnHealthyHostCount alarm.

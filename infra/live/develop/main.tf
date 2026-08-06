@@ -34,6 +34,21 @@ provider "aws" {
 
 // Reads CLOUDFLARE_API_TOKEN (or TF_VAR_cloudflare_api_token). DNS/Pages resources
 // are skipped when the zone is unset, so the stack applies before Cloudflare exists.
+// Route 53 publishes health-check metrics ONLY to us-east-1, so the ingress alarm has to
+// be created there even though every other resource is in ap-southeast-1. Same credentials,
+// different region — this is not a second account.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+  default_tags {
+    tags = {
+      Project     = "opshub"
+      Environment = "develop"
+      ManagedBy   = "opentofu"
+    }
+  }
+}
+
 provider "cloudflare" {
   api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : null
 }
@@ -45,6 +60,14 @@ locals {
 // ── The stack ─────────────────────────────────────────────────────────────────
 module "stack" {
   source = "../../modules/stack"
+
+  // Required by the stack module: it declares `aws.us_east_1` as a configuration alias for
+  // the Route 53 ingress alarm. Listing `aws` too is not optional — supplying a providers
+  // map replaces inheritance rather than adding to it.
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 
   product  = "opshub"
   env      = "develop"

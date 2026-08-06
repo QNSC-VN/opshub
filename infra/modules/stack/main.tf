@@ -819,6 +819,101 @@ resource "aws_scheduler_schedule" "ecs_scale_down" {
     }
   }
 }
+# ── Ingress health, from OUTSIDE AWS ─────────────────────────────────────────
+# Created only when the api is TUNNELLED and `monitor_ingress` is on, and it exists to
+# replace something real.
+#
+# With an ALB, `monitor_target_health` watched UnHealthyHostCount. A tunnelled task has no
+# target group, so that alarm cannot exist — and nothing else on the AWS side observes
+# ingress at all:
+#
+#   - ECS reports the task RUNNING whether or not cloudflared holds edge connections.
+#   - `essential = true` on the sidecar catches the connector CRASHING, not it staying up
+#     with zero edge connections.
+#   - An ECS healthCheck cannot probe it either: the cloudflared image is distroless, so
+#     there is no shell for a CMD-SHELL probe.
+#
+# A Route 53 health check probes the PUBLIC hostname from outside AWS, so it exercises the
+# whole path a user takes — Cloudflare edge, tunnel, connector, app — rather than asking ECS
+# whether it thinks the task is fine.
+#
+# No Route 53 HOSTED ZONE is involved: DNS is Cloudflare, and a health check is a standalone
+# resource. This adds no zone.
+#
+# BOTH gates are required. `tunnel_enabled` says the ALB alarm cannot do this job;
+# `monitor_ingress` says there is something running worth watching. See the variable for why
+# the second defaults to false here while rally defaults it true.
+locals {
+  monitor_ingress = var.tunnel_enabled && var.monitor_ingress
+}
+
+resource "aws_route53_health_check" "api_ingress" {
+  count = local.monitor_ingress ? 1 : 0
+
+  fqdn              = var.api_domain
+  type              = "HTTPS"
+  port              = 443
+  resource_path     = "/v1/healthz"
+  failure_threshold = 3
+  request_interval  = 30
+
+  # Left OFF: latency measurement is a paid option and this alarm only needs up/down. Same
+  # for string matching — /v1/healthz answering 200 is the signal.
+  measure_latency = false
+
+  tags = merge(local.tags, { Name = "${local.name}-api-ingress" })
+}
+
+# The alarm must live in us-east-1: AWS/Route53 HealthCheckStatus is published only there,
+# regardless of where the endpoint is.
+resource "aws_cloudwatch_metric_alarm" "api_ingress_down" {
+  count    = local.monitor_ingress ? 1 : 0
+  provider = aws.us_east_1
+
+  alarm_name        = "${local.name}-api-ingress-down"
+  alarm_description = "${var.api_domain} is not answering /v1/healthz from outside AWS. With no ALB this is the only ingress alarm — check the cloudflared sidecar's edge connections first."
+
+  namespace           = "AWS/Route53"
+  metric_name         = "HealthCheckStatus"
+  dimensions          = { HealthCheckId = aws_route53_health_check.api_ingress[0].id }
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 3
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+
+  # Missing data is NOT breaching here. The health checker itself is the reporter, so a gap
+  # in its own metric is far more likely to be a Route 53 reporting hiccup than an outage —
+  # treating it as breaching would page on the monitoring rather than the service.
+  treat_missing_data = "missing"
+
+  alarm_actions = [aws_sns_topic.ingress_alarms_us_east_1[0].arn]
+  ok_actions    = [aws_sns_topic.ingress_alarms_us_east_1[0].arn]
+
+  tags = local.tags
+}
+
+# A CloudWatch alarm action must be an SNS topic in the ALARM's own region, so the
+# ap-southeast-1 topic the observability module owns cannot be used here. This one mirrors
+# it, and costs nothing until it publishes.
+resource "aws_sns_topic" "ingress_alarms_us_east_1" {
+  count    = local.monitor_ingress ? 1 : 0
+  provider = aws.us_east_1
+
+  name = "${local.name}-ingress-alarms"
+  tags = local.tags
+}
+
+resource "aws_sns_topic_subscription" "ingress_alarms_email" {
+  for_each = local.monitor_ingress ? toset(var.alarm_emails) : toset([])
+  provider = aws.us_east_1
+
+  topic_arn = aws_sns_topic.ingress_alarms_us_east_1[0].arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
+
 
 # ── Guard: an environment without a cache must run no tasks ───────────────────
 # `cache.enabled = false` deletes the node, and ElastiCache has no stopped state, so it
