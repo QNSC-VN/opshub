@@ -880,6 +880,55 @@ module "observability" {
   tags         = local.tags
 }
 
+# ── Alerting: security controls that failed OPEN ──────────────────────────────
+# The access-token denylist (JwtAuthGuard) and the rate limiter both fail open when Valkey
+# is unreachable. Each choice is right on its own — an outage should not lock every user
+# out, and rate limiting is protective rather than load-bearing — but TOGETHER a cache
+# outage accepts revoked tokens AND serves unlimited traffic, with nothing watching.
+#
+# Log-based rather than OTel-based, deliberately: `OTEL_ENABLED` is false until
+# `observability.otlp_endpoint` is set, so a counter would report nothing while looking
+# like monitoring. Container logs reach CloudWatch regardless of the OTel path.
+#
+# The field comes from `FAIL_OPEN_FIELD` in @qnsc-vn/observability, emitted by
+# `failOpenLog()` at the two guards. Renaming it there would silently disarm this filter,
+# so libs/platform/src/observability/fail-open.spec.ts greps THIS file for the pattern and
+# fails if the two disagree.
+resource "aws_cloudwatch_log_metric_filter" "security_fail_open" {
+  name           = "${local.name}-security-fail-open"
+  log_group_name = module.api.log_group_name
+  pattern        = "{ $.securityFailOpen = \"*\" }"
+
+  metric_transformation {
+    name          = "SecurityFailOpen"
+    namespace     = "${var.product}/${var.env}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "security_fail_open" {
+  alarm_name        = "${local.name}-security-fail-open"
+  alarm_description = "A security control failed open (token denylist or rate limiter) — check Valkey health."
+
+  namespace           = "${var.product}/${var.env}"
+  metric_name         = "SecurityFailOpen"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  # A metric filter emits no data points when nothing matches, which IS the healthy state —
+  # treat that as OK rather than as INSUFFICIENT_DATA noise.
+  treat_missing_data = "notBreaching"
+
+  # NOT gated on `environment_idle` like the load alarms. A fail-open event means a security
+  # control degraded, which matters just as much in an environment serving no traffic — and
+  # unlike CPU, this metric does not disappear when a service scales to zero.
+  alarm_actions = [module.observability.alarm_topic_arn]
+  ok_actions    = [module.observability.alarm_topic_arn]
+}
+
 check "idled_environment_runs_no_tasks" {
   assert {
     condition = var.cache.enabled || (var.api.min_count == 0 && var.worker.min_count == 0)

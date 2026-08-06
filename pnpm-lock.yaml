@@ -112,6 +112,9 @@ importers:
       '@qnsc-vn/identity':
         specifier: ^6.0.0
         version: 6.0.0(aeccf69e8d35107358b76cfe2bec0f39)
+      '@qnsc-vn/observability':
+        specifier: ^0.1.4
+        version: 0.1.4(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@opentelemetry/api@1.9.1)(@opentelemetry/auto-instrumentations-node@0.78.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1)))(@opentelemetry/exporter-metrics-otlp-http@0.220.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.220.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-node@0.220.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(nestjs-pino@4.6.1(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2))
       '@qnsc-vn/platform-cache':
         specifier: ^2.1.0
         version: 2.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(ioredis@5.11.1)
@@ -2225,6 +2228,21 @@ packages:
       '@qnsc-vn/platform-http': '>=2.0.0'
       passport: '>=0.7'
       passport-jwt: '>=4'
+
+  '@qnsc-vn/observability@0.1.4':
+    resolution: {integrity: sha512-mvPd7MHPx4rI3ma2dHh+OdEgCyLAFd8Ooy35S2rlLwqv4ob3Dobi+lSafx0+djktnrPWoH5Sq9jkPrcJgmiGAw==, tarball: https://npm.pkg.github.com/download/@qnsc-vn/observability/0.1.4/d8179695d0480bbbfb9306fcfb6baffd02563743}
+    peerDependencies:
+      '@nestjs/common': '>=11'
+      '@opentelemetry/api': '>=1.9'
+      '@opentelemetry/auto-instrumentations-node': '>=0.78'
+      '@opentelemetry/exporter-metrics-otlp-http': '>=0.220'
+      '@opentelemetry/exporter-trace-otlp-http': '>=0.220'
+      '@opentelemetry/resources': '>=2'
+      '@opentelemetry/sdk-metrics': '>=2'
+      '@opentelemetry/sdk-node': '>=0.220'
+      '@opentelemetry/sdk-trace-base': '>=2'
+      '@opentelemetry/semantic-conventions': '>=1.41'
+      nestjs-pino: '>=4'
 
   '@qnsc-vn/platform-cache@2.1.0':
     resolution: {integrity: sha512-BXJ7UWEQUfWVi/OoG3AaitwlqOH8xjpeQZavk0Gsg2U38mB+VYDORwP3VC/TangFNC77bK0qdGSiXOBBsgISNg==, tarball: https://npm.pkg.github.com/download/@qnsc-vn/platform-cache/2.1.0/25d962fb0bdf7387bfddcd82c2850066e8ed8d71}
@@ -8324,6 +8342,20 @@ snapshots:
       passport: 0.7.0
       passport-jwt: 4.0.1
       uuidv7: 1.2.1
+
+  '@qnsc-vn/observability@0.1.4(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@opentelemetry/api@1.9.1)(@opentelemetry/auto-instrumentations-node@0.78.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1)))(@opentelemetry/exporter-metrics-otlp-http@0.220.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.220.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-node@0.220.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(nestjs-pino@4.6.1(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2))':
+    dependencies:
+      '@nestjs/common': 11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/auto-instrumentations-node': 0.78.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))
+      '@opentelemetry/exporter-metrics-otlp-http': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+      nestjs-pino: 4.6.1(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2)
 
   '@qnsc-vn/platform-cache@2.1.0(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(ioredis@5.11.1)':
     dependencies:
