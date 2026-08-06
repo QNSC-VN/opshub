@@ -17,6 +17,7 @@ import {
   type RateLimitTierName,
 } from './rate-limit.constants';
 import type { JwtPayload } from '../auth/jwt.strategy';
+import { failOpenLog } from '@qnsc-vn/observability';
 
 /**
  * Global rate-limit guard backed by the shared sliding-window limiter
@@ -105,7 +106,7 @@ export class RateLimitGuard implements CanActivate {
       // Rate limiting is a protective control, not a hard dependency for serving
       // traffic. If the cache is unavailable, fail open and surface it via logs.
       this.logger.error(
-        { err, key: rateLimitKey },
+        failOpenLog('rate_limit', { err, key: rateLimitKey }),
         'RateLimitGuard: backend unavailable — allowing request',
       );
       return true;

@@ -9,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthTokenCache } from '@qnsc-vn/identity';
+import { failOpenLog } from '@qnsc-vn/observability';
 import {
   BFF_SESSION_COOKIE,
   BFF_SESSION_RESOLVER,
@@ -142,7 +143,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       if (err instanceof UnauthorizedException) throw err;
       // Fail open — Redis unavailable should not block valid users.
       // Tokens still expire naturally via the JWT exp claim (max 15 min window).
-      this.logger.warn({ err }, 'Token denylist check failed; failing open');
+      // Tagged with the shared helper, not a bare object: the field name is what the
+      // CloudWatch metric filter matches, so it must come from one place. See
+      // aws_cloudwatch_log_metric_filter.security_fail_open in infra/modules/stack.
+      this.logger.warn(
+        failOpenLog('denylist', { err }),
+        'Token denylist check failed; failing open',
+      );
     }
   }
 
