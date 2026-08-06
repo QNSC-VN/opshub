@@ -56,11 +56,35 @@ async function run() {
     await seedRbacCatalog(seedUrl);
     console.log('✅  RBAC catalogue ensured');
 
-    // In develop/staging, also seed demo fixtures (login-able employees) on
-    // every deploy. Never set SEED_ON_DEPLOY=true in production.
+    /**
+     * Demo fixtures: login-able employees, sample assets, requests.
+     *
+     * TWO gates, not one. `SEED_ON_DEPLOY` is the switch; `NODE_ENV` is the floor.
+     *
+     * The switch alone was a comment where a guard belongs — "Never set
+     * SEED_ON_DEPLOY=true in production" is advice, and advice does not stop a copied
+     * tfvars stanza. Develop is live and read as real, so a single misplaced `true`
+     * would put eight fake employees (admin@opshub.local and friends) into a database
+     * people are asked to trust, and every bug report would then start by asking which
+     * rows were fixtures. Nothing in `infra/` sets this variable today, which is
+     * exactly why now is the cheap time to add the floor.
+     *
+     * Deployed migrator tasks run with `NODE_ENV=production` and nothing else does —
+     * CI's ephemeral Postgres and a developer's machine do not — so the floor cannot
+     * block a legitimate local or CI seed. Ported from rally, whose develop database
+     * really did carry a fixture project for a while.
+     */
     if (process.env['SEED_ON_DEPLOY'] === 'true') {
-      console.log('SEED_ON_DEPLOY=true — seeding demo fixtures...');
-      await seed(seedUrl);
+      if (process.env['NODE_ENV'] === 'production') {
+        console.warn(
+          '⚠️  SEED_ON_DEPLOY=true but NODE_ENV=production — demo seed REFUSED. ' +
+            'Deployed environments get the RBAC catalogue only; fixtures are for local ' +
+            'development (pnpm db:seed) and CI.',
+        );
+      } else {
+        console.log('SEED_ON_DEPLOY=true — seeding demo fixtures...');
+        await seed(seedUrl);
+      }
     }
   } catch (err) {
     console.error('❌  Migration failed', err);

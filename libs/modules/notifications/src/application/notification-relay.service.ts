@@ -155,10 +155,14 @@ export class NotificationRelayService
     newAttempts: number,
     newStatus: 'pending' | 'failed',
     lastError: string,
+    nextAttemptAt: Date,
   ): Promise<void> {
     await tx
       .update(notificationOutbox)
-      .set({ attempts: newAttempts, status: newStatus, lastError })
+      // scheduledAt IS the retry gate — fetchBatch selects on `scheduledAt <= now()`, so
+      // leaving it alone made every retry immediate and burned all five attempts inside
+      // ~25 seconds. A dependency blip therefore dead-lettered the row permanently.
+      .set({ attempts: newAttempts, status: newStatus, lastError, scheduledAt: nextAttemptAt })
       .where(eq(notificationOutbox.id, rowId));
   }
 }
