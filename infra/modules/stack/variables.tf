@@ -471,14 +471,21 @@ variable "monitor_ingress" {
     healthCheck cannot probe it because the cloudflared image is distroless and has no shell.
     So without this, an ingress outage is visible only when a person reports it.
 
-    DEFAULT false, which is DIFFERENT from rally's default of true. That is deliberate, not
-    drift. This environment runs `min_count = 0`, and a health check against a hostname with
-    no tasks behind it sits in ALARM permanently — it bills every month to report the state
-    the environment is deliberately in, and it trains whoever reads the alerts to ignore the
-    one alarm that replaces every ALB target-group alarm. rally hit exactly that: its
-    production probe "sat in ALARM continuously from the day it was created".
+    THE ZERO-TASK CASE IS HANDLED FOR YOU, so this variable is only for an environment that
+    IS serving and still does not want the probe. `local.monitor_ingress` also requires
+    `!local.environment_idle`, so an environment whose service floors are 0 creates no check
+    at all — the same rule this stack already applies to the load alarms. Raising the floors
+    re-arms it in the same change, rather than leaving a note asking someone to remember.
 
-    TURN IT ON IN THE SAME CHANGE THAT RAISES min_count. Not before, and not separately.
+    That matters because a health check against a hostname with no tasks behind it sits in
+    ALARM permanently: it pages for a condition that IS the intended state, and bills every
+    month for that non-signal. rally hit exactly that — its develop had floors of 0, an idle
+    schedule taking it to zero tasks nightly and all weekend, and this variable unset, so it
+    paid for a probe that was red most of the week (fixed in QNSC-VN/rally#393, which is
+    where this derivation comes from).
+
+    Default true, matching rally, because the idle gate makes true SAFE: it cannot create a
+    check against an environment that is not serving.
 
     Cost, since this is the one guard here that bills per month rather than per alarm: one
     health check on a non-AWS endpoint, with `measure_latency = false` and no string match,
@@ -488,7 +495,7 @@ variable "monitor_ingress" {
     NEITHER option, so that arithmetic describes something it did not build.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "monitor_target_health" {

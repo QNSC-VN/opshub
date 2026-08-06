@@ -844,7 +844,17 @@ resource "aws_scheduler_schedule" "ecs_scale_down" {
 # `monitor_ingress` says there is something running worth watching. See the variable for why
 # the second defaults to false here while rally defaults it true.
 locals {
-  monitor_ingress = var.tunnel_enabled && var.monitor_ingress
+  # An environment whose service floors are 0 spends most of its time at zero tasks, and a
+  # health check against a hostname with nothing behind it sits in ALARM for every one of
+  # those hours. That is the same argument this stack already makes for the LOAD alarms
+  # (`environment_idle` on the observability module): a floor of 0 is exactly what makes an
+  # alarm about serving traffic meaningless.
+  #
+  # DERIVED rather than left to the variable, so "turn it on when you raise min_count" is
+  # automatic instead of a thing to remember — the difference between a rule and a hope.
+  environment_idle = var.api.min_count == 0 && var.worker.min_count == 0
+
+  monitor_ingress = var.tunnel_enabled && var.monitor_ingress && !local.environment_idle
 }
 
 resource "aws_route53_health_check" "api_ingress" {
@@ -969,7 +979,7 @@ module "observability" {
   # scaled to zero makes its CPU metric DISAPPEAR rather than read zero, so the alarm would
   # walk OK -> INSUFFICIENT_DATA -> OK on every wake and mail an OK notice each time. Tying it
   # to the floors means restoring capacity re-arms the alarms in the same change.
-  environment_idle = var.api.min_count == 0 && var.worker.min_count == 0
+  environment_idle = local.environment_idle
 
   alarm_emails = var.alarm_emails
   tags         = local.tags
