@@ -92,6 +92,13 @@
       "when": 1783000006000,
       "tag": "0012_app_role_least_privilege",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783086406000,
+      "tag": "0013_drop_unconsumed_outbox_events",
+      "breakpoints": true
     }
   ]
 }

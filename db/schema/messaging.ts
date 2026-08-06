@@ -1,12 +1,19 @@
 /**
  * messaging schema — transactional outbox tables.
  *
- * outbox_events        — generic domain-event relay to SQS (existing)
  * notification_outbox  — in-app notification queue, relayed every 5s by cron
  * email_outbox         — email send queue, relayed every 5s by cron
+ * webhook_deliveries   — outbound webhook queue, relayed every 10s by cron
  *
- * All three follow the same pattern: written in the caller's DB transaction,
- * relayed by a cron service using SELECT … FOR UPDATE SKIP LOCKED.
+ * All three follow the same pattern: written in the caller's DB transaction, relayed by a
+ * cron service using SELECT … FOR UPDATE SKIP LOCKED, and every one of them has a real
+ * consumer at the far end.
+ *
+ * A fourth table, outbox_events, used to sit here — a generic domain-event outbox relayed
+ * to SQS. Nothing consumed the queue and nothing read the table, so migration 0013 dropped
+ * it. Do not reintroduce a generic event outbox without a consumer: rally shipped exactly
+ * that shape and lost 100% of its domain events in every deployed environment for months,
+ * because nothing exercised the middle of the chain.
  */
 import {
   pgSchema, uuid, varchar, text, jsonb, timestamp, boolean, integer,
@@ -16,28 +23,6 @@ import { sql } from 'drizzle-orm';
 import { outboxStatusEnum } from './enums';
 
 export const messagingSchema = pgSchema('messaging');
-
-// ── Generic domain-event outbox ──────────────────────────────────────────────
-
-export const outboxEvents = messagingSchema.table(
-  'outbox_events',
-  {
-    id:            uuid('id').primaryKey().defaultRandom(),
-    aggregateType: varchar('aggregate_type', { length: 60 }).notNull(),
-    aggregateId:   varchar('aggregate_id', { length: 64 }).notNull(),
-    eventType:     varchar('event_type', { length: 100 }).notNull(),
-    payload:       jsonb('payload').notNull().$type<Record<string, unknown>>(),
-    /** 'pending' → relay picks up; 'sent' → SQS ack'd; 'failed' → max retries exceeded. */
-    status:        outboxStatusEnum('status').notNull().default('pending'),
-    attempts:      integer('attempts').notNull().default(0),
-    lastError:     text('last_error'),
-    createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    sentAt:        timestamp('sent_at', { withTimezone: true }),
-  },
-  (t) => ({
-    pendingIdx: index('ix_outbox_pending').on(t.status, t.createdAt),
-  }),
-);
 
 // ── Notification outbox ──────────────────────────────────────────────────────
 

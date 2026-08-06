@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -176,7 +176,12 @@ describe('the catalogue is the only vocabulary', () => {
       encoding: 'utf8',
     })
       .split('\n')
-      .filter(Boolean);
+      .filter(Boolean)
+      // `git ls-files` reports the INDEX, which still lists a file deleted in the working
+      // tree but not yet staged — readFileSync then throws ENOENT and the whole check dies
+      // with an error that looks nothing like a permission problem. Same guard the
+      // route-policy and query-ordering ratchets carry, for the same reason.
+      .filter((f) => existsSync(join(ROOT, f)));
 
     const valid = new Set<string>([...ALL_CODES, WILDCARD_PERMISSION]);
     const offenders: string[] = [];

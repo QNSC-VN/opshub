@@ -28,8 +28,6 @@ const mockAssetRepo = {
 const mockDb = {
   transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
 };
-
-const mockOutbox  = { enqueue: vi.fn() };
 const mockStorage = { presignUpload: vi.fn(), confirmUpload: vi.fn(), getDownloadUrl: vi.fn(), deleteFile: vi.fn() };
 const mockAudit   = { record: vi.fn() };
 const mockEmployees = { getById: vi.fn() };
@@ -58,7 +56,6 @@ function makeService() {
   return new AssetService(
     mockAssetRepo as never,
     mockDb as never,
-    mockOutbox,
     mockStorage as never,
     mockAudit as never,
     mockEmployees as never,
@@ -122,7 +119,9 @@ describe('AssetService.assign()', () => {
     mockAssetRepo.findById.mockResolvedValueOnce(ASSET_BASE).mockResolvedValueOnce(updatedAsset);
 
     await makeService().assign('asset-1', 'emp-1', null, ACTOR);
-    expect(mockOutbox.enqueue).toHaveBeenCalledOnce();
+    // Asserts the WRITE, not a queue publish: the outbox event this used to check went
+    // nowhere (no consumer) and was removed. The repo call is the effect that matters.
+    expect(mockAssetRepo.assign).toHaveBeenCalledWith('asset-1', 'emp-1', null, expect.anything());
   });
 
   it('throws PreconditionFailedException when asset is retired', async () => {
@@ -148,7 +147,7 @@ describe('AssetService.unassign()', () => {
     mockAssetRepo.unassign.mockResolvedValue(unassignedAsset);
 
     await makeService().unassign('asset-1', ACTOR);
-    expect(mockOutbox.enqueue).toHaveBeenCalledOnce();
+    expect(mockAssetRepo.unassign).toHaveBeenCalledWith('asset-1', expect.anything());
   });
 
   it('throws PreconditionFailedException when asset is not assigned', async () => {
@@ -165,7 +164,7 @@ describe('AssetService.retire()', () => {
     mockAssetRepo.findById.mockResolvedValue(ASSET_BASE);
     mockAssetRepo.retire.mockResolvedValue({ ...ASSET_BASE, status: 'retired' as const });
     await makeService().retire('asset-1', ACTOR);
-    expect(mockOutbox.enqueue).toHaveBeenCalledOnce();
+    expect(mockAssetRepo.retire).toHaveBeenCalledWith('asset-1');
   });
 
   it('throws PreconditionFailedException when asset is already retired', async () => {

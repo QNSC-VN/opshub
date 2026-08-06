@@ -1,7 +1,7 @@
 /**
  * RequestEngine unit tests.
  *
- * All DB, authz, outbox, delegation, notification and webhook dependencies are
+ * All DB, authz, delegation, notification and webhook dependencies are
  * vi.fn() mocks — no database required. The db.transaction() mock calls its
  * callback with the same mock object so queries inside transactions are
  * intercepted identically.
@@ -113,9 +113,6 @@ function buildEngine(opts: {
   // -- AuthzService mock --
   const authz = { check: vi.fn().mockResolvedValue(actorHasPermission) };
 
-  // -- OutboxService mock --
-  const outbox = { enqueue: vi.fn().mockResolvedValue(undefined) };
-
   // -- WebhookEnqueueService mock --
   const webhookEnqueue = { fanout: vi.fn().mockResolvedValue(undefined) };
 
@@ -130,13 +127,12 @@ function buildEngine(opts: {
     db as never,
     registry as never,
     authz as never,
-    outbox,
     delegation as never,
     notifScheduler as never,
     webhookEnqueue,
   );
 
-  return { engine, db, registry, authz, outbox, webhookEnqueue, delegation, notifScheduler, updateChain, insertChain };
+  return { engine, db, registry, authz, webhookEnqueue, delegation, notifScheduler, updateChain, insertChain };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -144,9 +140,9 @@ function buildEngine(opts: {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('RequestEngine.submit()', () => {
-  it('inserts a request row and enqueues outbox + webhook events', async () => {
+  it('inserts a request row and enqueues webhook events', async () => {
     const submittedRow = makeRequest({ id: 'req-new', requesterId: REQUESTER.sub });
-    const { engine, db, outbox, webhookEnqueue } = buildEngine({
+    const { engine, db, webhookEnqueue } = buildEngine({
       typeDef: makeTypeDef({ onSubmit: undefined }),
     });
 
@@ -158,10 +154,6 @@ describe('RequestEngine.submit()', () => {
 
     expect(db.transaction).toHaveBeenCalledOnce();
     expect(db.insert).toHaveBeenCalled();
-    expect(outbox.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventType: 'request.submitted' }),
-    );
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
       'request.submitted',
@@ -230,7 +222,7 @@ describe('RequestEngine.approve() — single-step', () => {
     const onApprove = vi.fn().mockResolvedValue(undefined);
     const approvedRow = makeRequest({ status: 'approved', resolvedAt: new Date() });
 
-    const { engine, db, outbox, webhookEnqueue } = buildEngine({
+    const { engine, db, webhookEnqueue } = buildEngine({
       requestRow: makeRequest(),
       typeDef: makeTypeDef({ onApprove }),
     });
@@ -241,10 +233,6 @@ describe('RequestEngine.approve() — single-step', () => {
     const result = await engine.approve('req-1', 'LGTM', ACTOR);
 
     expect(onApprove).toHaveBeenCalledOnce();
-    expect(outbox.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventType: 'request.approved' }),
-    );
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
       'request.approved',
@@ -328,7 +316,7 @@ describe('RequestEngine.approve() — multi-step (3-step onboarding)', () => {
     const onStepApproved = vi.fn().mockResolvedValue(undefined);
     const inReviewRow = makeRequest({ status: 'in_review', currentStep: 2, totalSteps: 3 });
 
-    const { engine, db, outbox, webhookEnqueue } = buildEngine({
+    const { engine, db, webhookEnqueue } = buildEngine({
       requestRow: makeRequest({ currentStep: 1, totalSteps: 3 }),
       typeDef: makeTypeDef({ approvalSteps: steps, onStepApproved }),
     });
@@ -346,10 +334,6 @@ describe('RequestEngine.approve() — multi-step (3-step onboarding)', () => {
       expect.anything(),
       'request.step_approved',
       expect.objectContaining({ isFinalStep: false, step: 1 }),
-    );
-    expect(outbox.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventType: 'request.step_approved' }),
     );
   });
 
@@ -385,7 +369,7 @@ describe('RequestEngine.reject()', () => {
     const onReject = vi.fn().mockResolvedValue(undefined);
     const rejectedRow = makeRequest({ status: 'rejected', resolvedAt: new Date() });
 
-    const { engine, db, outbox, webhookEnqueue } = buildEngine({
+    const { engine, db, webhookEnqueue } = buildEngine({
       requestRow: makeRequest(),
       typeDef: makeTypeDef({ onReject }),
     });
@@ -396,10 +380,6 @@ describe('RequestEngine.reject()', () => {
     const result = await engine.reject('req-1', 'Not approved', ACTOR);
 
     expect(onReject).toHaveBeenCalledOnce();
-    expect(outbox.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventType: 'request.rejected' }),
-    );
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
       'request.rejected',
@@ -436,7 +416,7 @@ describe('RequestEngine.cancel()', () => {
   it('allows requester to cancel their own pending request', async () => {
     const cancelledRow = makeRequest({ status: 'cancelled', resolvedAt: new Date() });
 
-    const { engine, db, outbox, webhookEnqueue } = buildEngine({
+    const { engine, db, webhookEnqueue } = buildEngine({
       requestRow: makeRequest({ requesterId: REQUESTER.sub }),
     });
 
@@ -445,10 +425,6 @@ describe('RequestEngine.cancel()', () => {
 
     const result = await engine.cancel('req-1', REQUESTER);
 
-    expect(outbox.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventType: 'request.cancelled' }),
-    );
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
       'request.cancelled',
@@ -498,7 +474,7 @@ describe('RequestEngine.cancel()', () => {
 
 describe('RequestEngine.expire()', () => {
   it('sets status to expired and fires webhook + outbox events', async () => {
-    const { engine, db, outbox, webhookEnqueue } = buildEngine({
+    const { engine, db, webhookEnqueue } = buildEngine({
       requestRow: makeRequest({ status: 'pending' }),
     });
 
@@ -507,10 +483,6 @@ describe('RequestEngine.expire()', () => {
 
     await engine.expire('req-1');
 
-    expect(outbox.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventType: 'request.expired' }),
-    );
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
       'request.expired',
@@ -519,11 +491,13 @@ describe('RequestEngine.expire()', () => {
   });
 
   it('is a no-op when request is already resolved', async () => {
-    const { engine, outbox } = buildEngine({
+    const { engine, webhookEnqueue } = buildEngine({
       requestRow: makeRequest({ status: 'approved' }),
     });
 
     await engine.expire('req-1');
-    expect(outbox.enqueue).not.toHaveBeenCalled();
+    // Was asserted against the outbox enqueue, which is gone; the webhook fan-out is the
+    // remaining observable side effect, so its absence is what "no-op" now means.
+    expect(webhookEnqueue.fanout).not.toHaveBeenCalled();
   });
 });

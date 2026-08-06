@@ -73,16 +73,22 @@ export default defineConfig({
       // green. `pnpm check:coverage-floors` now fails when any floor falls more than 3 points
       // behind actual, so raising these is no longer a thing to remember.
       //
-      // Measured 2026-08-06: lines 24.1 / statements 24.05 / branches 19.56 / functions 16.64.
-      // Raised from 21/14/17/21 when abstract-outbox-relay.spec.ts landed — `pnpm
-      // check:coverage-floors` refused the commit until they moved, which is the entire point
-      // of that gate: floors that trail actual coverage by more than 3 points would let a
-      // large regression pass while still reading as a ratchet.
+      // Measured 2026-08-06: lines 23.43 / statements 23.41 / branches 19.06 / functions 16.27.
+      //
+      // These went 21/14/17/21 → 24/24/19/16 when abstract-outbox-relay.spec.ts landed, then
+      // DOWN to 23 when the unconsumed outbox leg was deleted (migration 0013). Lowering a
+      // ratchet normally means a regression; this one is the benign case and the distinction
+      // matters: no test was removed from surviving code. The deleted relay and
+      // aws-client.config were better covered than the repo average, so removing them and
+      // their specs together lowered the mean while leaving every remaining line as tested as
+      // before. `pnpm check:coverage-floors` fails in BOTH directions — it refused the raise
+      // until the floors moved up, then refused the delete until they moved down — which is
+      // why the number can be trusted to track reality rather than intent.
       thresholds: {
-        lines: 24,
+        lines: 23,
         functions: 16,
         branches: 19,
-        statements: 24,
+        statements: 23,
       },
     },
   },

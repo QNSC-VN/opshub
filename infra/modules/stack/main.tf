@@ -181,7 +181,6 @@ locals {
     { name = "DATABASE_HOST", value = module.rds.address },
     { name = "DATABASE_PORT", value = tostring(module.rds.port) },
     { name = "DATABASE_NAME", value = module.rds.db_name },
-    { name = "SQS_OUTBOX_URL", value = module.messaging.queue_urls["outbox"] },
     { name = "S3_FILES_BUCKET", value = module.app_bucket.bucket },
     { name = "ENTRA_TENANT_ID", value = var.entra_tenant_id },
     { name = "ENTRA_CLIENT_ID", value = var.entra_client_id },
@@ -294,26 +293,6 @@ module "cache" {
 
   mode      = var.cache.mode
   node_type = var.cache.node_type
-
-  tags = local.tags
-}
-
-# ── Messaging (SQS + SNS) ─────────────────────────────────────────────────────
-# The shared CMK in BOTH environments. Production passed the key and develop did not,
-# so develop's topic fell back to the AWS-managed `alias/aws/sns` — the environment
-# where an encryption regression would have to be caught was the one not exercising the
-# setting. Queues are unaffected either way: the module enables SSE-SQS
-# unconditionally, and this key only reaches the topic.
-module "messaging" {
-  source      = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/messaging?ref=messaging-v1.0.0"
-  prefix      = local.name
-  kms_key_arn = local.kms_key_arn
-
-  queues = {
-    outbox = { visibility_timeout = 60 }
-  }
-
-  topics = ["events"]
 
   tags = local.tags
 }
@@ -439,8 +418,6 @@ module "api" {
     { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = module.otel_agent_api.endpoint },
   ])
 
-  sqs_queue_arns = values(module.messaging.queue_arns)
-  sns_topic_arns = values(module.messaging.topic_arns)
   s3_bucket_arns = [module.app_bucket.arn]
 
   tags = merge(local.tags, { Service = "api" })
@@ -495,8 +472,6 @@ module "worker" {
     { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = module.otel_agent_worker.endpoint },
   ])
 
-  sqs_queue_arns = values(module.messaging.queue_arns)
-  sns_topic_arns = values(module.messaging.topic_arns)
   s3_bucket_arns = [module.app_bucket.arn]
 
   tags = merge(local.tags, { Service = "worker" })

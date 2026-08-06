@@ -1,44 +1,25 @@
 #!/usr/bin/env bash
 #
-# LocalStack bootstrap — provisions the SQS queue and S3 bucket the OpsHub API
-# and worker expect, so the outbox relay and file uploads can be exercised
-# locally instead of silently no-op'ing.
+# LocalStack bootstrap — provisions the S3 bucket the OpsHub API expects, so presigned
+# uploads can be exercised locally instead of failing against a bucket nobody owns.
 #
-# Runs automatically via the /etc/localstack/init/ready.d hook every time
-# LocalStack becomes ready (mounted from ./scripts/localstack in
-# docker-compose.dev.yml). Mirrors how db/init/ bootstraps Postgres.
+# Runs automatically via the /etc/localstack/init/ready.d hook every time LocalStack
+# becomes ready (mounted from ./scripts/localstack in docker-compose.dev.yml). Mirrors how
+# db/init/ bootstraps Postgres.
 #
-# Idempotent: create-queue returns the existing queue, and create-bucket's
-# BucketAlreadyOwnedByYou is swallowed explicitly, so re-runs are safe.
+# Idempotent: create-bucket's BucketAlreadyOwnedByYou is swallowed explicitly.
 #
-# Topology (mirrors module "messaging" / module "app_bucket" in
-# infra/modules/stack/main.tf):
+# THIS SCRIPT USED TO PROVISION AN SQS QUEUE AND DLQ. The domain-event outbox that fed
+# them had no consumer, so the whole leg was removed (migration 0013) and the queue went
+# with it. What remains is object storage, which StorageService genuinely uses in every
+# environment.
 #
-#   SQS opshub-outbox        — the outbox relay's SendMessage target
-#     └─ redrives to opshub-outbox-dlq after MAX_RECEIVE failed receives
-#
-#   S3  opshub-files-dev     — every presigned upload (StorageService)
-#
-# WHAT IS DELIBERATELY ABSENT: the SNS topic. infra declares `topics = ["events"]`
-# and grants both task roles publish on it, but no code publishes or subscribes
-# yet. A topic with no publisher and no subscription exercises nothing, so it is
-# left out rather than shipped as scaffolding — add it here (plus the SNS→SQS
-# subscription with RawMessageDelivery=true) in the same change that adds the
-# first publisher.
-#
-# Names, account and region are kept in sync with .env (AWS_REGION,
-# SQS_OUTBOX_URL, S3_FILES_BUCKET). Changing one without the other means the app
-# talks to a queue or bucket that does not exist.
+# Names / region are kept in sync with .env (S3_FILES_BUCKET).
 set -euo pipefail
 
 # `awslocal` exists only inside the LocalStack container, where the init hook runs it.
-# CI starts LocalStack as a service container and executes THIS SAME FILE from the
-# runner, which has plain `aws` — so fall back to it with the endpoint pinned.
-#
-# One script, two callers, deliberately: rally's audit pipeline dropped 100% of events in
-# every deployed environment for months because its local bootstrap and its Terraform
-# described different topologies, and only the permissive one was ever exercised. A CI
-# copy of these commands would be the same mistake in a smaller form.
+# Kept working under plain `aws` too, so the script can be run by hand from the host
+# against the same endpoint when a bucket needs re-creating mid-session.
 if command -v awslocal >/dev/null 2>&1; then
   aws_cmd() { awslocal "$@"; }
 else
@@ -46,39 +27,9 @@ else
 fi
 
 REGION="ap-southeast-1"
-QUEUE_NAME="opshub-outbox"
 BUCKET="opshub-files-dev"
-# Receives before a message is redriven to the DLQ. 5 mirrors MAX_ATTEMPTS in
-# apps/worker/src/outbox/outbox-relay.service.ts, which is the DB-side retry
-# budget for the same event. NOTE: real AWS does not currently pin this — infra
-# passes no `dlq_max_receive_count`, so the messaging module's default applies
-# there until it does.
-MAX_RECEIVE=5
 # Vite dev-server origin — the SPA PUTs directly to the bucket from here.
 WEB_ORIGIN="http://localhost:5173"
-
-echo "[localstack-init] provisioning SQS…"
-
-dlq="${QUEUE_NAME}-dlq"
-# The DLQ's ARN is referenced by the main queue's redrive policy, so read it back
-# from the queue we just created rather than hand-assembling an ARN string — a
-# typo in a hand-built ARN produces a queue whose redrive silently targets
-# nothing.
-aws_cmd sqs create-queue --queue-name "$dlq" >/dev/null
-dlq_arn="$(aws_cmd sqs get-queue-attributes \
-  --queue-url "$(aws_cmd sqs get-queue-url --queue-name "$dlq" --output text --query 'QueueUrl')" \
-  --attribute-names QueueArn --output text --query 'Attributes.QueueArn')"
-
-# RedrivePolicy's value is itself a JSON string, so it must be escaped inside the
-# --attributes JSON map (the shorthand form cannot express nested JSON).
-# VisibilityTimeout 60 matches `queues = { outbox = { visibility_timeout = 60 } }`.
-redrive="{\"deadLetterTargetArn\":\"${dlq_arn}\",\"maxReceiveCount\":\"${MAX_RECEIVE}\"}"
-aws_cmd sqs create-queue \
-  --queue-name "$QUEUE_NAME" \
-  --attributes "{\"VisibilityTimeout\":\"60\",\"RedrivePolicy\":\"${redrive//\"/\\\"}\"}" \
-  >/dev/null
-
-echo "[localstack-init]   queue ready: $QUEUE_NAME (dlq: $dlq)"
 
 echo "[localstack-init] provisioning S3…"
 

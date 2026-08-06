@@ -12,7 +12,6 @@ output "rds_endpoint" { value = module.rds.endpoint }
 output "rds_master_secret_arn" { value = module.rds.master_secret_arn }
 # Null when the cache is disabled for an idled environment, rather than a plan error.
 output "cache_endpoint" { value = var.cache.enabled ? module.cache[0].endpoint : null }
-output "outbox_queue_url" { value = module.messaging.queue_urls["outbox"] }
 output "secret_arns" { value = module.secrets.secret_arns }
 
 # Networking — needed for ECS run-task (migrator) and the GitHub environment vars.

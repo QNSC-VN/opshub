@@ -74,7 +74,6 @@ export const FIXTURE_TABLES = [
   // outboxes and delivery state — a stale row here makes a relay spec see another's work
   'messaging.notification_outbox',
   'messaging.email_outbox',
-  'messaging.outbox_events',
   'messaging.webhook_deliveries',
   'messaging.webhook_subscriptions',
   'notifications.in_app_notifications',

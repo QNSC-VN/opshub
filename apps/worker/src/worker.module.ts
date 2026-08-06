@@ -7,7 +7,6 @@ import { NotificationsModule } from '@modules/notifications';
 import { WebhooksModule } from '@modules/webhooks';
 import { ComplianceModule, ComplianceSyncCron } from '@modules/compliance';
 import { SecurityPostureModule, SecurityPostureSyncCron } from '@modules/security-posture';
-import { OutboxRelayService } from './outbox/outbox-relay.service';
 import { RequestExpiryCron } from './cron/request-expiry.cron';
 import { SlaBreachCron } from './cron/sla-breach.cron';
 import { DelegationExpiryCron } from './cron/delegation-expiry.cron';
@@ -35,7 +34,6 @@ import { StorageCleanupCron } from './cron/storage-cleanup.cron';
     SecurityPostureModule,
   ],
   providers: [
-    OutboxRelayService,
     ComplianceSyncCron,
     SecurityPostureSyncCron,
     RequestExpiryCron,
