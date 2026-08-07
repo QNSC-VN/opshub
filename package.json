@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "private": true,
   "license": "UNLICENSED",
-  "description": "OpsHub — internal IT/HR operations platform (Zone B2). Monorepo: apps/{api,worker,web}",
+  "description": "OpsHub \u2014 internal IT/HR operations platform (Zone B2). Monorepo: apps/{api,worker,web}",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
@@ -34,7 +34,8 @@
     "db:studio": "drizzle-kit studio",
     "prepare": "husky",
     "check:coverage-floors": "tsx test/check-coverage-floors.ts",
-    "db:roles:enable": "tsx db/enable-least-privilege-roles.ts"
+    "db:roles:enable": "tsx db/enable-least-privilege-roles.ts",
+    "smoke": "python3 scripts/smoke-api.py"
   },
   "lint-staged": {
     "*.ts": [

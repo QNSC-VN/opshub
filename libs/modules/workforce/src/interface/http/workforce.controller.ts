@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -156,7 +156,7 @@ export class WorkforceController {
   })
   @ApiCommonErrors(401, 403, 404, 412)
   async submitTimesheet(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<TimesheetResponseDto> {
     const ts = await this.service.submitTimesheet(id, user);
@@ -175,7 +175,7 @@ export class WorkforceController {
   @ApiOperation({ summary: 'Approve or reject a timesheet' })
   @ApiCommonErrors(401, 403, 404, 412)
   async reviewTimesheet(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<TimesheetResponseDto> {
@@ -237,7 +237,7 @@ export class WorkforceController {
   @ApiOperation({ summary: 'Approve or reject a leave request' })
   @ApiCommonErrors(401, 403, 404, 412)
   async reviewLeave(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
@@ -261,7 +261,7 @@ export class WorkforceController {
   })
   @ApiCommonErrors(401, 403, 404, 412)
   async cancelLeave(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
     const leave = await this.service.cancelLeave(id, user);
@@ -322,7 +322,7 @@ export class WorkforceController {
   @ApiOperation({ summary: 'Approve or reject an overtime entry' })
   @ApiCommonErrors(401, 403, 404, 412)
   async reviewOvertime(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<OvertimeResponseDto> {
@@ -455,7 +455,7 @@ export class WorkforceController {
   })
   @ApiCommonErrors(401, 404, 422)
   async presignLeaveDocument(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PresignLeaveDocumentDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -470,7 +470,7 @@ export class WorkforceController {
   })
   @ApiCommonErrors(401, 404, 422)
   async confirmLeaveDocument(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConfirmLeaveDocumentDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -487,7 +487,7 @@ export class WorkforceController {
     },
   })
   @ApiCommonErrors(401, 404)
-  async getLeaveDocumentUrl(@Param('id') id: string) {
+  async getLeaveDocumentUrl(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getLeaveDocumentUrl(id);
   }
 }

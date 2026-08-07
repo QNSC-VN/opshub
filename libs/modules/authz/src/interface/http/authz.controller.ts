@@ -96,7 +96,7 @@ export class AuthzController {
   @ApiOperation({ summary: 'Get a role by id' })
   @ApiOkResponse({ type: RoleResponseDto })
   @ApiCommonErrors(401, 403, 404)
-  async getRole(@Param('id') id: string): Promise<RoleResponseDto> {
+  async getRole(@Param('id', ParseUUIDPipe) id: string): Promise<RoleResponseDto> {
     return toRoleDto(await this.authz.getRole(id));
   }
 
@@ -125,7 +125,7 @@ export class AuthzController {
   @RequirePermission('rbac.manage')
   @ApiOperation({ summary: 'Replace a role’s permission set' })  @ApiOkResponse({ type: RoleResponseDto })  @ApiCommonErrors(401, 403, 404, 422)
   async setRolePermissions(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetRolePermissionsDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<RoleResponseDto> {
@@ -150,7 +150,7 @@ export class AuthzController {
   @ApiOperation({ summary: 'Delete a custom (non-system) role' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404, 422)
-  async deleteRole(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async deleteRole(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.authz.deleteRole(id, { sub: user.sub, email: user.email });
     void this.audit.record({
       actorId: user.sub,
@@ -165,7 +165,7 @@ export class AuthzController {
   @RequirePermission('rbac.read')
   @ApiOperation({ summary: 'List a user’s role assignments' })  @ApiOkResponse({ type: [RoleAssignmentResponseDto] })  @ApiCommonErrors(401, 403)
   async listUserAssignments(
-    @Param('userId') userId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<RoleAssignmentResponseDto[]> {
     return (await this.authz.listUserAssignments(userId)).map(toAssignmentDto);
   }
@@ -207,7 +207,7 @@ export class AuthzController {
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
   async revokeAssignment(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.authz.revokeAssignment(id, { sub: user.sub, email: user.email });

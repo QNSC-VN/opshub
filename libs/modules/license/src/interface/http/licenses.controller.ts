@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, ParseUUIDPipe} from '@nestjs/common';
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -134,7 +134,7 @@ export class LicensesController {
   @ApiOperation({ summary: 'Get a license by id' })
   @ApiOkResponse({ type: LicenseResponseDto })
   @ApiCommonErrors(401, 403, 404)
-  async getById(@Param('id') id: string): Promise<LicenseResponseDto> {
+  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<LicenseResponseDto> {
     return toLicenseDto(await this.licenseService.getById(id));
   }
 
@@ -144,7 +144,7 @@ export class LicensesController {
   @ApiOkResponse({ type: LicenseResponseDto })
   @ApiCommonErrors(400, 401, 403, 404)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLicenseDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<LicenseResponseDto> {
@@ -158,7 +158,7 @@ export class LicensesController {
   @ApiOperation({ summary: 'Delete a license (no active seats allowed)' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404, 409)
-  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.licenseService.delete(id, { sub: user.sub, email: user.email });
   }
 
@@ -168,7 +168,7 @@ export class LicensesController {
   @ApiOkResponse({ type: LicenseAssignmentResponseDto, isArray: true })
   @ApiCommonErrors(401, 403, 404)
   async listAssignments(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query() query: ListAssignmentsQueryDto,
   ): Promise<LicenseAssignmentResponseDto[]> {
     return (await this.licenseService.listAssignments(id, query.includeRevoked)).map(
@@ -182,7 +182,7 @@ export class LicensesController {
   @ApiCreatedResponse({ type: LicenseAssignmentResponseDto })
   @ApiCommonErrors(400, 401, 403, 404, 409)
   async assign(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AssignSeatDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<LicenseAssignmentResponseDto> {
@@ -200,7 +200,7 @@ export class LicensesController {
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
   async revoke(
-    @Param('assignmentId') assignmentId: string,
+    @Param('assignmentId', ParseUUIDPipe) assignmentId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.licenseService.revoke(assignmentId, { sub: user.sub, email: user.email });

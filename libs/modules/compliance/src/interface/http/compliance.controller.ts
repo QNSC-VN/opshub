@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, ParseUUIDPipe} from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -85,7 +85,7 @@ export class ComplianceController {
   @ApiOperation({ summary: 'Get a software catalog entry' })
   @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 404)
-  async getSoftware(@Param('id') id: string): Promise<SoftwareResponseDto> {
+  async getSoftware(@Param('id', ParseUUIDPipe) id: string): Promise<SoftwareResponseDto> {
     return toSoftwareDto(await this.service.getSoftware(id));
   }
 
@@ -116,7 +116,7 @@ export class ComplianceController {
   @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
   async updateSoftware(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSoftwareDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<SoftwareResponseDto> {
@@ -160,7 +160,7 @@ export class ComplianceController {
   @ApiOperation({ summary: 'Get a compliance finding' })
   @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404)
-  async getFinding(@Param('id') id: string): Promise<FindingResponseDto> {
+  async getFinding(@Param('id', ParseUUIDPipe) id: string): Promise<FindingResponseDto> {
     return toFindingDto(await this.service.getFinding(id));
   }
 
@@ -170,7 +170,7 @@ export class ComplianceController {
   @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async acknowledge(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<FindingResponseDto> {
     const finding = await this.service.acknowledgeFinding(id, user);
@@ -190,7 +190,7 @@ export class ComplianceController {
   @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async resolve(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ResolveFindingDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<FindingResponseDto> {
