@@ -1,3 +1,7 @@
+// `.env` FIRST, above the OTel bootstrap: that bootstrap reads process.env directly,
+// and @nestjs/config does not load the file until ConfigModule initialises — far too
+// late. See libs/platform/src/config/load-env.ts.
+import '@platform/config/load-env';
 // OTel must be imported before any other module — registers auto-instrumentation
 import { shutdownOtel } from './otel';
 import { NestFactory } from '@nestjs/core';
