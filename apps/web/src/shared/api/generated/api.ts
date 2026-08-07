@@ -731,7 +731,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Approve a request and issue a time-boxed grant */
+    /** Approve one step of a request; issues a grant on the final step */
     post: operations['AccessRequestsController_approve'];
     delete?: never;
     options?: never;
@@ -4511,7 +4511,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['AccessGrantResponseDto'];
+          'application/json': components['schemas']['AccessRequestResponseDto'];
         };
       };
       /** @description Unauthorized — missing or invalid authentication */
