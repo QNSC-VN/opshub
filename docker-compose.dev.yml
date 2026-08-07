@@ -58,6 +58,27 @@ services:
       retries: 10
       start_period: 15s
 
+  otel:
+    image: otel/opentelemetry-collector-contrib:0.140.1
+    container_name: opshub-otel
+    command: ['--config=/etc/otel/collector.yaml']
+    volumes:
+      - ./scripts/otel/collector.yaml:/etc/otel/collector.yaml:ro
+    ports:
+      # 4319 avoids conflict with other local collectors (rally would take 4318), matching
+      # how postgres (5433), valkey (6380) and localstack (4567) are offset. `.env` must
+      # point OTEL_EXPORTER_OTLP_ENDPOINT at this port, not 4318.
+      - '4319:4318'
+      # Prometheus scrape/inspect endpoint: `curl -s localhost:8890/metrics`.
+      - '8890:8889'
+    healthcheck:
+      # The collector image has no shell and no curl, so probe the OTLP port from the host
+      # side instead — an open socket is all this needs to prove.
+      test: ['CMD', '/otelcol-contrib', 'components']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   opshub_pgdata:
   opshub_localstack:
