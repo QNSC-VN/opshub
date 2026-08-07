@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, ParseUUIDPipe} from '@nestjs/common';
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -71,7 +71,7 @@ export class CatalogController {
   @ApiOperation({ summary: 'Get a catalog item by id' })
   @ApiOkResponse({ type: CatalogItemResponseDto })
   @ApiCommonErrors(401, 404)
-  async getById(@Param('id') id: string): Promise<CatalogItemResponseDto> {
+  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<CatalogItemResponseDto> {
     return toDto(await this.catalogService.getItem(id));
   }
 
@@ -81,7 +81,7 @@ export class CatalogController {
   @ApiOkResponse({ type: CatalogItemResponseDto })
   @ApiCommonErrors(400, 401, 403, 404)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCatalogItemDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<CatalogItemResponseDto> {
@@ -95,7 +95,7 @@ export class CatalogController {
   @ApiOperation({ summary: 'Delete a catalog item' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
-  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.catalogService.deleteItem(id, { sub: user.sub, email: user.email });
   }
 
@@ -104,7 +104,7 @@ export class CatalogController {
   @ApiCreatedResponse({ schema: { properties: { requestId: { type: 'string' } } } })
   @ApiCommonErrors(400, 401, 404)
   async submitRequest(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SubmitCatalogRequestDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<{ requestId: string }> {

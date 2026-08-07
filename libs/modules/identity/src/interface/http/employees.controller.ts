@@ -8,8 +8,7 @@ import {
   Param,
   Patch,
   Post,
-  Query,
-} from '@nestjs/common';
+  Query, ParseUUIDPipe,} from '@nestjs/common';
 import {
   ApiNoContentResponse,
   ApiOkResponse,
@@ -84,7 +83,7 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Get an employee by id' })
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 404)
-  async getById(@Param('id') id: string): Promise<EmployeeResponseDto> {
+  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<EmployeeResponseDto> {
     return toDto(await this.employeeService.getById(id));
   }
 
@@ -117,7 +116,7 @@ export class EmployeesController {
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateEmployeeDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
@@ -144,7 +143,7 @@ export class EmployeesController {
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
   async updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
@@ -187,7 +186,7 @@ export class EmployeesController {
   })
   @ApiCommonErrors(401, 403, 404, 422)
   async presignAvatar(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PresignAvatarDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -202,7 +201,7 @@ export class EmployeesController {
   })
   @ApiCommonErrors(401, 403, 404, 422)
   async confirmAvatar(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConfirmAvatarDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -219,7 +218,7 @@ export class EmployeesController {
     },
   })
   @ApiCommonErrors(401, 403, 404)
-  async getAvatarUrl(@Param('id') id: string) {
+  async getAvatarUrl(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeeService.getAvatarUrl(id);
   }
 
@@ -229,7 +228,7 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Delete the employee avatar' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
-  async deleteAvatar(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async deleteAvatar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.employeeService.deleteAvatar(id, { sub: user.sub, email: user.email });
   }
 }
