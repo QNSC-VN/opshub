@@ -20,9 +20,15 @@ overrides:
   # floor, it is no longer a safe one. The range spans every published major, so the
   # whole tree has to move (leaf util).
   "brace-expansion": "5.0.9"
-  # GHSA-pm4m-ph32-ghv5 — js-yaml. Two live majors, each patched separately:
-  # transitive via cosmiconfig (@nestjs/cli, commitlint) and @nestjs/swagger.
-  "js-yaml@4": "^4.3.0"
+  # js-yaml. Two live majors, each patched separately: transitive via cosmiconfig
+  # (@nestjs/cli, commitlint) and @nestjs/swagger.
+  #   GHSA-pm4m-ph32-ghv5 — the original pin, fixed 4.3.0 / 5.2.2.
+  #   GHSA-5p4m-2wfm-xmqj (CVE-2026-59870) — quadratic CPU in !!omap resolution,
+  #     CVSS 7.5, fixed 4.3.1. NOT backported to 3.x. 5.x is unaffected, so only the
+  #     4.x floor moves.
+  # The floor is ^4.3.1, not ">=4.3.1": the looser form crosses into 5.x, and
+  # @nestjs/swagger 11.4.5 and cosmiconfig were built against the 4.x API.
+  "js-yaml@4": "^4.3.1"
   "js-yaml@5": "^5.2.2"
   # GHSA-c96f-x56v-gq3h — HIGH "DDoS with HTTP2", fixed 9.7.0. Transitive via
   # fastify / @nestjs/platform-fastify, whose declared ^9.6.0 already allows it.
