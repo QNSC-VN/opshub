@@ -33,6 +33,11 @@ overrides:
   # GHSA-c96f-x56v-gq3h — HIGH "DDoS with HTTP2", fixed 9.7.0. Transitive via
   # fastify / @nestjs/platform-fastify, whose declared ^9.6.0 already allows it.
   "find-my-way@<9.7.0": "9.7.0"
+  # GHSA-2v37-7h3g-55p8 — nanoid, CVSS 8.2 HIGH: a custom generator loops forever when
+  # `size` is 0, fixed 3.3.17 (and 5.1.6 on the 4.x/5.x line, which is not in this tree).
+  # Transitive via postcss, whose declared range already allows the patch. Pinned "^3.3.17"
+  # rather than ">=3.3.17": the loose form crosses into 6.x, which is ESM-only.
+  "nanoid@3": "^3.3.17"
   # fast-uri, FOUR advisories deep in the same parser: GHSA-4c8g-83qw-93j6 /
   # GHSA-v2hh-gcrm-f6hx (IDN canonicalization), then one that resolved to exactly 3.1.4,
   # then GHSA-7p8r-x3mc-p8w7 (CVSS 7.5, host confusion via a backslash authority
