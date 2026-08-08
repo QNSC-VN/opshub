@@ -9,15 +9,19 @@ import {
   RequestEngine,
   StorageService,
   ActorScope,
+  InjectDrizzle,
 } from '@platform';
+import type { DrizzleDB } from '@platform';
 import type { PresignUploadResult } from '@platform';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import { LeaveBalanceService, type LeaveBalance } from './leave-balance.service';
 import { MS_PER_HOUR, type Actor } from '@shared-kernel';
 import {
   WORKFORCE_REPOSITORY,
   type IWorkforceRepository,
 } from '../domain/ports/workforce.repository';
 import type {
+  LeaveType,
   CreateLeaveInput,
   CreateOvertimeInput,
   CreateShiftLogInput,
@@ -45,6 +49,8 @@ export class WorkforceService {
     private readonly storage: StorageService,
     private readonly authz: AuthzService,
     private readonly actorScope: ActorScope,
+    private readonly balances: LeaveBalanceService,
+    @InjectDrizzle() private readonly db: DrizzleDB,
   ) {}
 
   // ── Access narrowing ───────────────────────────────────────────────────────
@@ -184,8 +190,22 @@ export class WorkforceService {
       );
     }
 
+    // What this request COSTS, with weekends and public holidays excluded — computed once here and
+    // stored on the row, never recomputed. The holiday calendar is editable, so a later addition
+    // inside a window someone already took would otherwise restate what their approved leave cost.
+    const workingDays = await this.balances.workingDaysFor(input.startDate, input.endDate);
+
+    // Refuse before creating anything. A leave type with no entitlement row is untracked and
+    // passes; a window of nothing but weekends is refused as a mistaken date range.
+    await this.balances.assertSufficientBalance(
+      actor.sub,
+      input.leaveType,
+      Number(input.startDate.slice(0, 4)),
+      workingDays,
+    );
+
     // Create domain row first, then submit to engine
-    const leave = await this.repo.createLeave({ ...input, employeeId: actor.sub });
+    const leave = await this.repo.createLeave({ ...input, employeeId: actor.sub, workingDays });
 
     const enginePayload: LeaveRequestPayload = {
       leaveRequestId: leave.id,
@@ -520,5 +540,116 @@ export class WorkforceService {
     if (!leave.documentStorageKey) return { documentUrl: null };
     const url = await this.storage.presignGet(leave.documentStorageKey);
     return { documentUrl: url };
+  }
+
+  // ── Leave balances, entitlements, holidays ─────────────────────────────────
+
+  /**
+   * Balances for the caller, or for another employee with `workforce.read`.
+   *
+   * Narrowed through the SAME ActorScope rule as the leave list, so "can I see this person's
+   * leave?" has one answer across the module rather than one per endpoint.
+   *
+   * `year` defaults here rather than in the DTO schema: a Zod default is evaluated when the module
+   * loads, so a long-running process would keep serving last year's balances after New Year.
+   */
+  async listLeaveBalances(
+    employeeId: string | undefined,
+    year: number | undefined,
+    actor: Actor,
+  ): Promise<LeaveBalance[]> {
+    const scoped = await this.narrowToActor({ employeeId }, actor);
+    return this.balances.listBalances(
+      scoped.employeeId ?? actor.sub,
+      year ?? new Date().getUTCFullYear(),
+    );
+  }
+
+  async setLeaveEntitlement(
+    input: {
+      employeeId: string;
+      leaveType: LeaveType;
+      year: number;
+      grantedDays: number;
+      carriedOverDays?: number;
+      note?: string;
+    },
+    actor: Actor,
+  ): Promise<void> {
+    // The employee's existence is checked by the CONTROLLER, which already injects
+    // EmployeeService for the same reason on the leave routes. Doing it here would mean a second
+    // path from this module into identity for one guard — and `leave_entitlements.employee_id`
+    // carries no cross-schema FK, matching every other workforce table, so the check is the only
+    // thing standing between a typo'd uuid and an orphan allowance.
+    // Transactional, and the audit entry goes in with it. An allowance changes what every future
+    // request of that type costs, so a grant recorded nowhere is exactly the gap a workforce audit
+    // trail exists to close.
+    await this.db.transaction(async (tx) => {
+      await this.balances.setEntitlement(input, tx);
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.LEAVE_ENTITLEMENT_SET,
+          resourceType: AUDIT_RESOURCE.LEAVE_ENTITLEMENT,
+          resourceId: input.employeeId,
+          changes: {
+            after: {
+              leaveType: input.leaveType,
+              year: input.year,
+              grantedDays: input.grantedDays,
+              carriedOverDays: input.carriedOverDays ?? 0,
+            },
+          },
+        },
+        tx,
+      );
+    });
+  }
+
+  async listHolidays(year: number | undefined) {
+    return this.balances.listHolidays(year ?? new Date().getUTCFullYear());
+  }
+
+  async addHoliday(
+    input: { date: string; name: string; region?: string },
+    actor: Actor,
+  ): Promise<{ id: string }> {
+    return this.db.transaction(async (tx) => {
+      const created = await this.balances.addHoliday(input, tx);
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.HOLIDAY_DECLARED,
+          resourceType: AUDIT_RESOURCE.HOLIDAY,
+          resourceId: created.id,
+          changes: { after: { date: input.date, name: input.name, region: input.region ?? 'ALL' } },
+        },
+        tx,
+      );
+      return created;
+    });
+  }
+
+  async removeHoliday(id: string, actor: Actor): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const removed = await this.balances.removeHoliday(id, tx);
+      if (!removed) {
+        // Thrown inside the transaction so the audit entry below cannot describe a deletion that
+        // did not happen — the throw rolls both back together.
+        throw new NotFoundException(ErrorCodes.NOT_FOUND, `Holiday ${id} not found`);
+      }
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.HOLIDAY_REMOVED,
+          resourceType: AUDIT_RESOURCE.HOLIDAY,
+          resourceId: id,
+        },
+        tx,
+      );
+    });
   }
 }

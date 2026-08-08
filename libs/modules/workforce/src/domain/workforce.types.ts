@@ -46,6 +46,11 @@ export interface LeaveRequest {
   startDate: string;
   endDate: string;
   reason: string | null;
+  /**
+   * Working days the window costs, frozen at submit. `numeric(5,2)`, so the driver hands it back
+   * as a STRING — the DTO converts. `null` only for rows predating the column.
+   */
+  workingDays: string | null;
   /** S3 key for a supporting document (e.g. medical cert). Null until uploaded. */
   documentStorageKey: string | null;
   status: LeaveStatus;
@@ -61,6 +66,8 @@ export interface CreateLeaveInput {
   leaveType: LeaveType;
   startDate: string;
   endDate: string;
+  /** Working days the window costs, frozen at submit — see the column's docblock. */
+  workingDays?: number;
   reason?: string | null;
   requestId?: string | null;
 }
