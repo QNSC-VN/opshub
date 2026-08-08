@@ -1,22 +1,27 @@
 # =============================================================================
-# CI — fast quality gates on every PR and push to main
-# Gate: lint → typecheck → build → pr-title
-# Security scans live in the Security · Scan workflow — independently runnable.
+# Web · CI — browser end-to-end flows against a live API and a seeded database
+#
+# The SPA had NO workflow of its own. Its typecheck/lint run inside the backend
+# build and `codegen:check` lives in Backend · CI, but nothing ever opened a
+# browser: every screen was unverified above the API boundary, so a broken auth
+# bootstrap, a form that posts the wrong shape, or a list that never re-fetches
+# shipped green.
+#
+# This job boots Postgres + Valkey, migrates and seeds, starts the API on 3001,
+# then runs Playwright — whose config starts the Vite dev server itself and
+# proxies /v1 to the API, exactly as local development does.
 # =============================================================================
 name: Web · CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
-    # NOT `edited`. That action exists only for the PR-title check, which now lives in
-    # pr-title.yml — and listening for it here was actively harmful: combined with
-    # `cancel-in-progress: true` below and the `if: action != 'edited'` guards this workflow
-    # used to carry, editing a PR title or body CANCELLED the in-flight real run and replaced
-    # it with one where every heavy job skipped. GitHub counts a skipped required check as
-    # passing, so the PR went green having executed nothing. Every run of this workflow is now
-    # a real one.
+    branches: [main]
+    # NOT `edited`, matching Backend · CI. With `cancel-in-progress` below, editing a PR
+    # title or body would cancel the in-flight real run and replace it with one that
+    # skipped everything — and GitHub counts a skipped required check as passing, so the
+    # PR would go green having executed nothing. Every run here is a real one.
     types: [opened, synchronize, reopened]
 
 concurrency:
@@ -25,108 +30,131 @@ concurrency:
 
 permissions:
   contents: read
-  # No longer for the semantic-PR action — that moved to pr-title.yml, which declares its
-  # own. Kept because it is read-only and removing a permission is a bigger claim than
-  # this change is making: nothing here needs it today (the openapi job reads
-  # `github.event.pull_request.base.sha` straight off the payload, which needs no grant).
-  pull-requests: read
-  packages: read       # pull @qnsc-vn/* from GitHub Packages
+  packages: read # pull @qnsc-vn/* from GitHub Packages
 
 env:
-  # 24, matching .nvmrc and the Dockerfile. See backend-ci.yml for why this was 22 and what
-  # unblocked the bump.
   NODE_VERSION: '24'
   PNPM_VERSION: '10.33.2'
 
 jobs:
-  quality:
-    name: Lint & typecheck
+  e2e:
+    name: E2E (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opshub_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      # Authenticates pnpm against GitHub Packages for @qnsc-vn/* (see .npmrc).
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Shared by migrate/seed and the API process. Connects as the owner rather than the
+      # restricted role: Backend · CI already proves the least-privilege grants are complete,
+      # and repeating that here would only add a second way for this job to fail.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
+      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
+      VALKEY_URL: redis://localhost:6379
+      # The BFF session lives in Valkey, so the cache is NOT optional here — a run without it
+      # would log in successfully and then lose the session on the next request.
+      JWT_ISSUER: opshub-api
+      JWT_AUDIENCE: opshub-web
+      JWT_ACCESS_EXPIRY: 8h
+      JWT_REFRESH_EXPIRY_DAYS: '7'
+      COOKIE_SECRET: ci-test-cookie-secret-min-32-characters-ok
+      CSRF_SECRET: ci-test-csrf-secret-min-32-characters-okay
+      CORS_ORIGINS: http://localhost:5173
+      # 3001, because apps/web/vite.config.ts proxies /v1 there. A different port here means
+      # every request 502s through the proxy and every spec fails on its first assertion.
+      PORT: '3001'
+      # `POST /v1/bff/dev-login` is refused under NODE_ENV=production by design, and it is how
+      # global-setup signs in — OpsHub's login page is a single Entra SSO button, and CI has no
+      # Entra tenant.
+      NODE_ENV: test
+      LOG_LEVEL: warn
+      OTEL_ENABLED: 'false'
+
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.6
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # pull @qnsc-vn/* from GitHub Packages
 
-      - name: Lint
-        run: pnpm --filter opshub-web lint
-
-      - name: Typecheck
-        run: pnpm --filter opshub-web typecheck
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # 2. Unit tests (no DB — pure component/hook/util tests)
-  # ─────────────────────────────────────────────────────────────────────────
-  test:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    outputs:
-      has_tests: ${{ steps.detect.outputs.has_tests }}
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # pull @qnsc-vn/* from GitHub Packages
-
-      - name: Detect unit tests
-        id: detect
-        shell: bash
+      - name: Generate ephemeral JWT keypair
+        # Fresh EC P-256 keypair per run — never a static secret, matching Backend · CI.
+        # JWT_PUBLIC_KEY is derived from the private key at boot, so only the private one is
+        # strictly required; both are exported to keep the two workflows readable side by side.
         run: |
-          if find apps/web/src -type f \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.spec.ts' -o -name '*.spec.tsx' \) | grep -q .; then
-            echo "has_tests=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_tests=false" >> "$GITHUB_OUTPUT"
-          fi
+          node - << 'EOF'
+          const { generateKeyPairSync } = require('crypto');
+          const fs = require('fs');
+          const { privateKey, publicKey } = generateKeyPairSync('ec', {
+            namedCurve: 'P-256',
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+            publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+          });
+          fs.appendFileSync(process.env.GITHUB_ENV, `JWT_PRIVATE_KEY=${Buffer.from(privateKey).toString('base64')}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `JWT_PUBLIC_KEY=${Buffer.from(publicKey).toString('base64')}\n`);
+          console.log('JWT keypair generated');
+          EOF
 
-      - name: Unit tests (with coverage)
-        if: steps.detect.outputs.has_tests == 'true'
-        run: pnpm --filter opshub-web test:cov
+      # `pnpm db:migrate` also seeds — the RBAC catalogue and one employee per system role,
+      # which is where the `admin@opshub.local` principal the specs sign in as comes from.
+      - name: Migrate + seed database
+        run: pnpm db:migrate
 
-      - name: Skip empty test suite
-        if: steps.detect.outputs.has_tests != 'true'
-        run: echo "No unit test files found. Skipping Vitest coverage job."
+      - name: Build API
+        run: pnpm build:api
 
-      - name: Upload coverage
-        if: always() && steps.detect.outputs.has_tests == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - name: Start API (background)
+        run: |
+          node --enable-source-maps dist/apps/api/apps/api/src/main.js > /tmp/api.log 2>&1 &
+          echo "Waiting for API health..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3001/v1/healthz >/dev/null 2>&1; then
+              echo "API up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start"; cat /tmp/api.log; exit 1
+
+      - name: Install Playwright browser
+        run: pnpm --filter opshub-web exec playwright install --with-deps chromium
+
+      - name: Run browser E2E
+        run: pnpm --filter opshub-web exec playwright test --reporter=line
+
+      - name: Upload Playwright artefacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: coverage
-          path: coverage/
+          name: playwright-report
+          path: apps/web/test-results/
           retention-days: 7
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [quality, test]
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-      - uses: QNSC-VN/qnsc-ci/actions/setup-node-pnpm@v1.6.6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # pull @qnsc-vn/* from GitHub Packages
-
-      - name: Build
-        run: pnpm --filter opshub-web build
-        env:
-          VITE_API_BASE_URL: http://localhost:3000
-
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: dist-${{ github.sha }}
-          path: apps/web/dist/
-          retention-days: 3
+      # The API log is the only place a 500 behind a failed assertion is visible: Playwright
+      # reports "element not found", not why the request failed.
+      - name: API logs on failure
+        if: failure()
+        run: cat /tmp/api.log || true

@@ -50,3 +50,10 @@ junit.xml
 # Local var files may hold environment-specific values — never commit
 **/terraform.tfvars
 **/*.auto.tfvars
+
+# Playwright — artefacts and the signed-in session global-setup writes.
+# `e2e/.auth/state.json` holds a REAL session cookie; committing it would publish a
+# credential and Gitleaks would rightly fail the build.
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/e2e/.auth/
