@@ -20,7 +20,9 @@ import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
 import { ResilienceService } from './resilience/resilience.service';
 import { EMAIL_PROVIDER } from './email/email.provider';
+import { DiscoveryModule } from '@nestjs/core';
 import { ExclusiveJob } from './scheduling/exclusive-job.service';
+import { RouteAuthzAudit } from './auth/route-authz-audit';
 import { DevEmailProvider } from './email/providers/dev.provider';
 import { ResendEmailProvider } from './email/providers/resend.provider';
 import { EmailService } from './email/email.service';
@@ -41,6 +43,8 @@ import { StorageService } from './storage/storage.service';
   imports: [
     AppConfigModule,
     DatabaseModule,
+    // Gives RouteAuthzAudit the controller inventory it scans at bootstrap.
+    DiscoveryModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [AppConfigService],
@@ -77,6 +81,9 @@ import { StorageService } from './storage/storage.service';
   ],
   controllers: [HealthController],
   providers: [
+    // Refuses to finish bootstrapping if any route declares no authorization. A provider so
+    // it runs for every app that imports this module, with no call site to forget.
+    RouteAuthzAudit,
     RequestContextService,
     JwtStrategy,
     JwtAuthGuard,

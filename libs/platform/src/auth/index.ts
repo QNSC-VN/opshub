@@ -7,3 +7,4 @@ export * from './authz.types';
 export * from './scope-evaluator';
 export * from './authz.service';
 export * from './policy.guard';
+export * from './route-authz-audit';

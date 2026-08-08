@@ -10,6 +10,7 @@ import {
   AppConfigService,
   AuthzService,
   RateLimit,
+  SelfScoped,
 } from '@platform';
 import type { JwtPayload } from '@platform';
 import { AuthService } from '@qnsc-vn/identity';
@@ -170,7 +171,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @Auth()
+  @SelfScoped("revokes the caller's own session")
   @HttpCode(204)
   @ApiOperation({
     summary:
@@ -189,6 +190,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @SelfScoped("returns the caller's own principal")
   @Auth()
   @ApiOperation({ summary: 'Return the authenticated principal and its effective permissions' })
   @ApiOkResponse({ type: MeResponseDto })

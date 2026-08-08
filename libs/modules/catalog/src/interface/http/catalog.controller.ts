@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, ParseUUIDPipe} from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -6,7 +16,15 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Auth, RequirePermission, ApiCommonErrors, CurrentUser, AuthzService } from '@platform';
+import {
+  Auth,
+  RequirePermission,
+  ApiCommonErrors,
+  CurrentUser,
+  AuthzService,
+  SelfScoped,
+  SharedRead,
+} from '@platform';
 import type { JwtPayload } from '@platform';
 import { CatalogService } from '../../application/catalog.service';
 import type { CatalogItem } from '../../domain/catalog.types';
@@ -42,6 +60,7 @@ export class CatalogController {
   ) {}
 
   @Get()
+  @SharedRead('the service catalogue is unowned reference data every employee browses')
   @ApiOperation({ summary: 'List active service catalog items' })
   @ApiOkResponse({ type: CatalogItemResponseDto, isArray: true })
   @ApiCommonErrors(401)
@@ -68,6 +87,7 @@ export class CatalogController {
   }
 
   @Get(':id')
+  @SharedRead('one catalogue entry — unowned reference data')
   @ApiOperation({ summary: 'Get a catalog item by id' })
   @ApiOkResponse({ type: CatalogItemResponseDto })
   @ApiCommonErrors(401, 404)
@@ -95,11 +115,15 @@ export class CatalogController {
   @ApiOperation({ summary: 'Delete a catalog item' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
-  async delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
     await this.catalogService.deleteItem(id, { sub: user.sub, email: user.email });
   }
 
   @Post(':id/request')
+  @SelfScoped('submits a request FOR the caller; requesterId is user.sub')
   @ApiOperation({ summary: 'Submit a service catalog request' })
   @ApiCreatedResponse({ schema: { properties: { requestId: { type: 'string' } } } })
   @ApiCommonErrors(400, 401, 404)

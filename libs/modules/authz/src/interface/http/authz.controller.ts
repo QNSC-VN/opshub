@@ -17,7 +17,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { ApiCommonErrors, Auth, CurrentUser, RequirePermission } from '@platform';
+import { ApiCommonErrors, Auth, CurrentUser, RequirePermission, SelfScoped } from '@platform';
 import type { JwtPayload, Permission, RoleAssignment, RoleWithPermissions } from '@platform';
 import { DelegationService, type ApprovalDelegation } from '@platform';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
@@ -198,7 +198,7 @@ export class AuthzController {
   // ── Approval Delegation ────────────────────────────────────────────────────
 
   @Post('delegations')
-  @Auth()
+  @SelfScoped("delegates the CALLER's own approval authority — fromUserId is user.sub")
   @ApiOperation({
     summary: 'Create an approval delegation',
     description:
@@ -230,7 +230,7 @@ export class AuthzController {
   }
 
   @Get('delegations')
-  @Auth()
+  @SelfScoped('lists delegations the caller granted or received')
   @ApiOperation({
     summary: 'List approval delegations',
     description:
@@ -251,6 +251,7 @@ export class AuthzController {
   }
 
   @Delete('delegations/:id')
+  @SelfScoped('revoke is keyed on (id, user.sub), so only the grantor can revoke')
   @Auth()
   @HttpCode(204)
   @ApiOperation({ summary: 'Revoke an approval delegation' })

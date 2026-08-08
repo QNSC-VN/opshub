@@ -33,7 +33,7 @@
 import { Controller, Get, Res } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
-import { Auth, CurrentUser } from '@platform';
+import { Auth, CurrentUser, SelfScoped } from '@platform';
 import type { JwtPayload } from '@platform';
 import { NotificationPubSubService } from '@platform/notifications';
 import { NotificationsService } from '../../application/notifications.service';
@@ -49,8 +49,8 @@ export class NotificationSseController {
     private readonly pubSub: NotificationPubSubService,
     private readonly notificationsService: NotificationsService,
   ) {}
-
   @Get('stream')
+  @SelfScoped("subscribes to the caller's own notification channel")
   @ApiOperation({
     summary: 'SSE stream — real-time notification events',
     description:

@@ -13,7 +13,15 @@ import {
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import '@fastify/cookie';
-import { Auth, CurrentUser, ErrorCodes, Public, RateLimit, UnauthorizedException } from '@platform';
+import {
+  Auth,
+  CurrentUser,
+  ErrorCodes,
+  Public,
+  RateLimit,
+  UnauthorizedException,
+  SelfScoped,
+} from '@platform';
 import type { JwtPayload } from '@platform';
 import { BffService, readCookie } from '@qnsc-vn/identity';
 import { BffLoginDto, DevLoginDto } from '../dto/auth.dto';
@@ -153,6 +161,7 @@ export class BffController {
   // JwtAuthGuard when it resolves the session, so logout revokes the session the
   // request actually arrived on rather than whatever the cookie currently says.
   @Post('logout')
+  @SelfScoped("destroys the caller's own server-side session")
   @HttpCode(204)
   @Auth()
   async logout(
