@@ -5,7 +5,7 @@ import {
   PreconditionFailedException,
   ErrorCodes,
 } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import {
   COMPLIANCE_REPOSITORY,
   type IComplianceRepository,
@@ -39,8 +39,8 @@ export class ComplianceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'software.added',
-      resourceType: 'software_catalog',
+      action: AUDIT_ACTION.SOFTWARE_ADDED,
+      resourceType: AUDIT_RESOURCE.SOFTWARE_CATALOG,
       resourceId: entry.id,
       metadata: { name: entry.name, listing: entry.listing },
     });
@@ -64,8 +64,8 @@ export class ComplianceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'software.updated',
-      resourceType: 'software_catalog',
+      action: AUDIT_ACTION.SOFTWARE_UPDATED,
+      resourceType: AUDIT_RESOURCE.SOFTWARE_CATALOG,
       resourceId: id,
       changes: patch,
     });
@@ -116,7 +116,7 @@ export class ComplianceService {
       actorId: actor.sub,
       actorEmail: actor.email,
       action: `finding.${status}`,
-      resourceType: 'compliance_finding',
+      resourceType: AUDIT_RESOURCE.COMPLIANCE_FINDING,
       resourceId: id,
     });
     return updated;
@@ -138,8 +138,8 @@ export class ComplianceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'finding.acknowledged',
-      resourceType: 'compliance_finding',
+      action: AUDIT_ACTION.FINDING_ACKNOWLEDGED,
+      resourceType: AUDIT_RESOURCE.COMPLIANCE_FINDING,
       resourceId: id,
     });
     return updated;

@@ -1,9 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NotFoundException, ErrorCodes, RequestEngine } from '@platform';
 import { REQUEST_TYPE, type Actor } from '@shared-kernel';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { CATALOG_REPOSITORY, type ICatalogRepository } from '../domain/ports/catalog.repository';
-import type { CatalogItem, CreateCatalogItemInput, UpdateCatalogItemInput } from '../domain/catalog.types';
+import type {
+  CatalogItem,
+  CreateCatalogItemInput,
+  UpdateCatalogItemInput,
+} from '../domain/catalog.types';
 
 @Injectable()
 export class CatalogService {
@@ -18,8 +22,8 @@ export class CatalogService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'catalog.item_created',
-      resourceType: 'catalog_item',
+      action: AUDIT_ACTION.CATALOG_ITEM_CREATED,
+      resourceType: AUDIT_RESOURCE.CATALOG_ITEM,
       resourceId: item.id,
       metadata: { name: item.name, category: item.category },
     });
@@ -43,8 +47,8 @@ export class CatalogService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'catalog.item_updated',
-      resourceType: 'catalog_item',
+      action: AUDIT_ACTION.CATALOG_ITEM_UPDATED,
+      resourceType: AUDIT_RESOURCE.CATALOG_ITEM,
       resourceId: id,
     });
     return updated;
@@ -56,8 +60,8 @@ export class CatalogService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'catalog.item_deleted',
-      resourceType: 'catalog_item',
+      action: AUDIT_ACTION.CATALOG_ITEM_DELETED,
+      resourceType: AUDIT_RESOURCE.CATALOG_ITEM,
       resourceId: id,
     });
   }
@@ -84,8 +88,8 @@ export class CatalogService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'catalog.request_submitted',
-      resourceType: 'catalog_request',
+      action: AUDIT_ACTION.CATALOG_REQUEST_SUBMITTED,
+      resourceType: AUDIT_RESOURCE.CATALOG_REQUEST,
       resourceId: engineItem.id,
       metadata: { catalogItemId, catalogItemName: item.name, reason },
     });

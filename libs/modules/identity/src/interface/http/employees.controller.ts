@@ -8,7 +8,9 @@ import {
   Param,
   Patch,
   Post,
-  Query, ParseUUIDPipe,} from '@nestjs/common';
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import {
   ApiNoContentResponse,
   ApiOkResponse,
@@ -97,14 +99,6 @@ export class EmployeesController {
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
     const employee = await this.employeeService.create(dto, { sub: user.sub, email: user.email });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'employee.created',
-      resourceType: 'employee',
-      resourceId: employee.id,
-      metadata: { email: employee.email, department: employee.department },
-    });
     return toDto(employee);
   }
 
@@ -124,14 +118,6 @@ export class EmployeesController {
       sub: user.sub,
       email: user.email,
     });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'employee.updated',
-      resourceType: 'employee',
-      resourceId: id,
-      metadata: { changes: dto },
-    });
     return toDto(employee);
   }
 
@@ -150,14 +136,6 @@ export class EmployeesController {
     const employee = await this.employeeService.updateStatus(id, dto.status, {
       sub: user.sub,
       email: user.email,
-    });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'employee.status_changed',
-      resourceType: 'employee',
-      resourceId: id,
-      metadata: { status: dto.status },
     });
     return toDto(employee);
   }
@@ -228,7 +206,10 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Delete the employee avatar' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
-  async deleteAvatar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async deleteAvatar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
     await this.employeeService.deleteAvatar(id, { sub: user.sub, email: user.email });
   }
 }

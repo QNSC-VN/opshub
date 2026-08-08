@@ -10,11 +10,17 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiCommonErrors, Auth, CurrentUser, RequirePermission } from '@platform';
 import type { JwtPayload, Permission, RoleAssignment, RoleWithPermissions } from '@platform';
 import { DelegationService, type ApprovalDelegation } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { AuthzAdminService } from '../../application/authz-admin.service';
 import {
   AssignRoleDto,
@@ -110,20 +116,14 @@ export class AuthzController {
     @CurrentUser() user: JwtPayload,
   ): Promise<RoleResponseDto> {
     const role = await this.authz.createRole(dto, { sub: user.sub, email: user.email });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'rbac.role_created',
-      resourceType: 'role',
-      resourceId: role.id,
-      metadata: { key: role.key, name: role.name },
-    });
     return toRoleDto(role);
   }
 
   @Put('roles/:id/permissions')
   @RequirePermission('rbac.manage')
-  @ApiOperation({ summary: 'Replace a role’s permission set' })  @ApiOkResponse({ type: RoleResponseDto })  @ApiCommonErrors(401, 403, 404, 422)
+  @ApiOperation({ summary: 'Replace a role’s permission set' })
+  @ApiOkResponse({ type: RoleResponseDto })
+  @ApiCommonErrors(401, 403, 404, 422)
   async setRolePermissions(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetRolePermissionsDto,
@@ -132,14 +132,6 @@ export class AuthzController {
     const role = await this.authz.setRolePermissions(id, dto.permissions, {
       sub: user.sub,
       email: user.email,
-    });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'rbac.role_permissions_updated',
-      resourceType: 'role',
-      resourceId: id,
-      metadata: { permissions: dto.permissions },
     });
     return toRoleDto(role);
   }
@@ -150,20 +142,18 @@ export class AuthzController {
   @ApiOperation({ summary: 'Delete a custom (non-system) role' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404, 422)
-  async deleteRole(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async deleteRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
     await this.authz.deleteRole(id, { sub: user.sub, email: user.email });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'rbac.role_deleted',
-      resourceType: 'role',
-      resourceId: id,
-    });
   }
 
   @Get('users/:userId/assignments')
   @RequirePermission('rbac.read')
-  @ApiOperation({ summary: 'List a user’s role assignments' })  @ApiOkResponse({ type: [RoleAssignmentResponseDto] })  @ApiCommonErrors(401, 403)
+  @ApiOperation({ summary: 'List a user’s role assignments' })
+  @ApiOkResponse({ type: [RoleAssignmentResponseDto] })
+  @ApiCommonErrors(401, 403)
   async listUserAssignments(
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<RoleAssignmentResponseDto[]> {
@@ -189,14 +179,6 @@ export class AuthzController {
       },
       { sub: user.sub, email: user.email },
     );
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'rbac.role_assigned',
-      resourceType: 'role_assignment',
-      resourceId: assignment.id,
-      metadata: { userId: dto.userId, roleId: dto.roleId, scopeType: dto.scopeType, scopeId: dto.scopeId ?? null },
-    });
     return toAssignmentDto(assignment);
   }
 
@@ -211,13 +193,6 @@ export class AuthzController {
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.authz.revokeAssignment(id, { sub: user.sub, email: user.email });
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'rbac.role_assignment_revoked',
-      resourceType: 'role_assignment',
-      resourceId: id,
-    });
   }
 
   // ── Approval Delegation ────────────────────────────────────────────────────
@@ -246,8 +221,8 @@ export class AuthzController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'rbac.delegation_created',
-      resourceType: 'delegation',
+      action: AUDIT_ACTION.DELEGATION_CREATED,
+      resourceType: AUDIT_RESOURCE.DELEGATION,
       resourceId: d.id,
       metadata: { toUserId: dto.toUserId, startsAt: dto.startsAt, endsAt: dto.endsAt },
     });
@@ -289,8 +264,8 @@ export class AuthzController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'rbac.delegation_revoked',
-      resourceType: 'delegation',
+      action: AUDIT_ACTION.DELEGATION_REVOKED,
+      resourceType: AUDIT_RESOURCE.DELEGATION,
       resourceId: id,
     });
   }

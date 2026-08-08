@@ -13,7 +13,7 @@ import {
   type RequestComment,
   ApiPagedResponse,
 } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import {
   ListRequestsQueryDto,
   ReviewRequestDto,
@@ -23,7 +23,9 @@ import {
   RequestCommentResponseDto,
 } from './dto/requests.dto';
 
-function toApprovalDto(a: RequestItemWithApprovals['approvals'][number]): RequestApprovalResponseDto {
+function toApprovalDto(
+  a: RequestItemWithApprovals['approvals'][number],
+): RequestApprovalResponseDto {
   return {
     id: a.id,
     requestId: a.requestId,
@@ -119,9 +121,7 @@ export class RequestsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get request item with approval history' })
   @ApiOkResponse({ type: RequestItemResponseDto })
-  async getById(
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<RequestItemResponseDto> {
+  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<RequestItemResponseDto> {
     return toDto(await this.mustGetById(id));
   }
 
@@ -138,8 +138,8 @@ export class RequestsController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'request.approved',
-      resourceType: 'request',
+      action: AUDIT_ACTION.REQUEST_APPROVED,
+      resourceType: AUDIT_RESOURCE.REQUEST,
       resourceId: id,
       metadata: { note: dto.note ?? null },
     });
@@ -159,8 +159,8 @@ export class RequestsController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'request.rejected',
-      resourceType: 'request',
+      action: AUDIT_ACTION.REQUEST_REJECTED,
+      resourceType: AUDIT_RESOURCE.REQUEST,
       resourceId: id,
       metadata: { note: dto.note ?? null },
     });
@@ -180,8 +180,8 @@ export class RequestsController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'request.cancelled',
-      resourceType: 'request',
+      action: AUDIT_ACTION.REQUEST_CANCELLED,
+      resourceType: AUDIT_RESOURCE.REQUEST,
       resourceId: id,
     });
     return toDto(await this.mustGetById(id));
@@ -196,9 +196,7 @@ export class RequestsController {
   @Get(':id/comments')
   @ApiOperation({ summary: 'List comments on a request' })
   @ApiOkResponse({ type: [RequestCommentResponseDto] })
-  async listComments(
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<RequestCommentResponseDto[]> {
+  async listComments(@Param('id', ParseUUIDPipe) id: string): Promise<RequestCommentResponseDto[]> {
     // Ensure request exists (throws 404 if not)
     await this.mustGetById(id);
     const comments = await this.engine.listComments(id);
@@ -219,8 +217,8 @@ export class RequestsController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'request.comment_added',
-      resourceType: 'request',
+      action: AUDIT_ACTION.REQUEST_COMMENT_ADDED,
+      resourceType: AUDIT_RESOURCE.REQUEST,
       resourceId: id,
       metadata: { commentId: comment.id },
     });
