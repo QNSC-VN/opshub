@@ -10,7 +10,7 @@ import {
   StorageService,
 } from '@platform';
 import type { PresignUploadResult } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { MS_PER_HOUR, type Actor } from '@shared-kernel';
 import {
   WORKFORCE_REPOSITORY,
@@ -162,8 +162,8 @@ export class WorkforceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: approve ? 'timesheet.approved' : 'timesheet.rejected',
-      resourceType: 'timesheet',
+      action: approve ? AUDIT_ACTION.TIMESHEET_APPROVED : AUDIT_ACTION.TIMESHEET_REJECTED,
+      resourceType: AUDIT_RESOURCE.TIMESHEET,
       resourceId: id,
     });
     return updated!;
@@ -208,8 +208,8 @@ export class WorkforceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'leave.requested',
-      resourceType: 'leave_request',
+      action: AUDIT_ACTION.LEAVE_REQUESTED,
+      resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
       resourceId: leave.id,
       metadata: {
         leaveType: leave.leaveType,
@@ -262,8 +262,8 @@ export class WorkforceService {
       void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
-        action: approve ? 'leave.approved' : 'leave.rejected',
-        resourceType: 'leave_request',
+        action: approve ? AUDIT_ACTION.LEAVE_APPROVED : AUDIT_ACTION.LEAVE_REJECTED,
+        resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
         resourceId: id,
       });
       return updated!;
@@ -348,8 +348,8 @@ export class WorkforceService {
       void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
-        action: approve ? 'overtime.approved' : 'overtime.rejected',
-        resourceType: 'overtime_entry',
+        action: approve ? AUDIT_ACTION.OVERTIME_APPROVED : AUDIT_ACTION.OVERTIME_REJECTED,
+        resourceType: AUDIT_RESOURCE.OVERTIME_ENTRY,
         resourceId: id,
       });
       return updated!;
@@ -425,8 +425,8 @@ export class WorkforceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'workforce.onboarding_submitted',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.ONBOARDING_SUBMITTED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: input.employeeId,
       metadata: { requestId: item.id, startDate: input.startDate },
     });
@@ -453,8 +453,8 @@ export class WorkforceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'workforce.offboarding_submitted',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.OFFBOARDING_SUBMITTED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: input.employeeId,
       metadata: { requestId: item.id, reason: input.reason },
     });
@@ -508,8 +508,8 @@ export class WorkforceService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'leave.document_uploaded',
-      resourceType: 'leave_request',
+      action: AUDIT_ACTION.LEAVE_DOCUMENT_UPLOADED,
+      resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
       resourceId: leaveId,
     });
 

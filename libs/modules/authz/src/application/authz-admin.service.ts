@@ -7,7 +7,7 @@ import {
   ValidationException,
 } from '@platform';
 import type { Permission, RoleAssignment, RoleWithPermissions, ScopeType } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import {
   ROLE_REPOSITORY,
   type CreateRoleInput,
@@ -73,8 +73,8 @@ export class AuthzAdminService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'authz.role.created',
-      resourceType: 'role',
+      action: AUDIT_ACTION.ROLE_CREATED,
+      resourceType: AUDIT_RESOURCE.ROLE,
       resourceId: role.id,
       metadata: { key: role.key, permissions: role.permissions },
     });
@@ -92,8 +92,8 @@ export class AuthzAdminService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'authz.role.permissions_updated',
-      resourceType: 'role',
+      action: AUDIT_ACTION.ROLE_PERMISSIONS_UPDATED,
+      resourceType: AUDIT_RESOURCE.ROLE,
       resourceId: roleId,
       changes: { before: role.permissions, after: permissionKeys },
     });
@@ -126,8 +126,8 @@ export class AuthzAdminService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'authz.role.deleted',
-      resourceType: 'role',
+      action: AUDIT_ACTION.ROLE_DELETED,
+      resourceType: AUDIT_RESOURCE.ROLE,
       resourceId: roleId,
       metadata: { key: role.key, holders: holders.length },
     });
@@ -215,8 +215,8 @@ export class AuthzAdminService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'authz.role.assigned',
-      resourceType: 'role_assignment',
+      action: AUDIT_ACTION.ROLE_ASSIGNED,
+      resourceType: AUDIT_RESOURCE.ROLE_ASSIGNMENT,
       resourceId: assignment.id,
       metadata: {
         userId: command.userId,
@@ -281,8 +281,8 @@ export class AuthzAdminService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'authz.role.synced',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.ROLE_SYNCED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: userId,
       metadata: { requestedKeys: roleKeys, appliedRoles: granted, effectiveClaims: finalKeys },
     });
@@ -300,8 +300,8 @@ export class AuthzAdminService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'authz.role.revoked',
-      resourceType: 'role_assignment',
+      action: AUDIT_ACTION.ROLE_REVOKED,
+      resourceType: AUDIT_RESOURCE.ROLE_ASSIGNMENT,
       resourceId: id,
       metadata: { userId: assignment.userId, roleId: assignment.roleId },
     });

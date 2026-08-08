@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, ParseUUIDPipe} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, ParseUUIDPipe } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -9,7 +9,7 @@ import {
   CurrentUser,
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { ComplianceService } from '../../application/compliance.service';
 import { ShadowItDetectionService } from '../../application/shadow-it-detection.service';
 import {
@@ -99,14 +99,6 @@ export class ComplianceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<SoftwareResponseDto> {
     const entry = await this.service.addSoftware(dto, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'compliance.software_added',
-      resourceType: 'software_catalog',
-      resourceId: entry.id,
-      metadata: { name: entry.name, listing: entry.listing },
-    });
     return toSoftwareDto(entry);
   }
 
@@ -121,14 +113,6 @@ export class ComplianceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<SoftwareResponseDto> {
     const entry = await this.service.updateSoftware(id, dto, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'compliance.software_updated',
-      resourceType: 'software_catalog',
-      resourceId: id,
-      metadata: { changes: dto },
-    });
     return toSoftwareDto(entry);
   }
 
@@ -174,13 +158,6 @@ export class ComplianceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<FindingResponseDto> {
     const finding = await this.service.acknowledgeFinding(id, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'compliance.finding_acknowledged',
-      resourceType: 'compliance_finding',
-      resourceId: id,
-    });
     return toFindingDto(finding);
   }
 
@@ -198,8 +175,8 @@ export class ComplianceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'compliance.finding_resolved',
-      resourceType: 'compliance_finding',
+      action: AUDIT_ACTION.FINDING_RESOLVED,
+      resourceType: AUDIT_RESOURCE.COMPLIANCE_FINDING,
       resourceId: id,
       metadata: { riskAccepted: dto.riskAccepted, note: dto.note ?? null },
     });
@@ -228,8 +205,8 @@ export class ComplianceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'compliance.shadow_it_scan_triggered',
-      resourceType: 'compliance',
+      action: AUDIT_ACTION.SHADOW_IT_SCAN_TRIGGERED,
+      resourceType: AUDIT_RESOURCE.COMPLIANCE,
       resourceId: 'shadow-it',
       metadata: { scanned: result.scanned, newFindings: result.newFindings },
     });

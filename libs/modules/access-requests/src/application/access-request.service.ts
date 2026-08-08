@@ -7,7 +7,7 @@ import {
   PreconditionFailedException,
   RequestEngine,
 } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { newId, MS_PER_HOUR } from '@shared-kernel';
 import { eq } from 'drizzle-orm';
 import { accessRequests } from '../../../../../db/schema';
@@ -61,10 +61,14 @@ export class AccessRequestService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'access_request.submitted',
-      resourceType: 'access_request',
+      action: AUDIT_ACTION.ACCESS_REQUEST_SUBMITTED,
+      resourceType: AUDIT_RESOURCE.ACCESS_REQUEST,
       resourceId: domainRow.id,
-      metadata: { accessType: input.accessType, target: input.target, engineRequestId: engineItem.id },
+      metadata: {
+        accessType: input.accessType,
+        target: input.target,
+        engineRequestId: engineItem.id,
+      },
     });
 
     return { ...domainRow, requestId: engineItem.id };
@@ -133,13 +137,18 @@ export class AccessRequestService {
       };
       await this.db.transaction(async (tx) => {
         await this.repo.approve(requestId, actor.sub, note, grant, tx);
-      });
-      void this.audit.record({
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action: 'access_request.approved',
-        resourceType: 'access_request',
-        resourceId: requestId,
+        // Inside the transaction: an approval that issued a grant without recording it is
+        // exactly the gap an access-request audit trail exists to close.
+        await this.audit.record(
+          {
+            actorId: actor.sub,
+            actorEmail: actor.email,
+            action: AUDIT_ACTION.ACCESS_REQUEST_APPROVED,
+            resourceType: AUDIT_RESOURCE.ACCESS_REQUEST,
+            resourceId: requestId,
+          },
+          tx,
+        );
       });
     }
 
@@ -169,8 +178,8 @@ export class AccessRequestService {
       void this.audit.record({
         actorId: actor.sub,
         actorEmail: actor.email,
-        action: 'access_request.rejected',
-        resourceType: 'access_request',
+        action: AUDIT_ACTION.ACCESS_REQUEST_REJECTED,
+        resourceType: AUDIT_RESOURCE.ACCESS_REQUEST,
         resourceId: requestId,
       });
     }
@@ -191,8 +200,8 @@ export class AccessRequestService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'access_grant.revoked',
-      resourceType: 'access_grant',
+      action: AUDIT_ACTION.ACCESS_GRANT_REVOKED,
+      resourceType: AUDIT_RESOURCE.ACCESS_GRANT,
       resourceId: grantId,
     });
   }

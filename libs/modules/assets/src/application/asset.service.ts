@@ -9,7 +9,7 @@ import {
   StorageService,
 } from '@platform';
 import type { PresignUploadResult } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { EmployeeService } from '@modules/identity';
 import { ASSET_REPOSITORY, type IAssetRepository } from '../domain/ports/asset.repository';
 import type { Asset, AssetAssignment, AssetFilters, CreateAssetInput } from '../domain/asset.types';
@@ -27,14 +27,17 @@ export class AssetService {
   async create(input: CreateAssetInput, actor: { sub: string; email: string }): Promise<Asset> {
     const existing = await this.assetRepo.findByTag(input.assetTag);
     if (existing) {
-      throw new ConflictException(ErrorCodes.ASSET_TAG_TAKEN, `Asset tag ${input.assetTag} is taken`);
+      throw new ConflictException(
+        ErrorCodes.ASSET_TAG_TAKEN,
+        `Asset tag ${input.assetTag} is taken`,
+      );
     }
     const asset = await this.assetRepo.create(input);
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'asset.created',
-      resourceType: 'asset',
+      action: AUDIT_ACTION.ASSET_CREATED,
+      resourceType: AUDIT_RESOURCE.ASSET,
       resourceId: asset.id,
       metadata: { assetTag: asset.assetTag, type: asset.type },
     });
@@ -73,15 +76,17 @@ export class AssetService {
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.assign(assetId, employeeId, notes, tx);
-    });
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: 'asset.assigned',
-      resourceType: 'asset',
-      resourceId: assetId,
-      metadata: { employeeId },
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.ASSET_ASSIGNED,
+          resourceType: AUDIT_RESOURCE.ASSET,
+          resourceId: assetId,
+          metadata: { employeeId },
+        },
+        tx,
+      );
     });
     return this.getById(assetId);
   }
@@ -94,14 +99,16 @@ export class AssetService {
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.unassign(assetId, tx);
-    });
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: 'asset.unassigned',
-      resourceType: 'asset',
-      resourceId: assetId,
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.ASSET_UNASSIGNED,
+          resourceType: AUDIT_RESOURCE.ASSET,
+          resourceId: assetId,
+        },
+        tx,
+      );
     });
     return this.getById(assetId);
   }
@@ -112,14 +119,17 @@ export class AssetService {
       throw new PreconditionFailedException(ErrorCodes.ASSET_RETIRED, 'Asset is already retired');
     }
     if (asset.status === 'assigned') {
-      throw new PreconditionFailedException(ErrorCodes.ASSET_ALREADY_ASSIGNED, 'Cannot retire an assigned asset — unassign it first');
+      throw new PreconditionFailedException(
+        ErrorCodes.ASSET_ALREADY_ASSIGNED,
+        'Cannot retire an assigned asset — unassign it first',
+      );
     }
     await this.assetRepo.retire(assetId);
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'asset.retired',
-      resourceType: 'asset',
+      action: AUDIT_ACTION.ASSET_RETIRED,
+      resourceType: AUDIT_RESOURCE.ASSET,
       resourceId: assetId,
     });
     return this.getById(assetId);
@@ -172,8 +182,8 @@ export class AssetService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'asset.photo_updated',
-      resourceType: 'asset',
+      action: AUDIT_ACTION.ASSET_PHOTO_UPDATED,
+      resourceType: AUDIT_RESOURCE.ASSET,
       resourceId: assetId,
     });
 

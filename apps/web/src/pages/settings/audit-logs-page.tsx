@@ -18,19 +18,41 @@ import type { AuditLogResponse } from '@/shared/api/types';
 
 function formatTs(iso: string) {
   return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
+/**
+ * Badge colour per action verb — the LAST dotted segment of `audit_logs.action`.
+ *
+ * Keys are past tense because every code in `AUDIT_ACTION` is (`role.created`, not
+ * `role.create`). They used to be present tense, so not one of the 65 action codes could ever
+ * match and every badge in the table fell through to the grey default — the colour coding was
+ * dead in a way no test and no glance at the screen would flag, since grey is a valid look.
+ */
 const ACTION_CLASS: Record<string, string> = {
-  create: 'bg-success-bg text-success',
-  update: 'bg-accent-muted text-accent',
-  delete: 'bg-danger-bg text-danger',
-  approve: 'bg-success-bg text-success',
-  reject: 'bg-danger-bg text-danger',
-  assign: 'bg-violet-bg text-violet-fg',
-  revoke: 'bg-orange-50 text-orange-700',
+  created: 'bg-success-bg text-success',
+  added: 'bg-success-bg text-success',
+  updated: 'bg-accent-muted text-accent',
+  permissions_updated: 'bg-accent-muted text-accent',
+  status_changed: 'bg-accent-muted text-accent',
+  synced: 'bg-accent-muted text-accent',
+  deleted: 'bg-danger-bg text-danger',
+  approved: 'bg-success-bg text-success',
+  resolved: 'bg-success-bg text-success',
+  rejected: 'bg-danger-bg text-danger',
+  cancelled: 'bg-danger-bg text-danger',
+  assigned: 'bg-violet-bg text-violet-fg',
+  seat_assigned: 'bg-violet-bg text-violet-fg',
+  revoked: 'bg-orange-50 text-orange-700',
+  seat_revoked: 'bg-orange-50 text-orange-700',
+  unassigned: 'bg-orange-50 text-orange-700',
+  retired: 'bg-orange-50 text-orange-700',
+  disabled: 'bg-orange-50 text-orange-700',
 };
 
 function actionClass(action: string): string {
@@ -43,15 +65,25 @@ const inputClass =
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function AuditRow({ log, onSelect }: { log: AuditLogResponse; onSelect: (l: AuditLogResponse) => void }) {
+function AuditRow({
+  log,
+  onSelect,
+}: {
+  log: AuditLogResponse;
+  onSelect: (l: AuditLogResponse) => void;
+}) {
   return (
     <tr
       className="border-b border-border cursor-pointer transition-colors hover:bg-surface-hover"
       onClick={() => onSelect(log)}
     >
-      <td className="px-4 py-2.5 text-xs text-fg-subtle tabular-nums">{formatTs(log.occurredAt)}</td>
+      <td className="px-4 py-2.5 text-xs text-fg-subtle tabular-nums">
+        {formatTs(log.occurredAt)}
+      </td>
       <td className="px-4 py-2.5">
-        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${actionClass(log.action)}`}>
+        <span
+          className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${actionClass(log.action)}`}
+        >
           {log.action}
         </span>
       </td>
@@ -121,7 +153,9 @@ export function AuditLogsPage() {
         <ShieldAlert className="h-5 w-5 text-fg-subtle" strokeWidth={1.75} />
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-fg">Audit Logs</h1>
-          <p className="text-sm text-fg-muted">Compliance-grade action history for all OpsHub operations.</p>
+          <p className="text-sm text-fg-muted">
+            Compliance-grade action history for all OpsHub operations.
+          </p>
         </div>
       </div>
 
@@ -160,7 +194,9 @@ export function AuditLogsPage() {
         {(committed.actorEmail || committed.resourceType || committed.action) && (
           <button
             onClick={() => {
-              setActorEmail(''); setResourceType(''); setAction('');
+              setActorEmail('');
+              setResourceType('');
+              setAction('');
               setCommitted({ actorEmail: '', resourceType: '', action: '' });
               setOffset(0);
             }}
@@ -179,20 +215,38 @@ export function AuditLogsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-muted">
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted w-44">Time</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Action</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Resource</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted w-32">Resource ID</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Actor</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted w-44">
+                Time
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">
+                Action
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">
+                Resource
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted w-32">
+                Resource ID
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">
+                Actor
+              </th>
               <th className="px-4 py-2.5 w-8" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-fg-subtle">Loading…</td></tr>
+              <tr>
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-fg-subtle">
+                  Loading…
+                </td>
+              </tr>
             )}
             {isError && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-danger">Failed to load audit logs.</td></tr>
+              <tr>
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-danger">
+                  Failed to load audit logs.
+                </td>
+              </tr>
             )}
             {!isLoading && !isError && rows.length === 0 && (
               <tr>
@@ -202,7 +256,9 @@ export function AuditLogsPage() {
                 </td>
               </tr>
             )}
-            {rows.map((log) => <AuditRow key={log.id} log={log} onSelect={setSelected} />)}
+            {rows.map((log) => (
+              <AuditRow key={log.id} log={log} onSelect={setSelected} />
+            ))}
           </tbody>
         </table>
       </div>
@@ -237,7 +293,9 @@ export function AuditLogsPage() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.action ?? 'Audit entry'}
-        description={selected ? `${selected.resourceType} · ${formatTs(selected.occurredAt)}` : undefined}
+        description={
+          selected ? `${selected.resourceType} · ${formatTs(selected.occurredAt)}` : undefined
+        }
         width="lg"
       >
         {selected && (
@@ -245,11 +303,23 @@ export function AuditLogsPage() {
             <SlideOverSection title="Event">
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 {[
-                  { label: 'Action',        value: <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${actionClass(selected.action)}`}>{selected.action}</span> },
+                  {
+                    label: 'Action',
+                    value: (
+                      <span
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${actionClass(selected.action)}`}
+                      >
+                        {selected.action}
+                      </span>
+                    ),
+                  },
                   { label: 'Resource type', value: selected.resourceType },
-                  { label: 'Resource ID',   value: <span className="font-mono text-xs">{selected.resourceId ?? '—'}</span> },
-                  { label: 'Actor',         value: selected.actorEmail ?? selected.actorId ?? 'system' },
-                  { label: 'Time',          value: formatTs(selected.occurredAt) },
+                  {
+                    label: 'Resource ID',
+                    value: <span className="font-mono text-xs">{selected.resourceId ?? '—'}</span>,
+                  },
+                  { label: 'Actor', value: selected.actorEmail ?? selected.actorId ?? 'system' },
+                  { label: 'Time', value: formatTs(selected.occurredAt) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <dt className="text-xs text-fg-subtle">{label}</dt>

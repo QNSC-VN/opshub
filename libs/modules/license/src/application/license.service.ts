@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ConflictException, NotFoundException, PreconditionFailedException, ErrorCodes } from '@platform';
-import { type Actor } from '@shared-kernel';
-import { AuditService } from '@modules/audit';
 import {
-  LICENSE_REPOSITORY,
-  type ILicenseRepository,
-} from '../domain/ports/license.repository';
+  ConflictException,
+  NotFoundException,
+  PreconditionFailedException,
+  ErrorCodes,
+} from '@platform';
+import { type Actor } from '@shared-kernel';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import { LICENSE_REPOSITORY, type ILicenseRepository } from '../domain/ports/license.repository';
 import type {
   SoftwareLicense,
   LicenseAssignment,
@@ -27,8 +29,8 @@ export class LicenseService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'license.created',
-      resourceType: 'software_license',
+      action: AUDIT_ACTION.LICENSE_CREATED,
+      resourceType: AUDIT_RESOURCE.SOFTWARE_LICENSE,
       resourceId: license.id,
       metadata: { name: license.name, vendor: license.vendor },
     });
@@ -56,8 +58,8 @@ export class LicenseService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'license.updated',
-      resourceType: 'software_license',
+      action: AUDIT_ACTION.LICENSE_UPDATED,
+      resourceType: AUDIT_RESOURCE.SOFTWARE_LICENSE,
       resourceId: id,
     });
     return updated;
@@ -76,8 +78,8 @@ export class LicenseService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'license.deleted',
-      resourceType: 'software_license',
+      action: AUDIT_ACTION.LICENSE_DELETED,
+      resourceType: AUDIT_RESOURCE.SOFTWARE_LICENSE,
       resourceId: id,
     });
   }
@@ -92,13 +94,19 @@ export class LicenseService {
 
     const existing = await this.repo.findActiveAssignment(licenseId, employeeId);
     if (existing) {
-      throw new ConflictException(ErrorCodes.CONFLICT, 'Employee already has an active seat for this license');
+      throw new ConflictException(
+        ErrorCodes.CONFLICT,
+        'Employee already has an active seat for this license',
+      );
     }
 
     if (license.seatCount != null) {
       const used = await this.repo.countActiveSeats(licenseId);
       if (used >= license.seatCount) {
-        throw new PreconditionFailedException(ErrorCodes.PRECONDITION_FAILED, 'No seats available for this license');
+        throw new PreconditionFailedException(
+          ErrorCodes.PRECONDITION_FAILED,
+          'No seats available for this license',
+        );
       }
     }
 
@@ -106,8 +114,8 @@ export class LicenseService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'license.seat_assigned',
-      resourceType: 'license_assignment',
+      action: AUDIT_ACTION.LICENSE_SEAT_ASSIGNED,
+      resourceType: AUDIT_RESOURCE.LICENSE_ASSIGNMENT,
       resourceId: assignment.id,
       metadata: { licenseId, employeeId },
     });
@@ -119,8 +127,8 @@ export class LicenseService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'license.seat_revoked',
-      resourceType: 'license_assignment',
+      action: AUDIT_ACTION.LICENSE_SEAT_REVOKED,
+      resourceType: AUDIT_RESOURCE.LICENSE_ASSIGNMENT,
       resourceId: assignmentId,
     });
   }

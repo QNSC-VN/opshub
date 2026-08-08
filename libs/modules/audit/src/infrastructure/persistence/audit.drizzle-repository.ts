@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
 import { auditLogs } from '../../../../../../db/schema';
 import type { IAuditRepository } from '../../domain/ports/audit.repository';
 import type { AuditFilters, AuditLog, CreateAuditLogInput } from '../../domain/audit.types';
@@ -9,8 +9,10 @@ import type { AuditFilters, AuditLog, CreateAuditLogInput } from '../../domain/a
 export class AuditDrizzleRepository implements IAuditRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async create(input: CreateAuditLogInput): Promise<void> {
-    await this.db.insert(auditLogs).values({
+  async create(input: CreateAuditLogInput, tx?: DbExecutor): Promise<void> {
+    // The caller's transaction when given one, so the entry commits with the change it
+    // records; the pool otherwise.
+    await (tx ?? this.db).insert(auditLogs).values({
       id: input.id,
       actorId: input.actorId ?? null,
       actorEmail: input.actorEmail ?? null,

@@ -1,8 +1,18 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RequirePermission, ApiCommonErrors, CurrentUser } from '@platform';
 import type { JwtPayload } from '@platform';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { WebhooksService } from '../../application/webhooks.service';
 import type { WebhookSubscription, WebhookDelivery } from '../../domain/webhook.types';
 import {
@@ -68,8 +78,8 @@ export class WebhooksController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'webhooks.subscription_created',
-      resourceType: 'webhook_subscription',
+      action: AUDIT_ACTION.WEBHOOK_SUBSCRIPTION_CREATED,
+      resourceType: AUDIT_RESOURCE.WEBHOOK_SUBSCRIPTION,
       resourceId: sub.id,
       metadata: { url: dto.url, events: dto.events },
     });
@@ -111,8 +121,10 @@ export class WebhooksController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: dto.active ? 'webhooks.subscription_enabled' : 'webhooks.subscription_disabled',
-      resourceType: 'webhook_subscription',
+      action: dto.active
+        ? AUDIT_ACTION.WEBHOOK_SUBSCRIPTION_ENABLED
+        : AUDIT_ACTION.WEBHOOK_SUBSCRIPTION_DISABLED,
+      resourceType: AUDIT_RESOURCE.WEBHOOK_SUBSCRIPTION,
       resourceId: id,
     });
     return toSubDto(sub);
@@ -131,8 +143,8 @@ export class WebhooksController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'webhooks.subscription_deleted',
-      resourceType: 'webhook_subscription',
+      action: AUDIT_ACTION.WEBHOOK_SUBSCRIPTION_DELETED,
+      resourceType: AUDIT_RESOURCE.WEBHOOK_SUBSCRIPTION,
       resourceId: id,
     });
   }
@@ -164,8 +176,8 @@ export class WebhooksController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'webhooks.delivery_retried',
-      resourceType: 'webhook_delivery',
+      action: AUDIT_ACTION.WEBHOOK_DELIVERY_RETRIED,
+      resourceType: AUDIT_RESOURCE.WEBHOOK_DELIVERY,
       resourceId: id,
     });
     return toDeliveryDto(delivery);

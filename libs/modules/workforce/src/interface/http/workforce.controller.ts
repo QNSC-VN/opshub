@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -10,7 +10,7 @@ import {
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { EmployeeService } from '@modules/identity';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { WorkforceService } from '../../application/workforce.service';
 import {
   CreateTimesheetDto,
@@ -139,8 +139,8 @@ export class WorkforceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'workforce.timesheet_created',
-      resourceType: 'timesheet',
+      action: AUDIT_ACTION.TIMESHEET_CREATED,
+      resourceType: AUDIT_RESOURCE.TIMESHEET,
       resourceId: ts.id,
       metadata: { workDate: dto.workDate, minutesWorked: dto.minutesWorked },
     });
@@ -163,8 +163,8 @@ export class WorkforceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'workforce.timesheet_submitted',
-      resourceType: 'timesheet',
+      action: AUDIT_ACTION.TIMESHEET_SUBMITTED,
+      resourceType: AUDIT_RESOURCE.TIMESHEET,
       resourceId: id,
     });
     return toTimesheetDto(ts);
@@ -180,13 +180,6 @@ export class WorkforceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<TimesheetResponseDto> {
     const ts = await this.service.reviewTimesheet(id, dto.approve, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: dto.approve ? 'workforce.timesheet_approved' : 'workforce.timesheet_rejected',
-      resourceType: 'timesheet',
-      resourceId: id,
-    });
     return toTimesheetDto(ts);
   }
 
@@ -221,14 +214,6 @@ export class WorkforceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
     const leave = await this.service.createLeave(dto, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'workforce.leave_requested',
-      resourceType: 'leave_request',
-      resourceId: leave.id,
-      metadata: { leaveType: dto.leaveType, startDate: dto.startDate, endDate: dto.endDate },
-    });
     return toLeaveDto(leave);
   }
 
@@ -242,13 +227,6 @@ export class WorkforceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
     const leave = await this.service.reviewLeave(id, dto.approve, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: dto.approve ? 'workforce.leave_approved' : 'workforce.leave_rejected',
-      resourceType: 'leave_request',
-      resourceId: id,
-    });
     return toLeaveDto(leave);
   }
 
@@ -268,8 +246,8 @@ export class WorkforceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'workforce.leave_cancelled',
-      resourceType: 'leave_request',
+      action: AUDIT_ACTION.LEAVE_CANCELLED,
+      resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
       resourceId: id,
     });
     return toLeaveDto(leave);
@@ -309,8 +287,8 @@ export class WorkforceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'workforce.overtime_logged',
-      resourceType: 'overtime_entry',
+      action: AUDIT_ACTION.OVERTIME_LOGGED,
+      resourceType: AUDIT_RESOURCE.OVERTIME_ENTRY,
       resourceId: entry.id,
       metadata: { workDate: dto.workDate, hours: dto.hours },
     });
@@ -327,13 +305,6 @@ export class WorkforceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<OvertimeResponseDto> {
     const entry = await this.service.reviewOvertime(id, dto.approve, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: dto.approve ? 'workforce.overtime_approved' : 'workforce.overtime_rejected',
-      resourceType: 'overtime_entry',
-      resourceId: id,
-    });
     return toOvertimeDto(entry);
   }
 
@@ -374,8 +345,8 @@ export class WorkforceController {
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
-      action: 'workforce.shift_logged',
-      resourceType: 'shift_log',
+      action: AUDIT_ACTION.SHIFT_LOGGED,
+      resourceType: AUDIT_RESOURCE.SHIFT_LOG,
       resourceId: shift.id,
       metadata: { shiftType: dto.shiftType, startsAt: dto.startsAt, endsAt: dto.endsAt },
     });

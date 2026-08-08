@@ -3,7 +3,7 @@ import { NotFoundException, ConflictException, ErrorCodes, StorageService } from
 import { AuthTokenCache } from '@qnsc-vn/identity';
 import type { PresignUploadResult } from '@platform';
 import { SEC_PER_DAY } from '@shared-kernel';
-import { AuditService } from '@modules/audit';
+import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../domain/ports/employee.repository';
 import {
   REFRESH_TOKEN_REPOSITORY,
@@ -43,8 +43,8 @@ export class EmployeeService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'employee.created',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.EMPLOYEE_CREATED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: employee.id,
       changes: { email: employee.email, displayName: employee.displayName, roles: employee.roles },
     });
@@ -67,8 +67,8 @@ export class EmployeeService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'employee.updated',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.EMPLOYEE_UPDATED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: id,
       changes: input,
     });
@@ -104,8 +104,8 @@ export class EmployeeService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'employee.status_changed',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.EMPLOYEE_STATUS_CHANGED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: id,
       changes: { from: employee.status, to: status },
     });
@@ -163,8 +163,8 @@ export class EmployeeService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'employee.avatar_updated',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.EMPLOYEE_AVATAR_UPDATED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: employeeId,
     });
 
@@ -192,8 +192,8 @@ export class EmployeeService {
     void this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
-      action: 'employee.avatar_deleted',
-      resourceType: 'employee',
+      action: AUDIT_ACTION.EMPLOYEE_AVATAR_DELETED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
       resourceId: employeeId,
     });
   }

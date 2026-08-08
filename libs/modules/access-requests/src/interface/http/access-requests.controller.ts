@@ -90,18 +90,6 @@ export class AccessRequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessRequestResponseDto> {
     const result = await this.service.submit(dto, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'access_request.submitted',
-      resourceType: 'access_request',
-      resourceId: result.id,
-      metadata: {
-        accessType: dto.accessType,
-        target: dto.target,
-        durationHours: dto.durationHours,
-      },
-    });
     return toDto(result);
   }
 
@@ -122,16 +110,6 @@ export class AccessRequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessRequestResponseDto> {
     const request = await this.service.approve(id, dto.note ?? null, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'access_request.approved',
-      resourceType: 'access_request',
-      resourceId: id,
-      // `status` rather than a grant id: an intermediate step has no grant, and recording
-      // the state the approval produced is what makes the trail readable either way.
-      metadata: { status: request.status, note: dto.note ?? null },
-    });
     return toDto(request);
   }
 
@@ -146,14 +124,6 @@ export class AccessRequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessRequestResponseDto> {
     const result = await this.service.reject(id, dto.note ?? null, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'access_request.rejected',
-      resourceType: 'access_request',
-      resourceId: id,
-      metadata: { note: dto.note ?? null },
-    });
     return toDto(result);
   }
 
@@ -167,13 +137,6 @@ export class AccessRequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<{ status: string }> {
     await this.service.revokeGrant(grantId, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'access_request.grant_revoked',
-      resourceType: 'access_grant',
-      resourceId: grantId,
-    });
     return { status: 'revoked' };
   }
 

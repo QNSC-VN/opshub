@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -109,14 +109,6 @@ export class AssetsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AssetResponseDto> {
     const asset = await this.assetService.create(dto, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'asset.created',
-      resourceType: 'asset',
-      resourceId: asset.id,
-      metadata: { assetTag: asset.assetTag, type: asset.type },
-    });
     return toDto(asset);
   }
 
@@ -131,14 +123,6 @@ export class AssetsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AssetResponseDto> {
     const asset = await this.assetService.assign(id, dto.employeeId, dto.notes ?? null, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'asset.assigned',
-      resourceType: 'asset',
-      resourceId: id,
-      metadata: { employeeId: dto.employeeId },
-    });
     return toDto(asset);
   }
 
@@ -152,13 +136,6 @@ export class AssetsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AssetResponseDto> {
     const asset = await this.assetService.unassign(id, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'asset.unassigned',
-      resourceType: 'asset',
-      resourceId: id,
-    });
     return toDto(asset);
   }
 
@@ -172,13 +149,6 @@ export class AssetsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AssetResponseDto> {
     const asset = await this.assetService.retire(id, user);
-    void this.audit.record({
-      actorId: user.sub,
-      actorEmail: user.email,
-      action: 'asset.retired',
-      resourceType: 'asset',
-      resourceId: id,
-    });
     return toDto(asset);
   }
 
