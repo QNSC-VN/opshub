@@ -7,6 +7,8 @@ import {
   ApiPagedResponse,
   buildPageResult,
   CurrentUser,
+  SelfScoped,
+  AuthorizedInService,
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { EmployeeService } from '@modules/identity';
@@ -107,6 +109,10 @@ export class WorkforceController {
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
   @Get('timesheets')
+  @AuthorizedInService(
+    'optional employeeId filter: narrowToActor denies asking for another employee without workforce.read, else pins it to user.sub',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary: 'List timesheets',
     description:
@@ -129,6 +135,7 @@ export class WorkforceController {
   }
 
   @Post('timesheets')
+  @SelfScoped('creates a timesheet FOR the caller — employeeId is actor.sub')
   @ApiOperation({ summary: 'Create a draft timesheet for the current user' })
   @ApiCommonErrors(401, 422)
   async createTimesheet(
@@ -148,6 +155,10 @@ export class WorkforceController {
   }
 
   @Post('timesheets/:id/submit')
+  @AuthorizedInService(
+    'assertOwnerOrApprover: the owner, or a holder of workforce.approve',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary: 'Submit a timesheet for approval',
     description:
@@ -185,6 +196,10 @@ export class WorkforceController {
 
   // ── Leave ──────────────────────────────────────────────────────────────────
   @Get('leave')
+  @AuthorizedInService(
+    'optional employeeId filter — see narrowToActor',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary: 'List leave requests',
     description:
@@ -207,6 +222,7 @@ export class WorkforceController {
   }
 
   @Post('leave')
+  @SelfScoped('files leave FOR the caller — employeeId is actor.sub')
   @ApiOperation({ summary: 'Request leave for the current user' })
   @ApiCommonErrors(401, 409, 412, 422)
   async createLeave(
@@ -231,6 +247,10 @@ export class WorkforceController {
   }
 
   @Post('leave/:id/cancel')
+  @AuthorizedInService(
+    'assertOwnerOrApprover: the owner, or a holder of workforce.approve',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary: 'Cancel a leave request',
     description:
@@ -255,6 +275,10 @@ export class WorkforceController {
 
   // ── Overtime ───────────────────────────────────────────────────────────────
   @Get('overtime')
+  @AuthorizedInService(
+    'optional employeeId filter — see narrowToActor',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary: 'List overtime entries',
     description:
@@ -277,6 +301,7 @@ export class WorkforceController {
   }
 
   @Post('overtime')
+  @SelfScoped('logs overtime FOR the caller — employeeId is actor.sub')
   @ApiOperation({ summary: 'Log overtime for the current user' })
   @ApiCommonErrors(401, 422)
   async createOvertime(
@@ -310,6 +335,10 @@ export class WorkforceController {
 
   // ── Shift logs ─────────────────────────────────────────────────────────────
   @Get('shifts')
+  @AuthorizedInService(
+    'optional employeeId filter — see narrowToActor',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary: 'List night/on-call/weekend shift logs',
     description:
@@ -332,6 +361,7 @@ export class WorkforceController {
   }
 
   @Post('shifts')
+  @SelfScoped('logs a shift FOR the caller — employeeId is actor.sub')
   @ApiOperation({ summary: 'Log a worked shift for the current user' })
   @ApiCommonErrors(401, 412, 422)
   async createShift(
@@ -409,6 +439,10 @@ export class WorkforceController {
   // ── Leave document upload ─────────────────────────────────────────────
 
   @Post('leave-requests/:id/document/presign')
+  @AuthorizedInService(
+    'assertOwnerOrApprover on the leave request the document attaches to',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({
     summary:
       'Get a presigned S3 PUT URL to upload a leave supporting document (e.g. medical certificate)',
@@ -434,6 +468,10 @@ export class WorkforceController {
   }
 
   @Post('leave-requests/:id/document/confirm')
+  @AuthorizedInService(
+    'assertOwnerOrApprover on the owning leave request',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({ summary: 'Confirm leave document upload completed' })
   @ApiResponse({
     status: 200,
@@ -449,6 +487,10 @@ export class WorkforceController {
   }
 
   @Get('leave-requests/:id/document')
+  @AuthorizedInService(
+    'assertOwnerOrApprover on the owning leave request',
+    'workforce-access-narrowing.spec.ts',
+  )
   @ApiOperation({ summary: 'Get a time-limited download URL for the leave supporting document' })
   @ApiResponse({
     status: 200,

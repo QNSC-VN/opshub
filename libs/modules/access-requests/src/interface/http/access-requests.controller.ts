@@ -7,6 +7,8 @@ import {
   ApiPagedResponse,
   buildPageResult,
   CurrentUser,
+  SelfScoped,
+  AuthzGap,
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
@@ -59,6 +61,9 @@ export class AccessRequestsController {
   ) {}
 
   @Get()
+  @AuthzGap(
+    'the repository applies requesterId only when supplied, so an unfiltered call returns every access request. Same shape as the request engine; needs the same decision.',
+  )
   @ApiOperation({ summary: 'List access requests' })
   @ApiPagedResponse(AccessRequestResponseDto)
   @ApiCommonErrors(401)
@@ -74,6 +79,7 @@ export class AccessRequestsController {
   }
 
   @Get(':id')
+  @AuthzGap('no ownership check — any authenticated caller can read any access request by id.')
   @ApiOperation({ summary: 'Get an access request by id' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 404)
@@ -82,6 +88,7 @@ export class AccessRequestsController {
   }
 
   @Post()
+  @SelfScoped('submits an access request FOR the caller — requesterId is actor.sub')
   @ApiOperation({ summary: 'Submit a privileged-access request' })
   @ApiCreatedResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 422)
@@ -141,6 +148,7 @@ export class AccessRequestsController {
   }
 
   @Get('grants/me/active')
+  @SelfScoped('lists the callers own active grants — listActiveGrants(user.sub)')
   @ApiOperation({ summary: 'List my active grants' })
   @ApiOkResponse({ type: [AccessGrantResponseDto] })
   @ApiCommonErrors(401)

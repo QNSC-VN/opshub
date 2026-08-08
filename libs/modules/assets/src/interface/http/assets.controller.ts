@@ -194,7 +194,7 @@ export class AssetsController {
   }
 
   @Get(':id/photo')
-  @Auth()
+  @RequirePermission('asset.read', { resource: 'asset', from: 'param', field: 'id' })
   @ApiOperation({ summary: 'Get a time-limited download URL for the asset photo' })
   @ApiOkResponse({
     schema: {

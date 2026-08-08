@@ -12,6 +12,8 @@ import {
   type RequestItemWithApprovals,
   type RequestComment,
   ApiPagedResponse,
+  AuthorizedInService,
+  AuthzGap,
 } from '@platform';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import {
@@ -95,6 +97,9 @@ export class RequestsController {
    * Use `myQueue=true` to get requests awaiting the caller's action.
    */
   @Get()
+  @AuthzGap(
+    'RequestEngine.list builds its WHERE from optional filters only, so an unfiltered call returns EVERY request. Needs a product decision on who may see all requests before it can be narrowed.',
+  )
   @ApiOperation({ summary: 'List request items (unified inbox)' })
   @ApiPagedResponse(RequestItemResponseDto)
   async list(
@@ -119,6 +124,9 @@ export class RequestsController {
 
   /** Get a single request item with its full approval history. */
   @Get(':id')
+  @AuthzGap(
+    'RequestEngine.getById performs no ownership or participant check — any authenticated caller can read any request by id.',
+  )
   @ApiOperation({ summary: 'Get request item with approval history' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async getById(@Param('id', ParseUUIDPipe) id: string): Promise<RequestItemResponseDto> {
@@ -127,6 +135,10 @@ export class RequestsController {
 
   /** Approve a pending request. Requires the relevant `*.approve` permission. */
   @Post(':id/approve')
+  @AuthorizedInService(
+    'required permission comes from the request TYPE and current STEP; unions actor with an active delegator and enforces separation of duties',
+    'request-engine.spec.ts',
+  )
   @ApiOperation({ summary: 'Approve a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async approve(
@@ -148,6 +160,7 @@ export class RequestsController {
 
   /** Reject a pending request. Requires the relevant `*.approve` permission. */
   @Post(':id/reject')
+  @AuthorizedInService('same step-derived permission as approve', 'request-engine.spec.ts')
   @ApiOperation({ summary: 'Reject a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async reject(
@@ -169,6 +182,7 @@ export class RequestsController {
 
   /** Cancel a pending request (requester or admin). */
   @Post(':id/cancel')
+  @AuthorizedInService('requester, or a holder of rbac.manage', 'request-engine.spec.ts')
   @ApiOperation({ summary: 'Cancel a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
   async cancel(
@@ -194,6 +208,7 @@ export class RequestsController {
    * Comments are informational only — they do not affect request state.
    */
   @Get(':id/comments')
+  @AuthzGap('listComments filters on requestId alone, with no participant check.')
   @ApiOperation({ summary: 'List comments on a request' })
   @ApiOkResponse({ type: [RequestCommentResponseDto] })
   async listComments(@Param('id', ParseUUIDPipe) id: string): Promise<RequestCommentResponseDto[]> {
@@ -205,6 +220,9 @@ export class RequestsController {
 
   /** Post a discussion comment. Does not trigger any state transition. */
   @Post(':id/comments')
+  @AuthzGap(
+    'addComment verifies only that the request exists — any authenticated caller can comment on any request.',
+  )
   @HttpCode(201)
   @ApiOperation({ summary: 'Post a comment on a request' })
   @ApiCreatedResponse({ type: RequestCommentResponseDto })

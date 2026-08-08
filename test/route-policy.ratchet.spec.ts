@@ -4,56 +4,34 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Ratchet: how many HTTP route handlers carry NEITHER `@RequirePermission` nor `@Public`.
+ * Ratchet: every HTTP route handler must DECLARE how it is authorized. Baseline 0.
  *
- * This matters because of one line in `libs/platform/src/auth/policy.guard.ts`:
+ * This used to be a debt counter at 43, because `PolicyGuard` returned `true` on missing
+ * metadata: a handler nobody decorated was allowed, to any authenticated caller. `JwtAuthGuard`
+ * proved *who* you were and nothing then checked *whether you may*, so forgetting a decorator
+ * was not a 500 and not a 403 — it was a silently world-readable endpoint that every test
+ * still passed.
  *
- *     if (!requirement) return true;
+ * The guard now denies an undeclared route, and `assertEveryRouteDeclaresAuthz` refuses to
+ * finish bootstrapping when one exists. So this is no longer a debt marker: it is a static
+ * fast check for a property the runtime also enforces, and it stays because a source-text scan
+ * runs in milliseconds and names the file and line, while the boot audit needs a module graph.
  *
- * A handler with no permission metadata is not denied — it is ALLOWED, to any
- * authenticated caller. `JwtAuthGuard` still proves *who* you are; nothing then checks
- * *whether you may*. So forgetting the decorator on a new route is not a 500 and not a
- * 403: it is a silently world-readable (or world-writable) endpoint that every test
- * still passes. That is the failure mode this counter exists to make loud.
+ * FIVE declarations satisfy it, and every route has exactly one:
+ *   `@RequirePermission(code, scope?)`   a permission, resolved from the database
+ *   `@Public()`                          no principal exists yet (login, refresh, HMAC webhook)
+ *   `@SelfScoped(reason)`                the subject IS the caller
+ *   `@AuthorizedInService(reason, test)` resolved at run time, pinned by a named test
+ *   `@AuthzGap(reason)`                  a KNOWN missing check, counted below
  *
- * Note that `@Auth()` does NOT count as policed. It mounts `JwtAuthGuard` and
- * `PolicyGuard`, but mounting `PolicyGuard` without metadata for it to read is exactly
- * the case above: the guard runs and returns `true`. Most controllers carry a class-level
- * `@Auth()`, so treating it as authorization would make this counter report zero while
- * changing nothing about who may call what.
+ * `@Auth()` is NOT one of them. It mounts JwtAuthGuard and nothing else, so treating it as
+ * authorization would make this ratchet report zero while changing nothing about who may call
+ * what — which is exactly the state that produced the 43.
  *
- * Three shapes are legitimately undecorated, and they are why this is a ratchet rather
- * than an assertion of zero:
- *
- *  1. No principal to authorize — `/v1/bff/login`, `auth/refresh` and the signature-
- *     authenticated `webhooks/inbound` all run before, or without, an identity.
- *     `health` is explicitly `@Public`, so it already counts as policed.
- *  2. Self-scoped by construction — the subject IS the caller, so there is no cross-user
- *     access to authorize: `authz/delegations` (writes `fromUserId: user.sub`, reads
- *     `listFrom(user.sub)`), `notifications/*`, `notification-preferences/*`,
- *     `access-requests/grants/me/active`, `auth/me`, and both logout routes.
- *  3. Authorization resolved at RUN TIME, so no static decorator can name it. Two shapes
- *     live here, and both are pinned by unit tests rather than by this counter:
- *       - `requests/:id/{approve,reject}` — the required permission comes from the
- *         request TYPE and the current approval STEP (`stepDef.requiredPermission ??
- *         def.requiredApprovalPermission`), and the check unions the actor with an
- *         active delegator and enforces separation of duties. See
- *         `RequestEngine.approve`.
- *       - `GET workforce/{timesheets,leave,overtime,shifts}` — the `employeeId` filter is
- *         OPTIONAL, so a scope descriptor cannot work: with the filter omitted the guard
- *         resolves no resource and `AuthzService.check` denies, which would 403 the
- *         self-service case the SPA actually issues. `WorkforceService.narrowToActor`
- *         decides the tier first and then applies the filter. See
- *         `workforce-access-narrowing.spec.ts`.
- *
- * Everything else in the count is a gap, not a design — the read paths of modules whose
- * write paths are decorated. The list is not enumerated here because it goes stale; run
- * the test and read the failure report, which prints file and line.
- *
- * The counter reads SOURCE TEXT. It cannot tell a correct permission code from a
- * misspelled one, and it cannot see authorization that lives inside a service — the six
- * workforce routes above pass this check by NOT being counted, which is exactly why a
- * ratchet is a smoke detector and the e2e and unit suites are the authorization tests.
+ * This scanner reads SOURCE TEXT. It cannot tell a correct permission code from a misspelled
+ * one, and it cannot see authorization that lives inside a service — `@AuthorizedInService`
+ * routes satisfy it by declaring, not by being checked here. That is why a ratchet is a smoke
+ * detector and the e2e and unit suites are the authorization tests.
  */
 
 // ── Baseline — LOWER as routes get decorated, NEVER raise ─────────────────────
@@ -71,7 +49,17 @@ import { describe, expect, it } from 'vitest';
 //
 // This baseline is a DEBT MARKER, not a target: it exists so the unpoliced surface stops
 // growing while the remaining routes are closed one module at a time.
-const MAX_UNPOLICED_ROUTES = 43;
+const MAX_UNPOLICED_ROUTES = 0;
+
+/**
+ * Routes carrying `@AuthzGap` — a DECLARED missing check. MAY ONLY FALL.
+ *
+ * All six are the same defect in two modules: the WHERE clause is built from optional
+ * filters, so an unfiltered call returns every row, and the by-id reads perform no ownership
+ * check at all. They are declared rather than silently narrowed because choosing who may see
+ * all requests is a product decision, and labelling them `@SelfScoped` would have been false.
+ */
+const MAX_AUTHZ_GAPS = 6;
 
 /** Sanity floor: if the scanner stops finding routes, fail loudly, not silently. */
 const MIN_ROUTES_FOUND = 100;
@@ -85,7 +73,8 @@ const HANDLER = /^\s*(?:async\s+)?[\w[\]'"]+\s*\(/;
  * not prose: an unanchored /@RequirePermission/ also matches the doc comments that
  * mention the decorator by name, which would silently mark whole controllers as policed.
  */
-const POLICY = /^\s*@(RequirePermission|Public)\b/;
+const POLICY =
+  /^\s*@(RequirePermission|Public|SelfScoped|SharedRead|AuthorizedInService|AuthzGap)\b/;
 const COMMENT = /^\s*(\/\/|\/?\*)/;
 
 interface Route {
@@ -175,5 +164,36 @@ describe('route-policy ratchet (only ever decreases)', () => {
     }
 
     expect(unpoliced.length).toBeLessThanOrEqual(MAX_UNPOLICED_ROUTES);
+  });
+
+  it(`declared authorization gaps <= ${MAX_AUTHZ_GAPS}`, () => {
+    const files = execFileSync('git', ['ls-files', '*.controller.ts'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(Boolean)
+      .filter((f) => existsSync(join(ROOT, f)));
+
+    const gaps: string[] = [];
+    for (const file of files) {
+      const lines = readFileSync(join(ROOT, file), 'utf8').split('\n');
+      lines.forEach((l, i) => {
+        if (/^\s*@AuthzGap\(/.test(l)) gaps.push(`${file}:${i + 1}`);
+      });
+    }
+
+    expect(
+      gaps.length,
+      `Declared authorization gaps rose to ${gaps.length} (max ${MAX_AUTHZ_GAPS}):\n  ` +
+        `${gaps.join('\n  ')}\n\n@AuthzGap ships a KNOWN hole. Adding one is a decision to ` +
+        `be argued in review, not a way to satisfy the boot audit.`,
+    ).toBeLessThanOrEqual(MAX_AUTHZ_GAPS);
+
+    expect(
+      gaps.length,
+      `MAX_AUTHZ_GAPS is ${MAX_AUTHZ_GAPS} but only ${gaps.length} remain — lower it, or the ` +
+        `ratchet stops measuring.`,
+    ).toBe(MAX_AUTHZ_GAPS);
   });
 });
