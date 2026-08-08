@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { StorageService } from '@platform';
+import { ExclusiveJob, StorageService } from '@platform';
 import { MS_PER_HOUR } from '@shared-kernel';
 
 /** Run the orphan cleanup sweep every hour. */
 const CLEANUP_INTERVAL_MS = MS_PER_HOUR;
+
+/** Under the sweep interval, so a crashed pod cannot block the next sweep. */
+const LOCK_TTL_MS = 55 * 60_000;
 
 /**
  * StorageCleanupCron — purges orphaned pending file uploads.
@@ -25,13 +28,18 @@ const CLEANUP_INTERVAL_MS = MS_PER_HOUR;
 export class StorageCleanupCron {
   private readonly logger = new Logger(StorageCleanupCron.name);
 
-  constructor(private readonly storage: StorageService) {}
+  constructor(
+    private readonly storage: StorageService,
+    private readonly exclusive: ExclusiveJob,
+  ) {}
 
   @Interval(CLEANUP_INTERVAL_MS)
   async tick(): Promise<void> {
-    const purged = await this.storage.purgeOrphanedUploads();
-    if (purged > 0) {
-      this.logger.log(`Purged ${purged} orphaned pending upload(s)`);
-    }
+    await this.exclusive.run('storage-cleanup', LOCK_TTL_MS, async () => {
+      const purged = await this.storage.purgeOrphanedUploads();
+      if (purged > 0) {
+        this.logger.log(`Purged ${purged} orphaned pending upload(s)`);
+      }
+    });
   }
 }
