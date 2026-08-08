@@ -47,6 +47,20 @@ const MAX_ARBITRARY_TEXT = 29;
 // composing. The generated API client is excluded — it is 7575 lines and not hand-written.
 const MAX_FILE_LINES = 1082;
 
+/**
+ * Hand-rolled modal overlays — a `fixed inset-0 z-50` backdrop built inline instead of using
+ * `shared/ui/modal.tsx`. MAY ONLY FALL.
+ *
+ * 11 of the 12 modals in the SPA do this, and `Modal` is the only component that sets
+ * `role="dialog"` / `aria-modal`, so none of those 11 are announced as dialogs to a screen reader
+ * and none inherit its focus handling. Found while writing `apps/web/e2e/workforce-leave.e2e.ts`,
+ * where `page.getByRole('dialog')` matched nothing on an open modal — a browser test failing to
+ * find a dialog is the same signal assistive tech gets.
+ *
+ * Twelve copies of backdrop markup is also the duplication `Modal` exists to remove.
+ */
+const MAX_HANDROLLED_MODAL = 11;
+
 // this file lives in src/test/
 const SRC = join(import.meta.dirname, '../');
 
@@ -121,6 +135,21 @@ describe('FE consistency ratchets (only ever decrease)', () => {
   it(`arbitrary text-[…] app-wide <= ${MAX_ARBITRARY_TEXT}`, () => {
     const { total, byFile } = countMatches((f) => f.endsWith('.tsx'), /text-\[/g);
     assertRatchet('arbitrary text-[ count', total, MAX_ARBITRARY_TEXT, byFile);
+  });
+
+  it(`hand-rolled modal overlays <= ${MAX_HANDROLLED_MODAL}`, () => {
+    // Counts files, not occurrences: a page with two inline modals is one file to convert.
+    const byFile: Record<string, number> = {};
+    let total = 0;
+    for (const rel of files((f) => f.endsWith('.tsx'))) {
+      if (rel.includes('shared/ui/')) continue; // Modal itself, and slide-over, legitimately own one.
+      const hits = (readFileSync(join(SRC, rel), 'utf8').match(/fixed inset-0 z-50/g) ?? []).length;
+      if (hits > 0) {
+        byFile[rel] = hits;
+        total += 1;
+      }
+    }
+    assertRatchet('hand-rolled modal files', total, MAX_HANDROLLED_MODAL, byFile);
   });
 
   it(`largest source file <= ${MAX_FILE_LINES} lines`, () => {
