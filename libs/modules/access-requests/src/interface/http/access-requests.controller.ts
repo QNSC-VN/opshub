@@ -8,7 +8,7 @@ import {
   buildPageResult,
   CurrentUser,
   SelfScoped,
-  AuthzGap,
+  AuthorizedInService,
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
@@ -61,30 +61,39 @@ export class AccessRequestsController {
   ) {}
 
   @Get()
-  @AuthzGap(
-    'the repository applies requesterId only when supplied, so an unfiltered call returns every access request. Same shape as the request engine; needs the same decision.',
+  @AuthorizedInService(
+    'narrows to the caller unless they hold access_request.read',
+    'request-visibility.e2e.spec.ts',
   )
   @ApiOperation({ summary: 'List access requests' })
   @ApiPagedResponse(AccessRequestResponseDto)
   @ApiCommonErrors(401)
   async list(
     @Query() query: ListAccessRequestsQueryDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<PagedResult<AccessRequestResponseDto>> {
     const { rows, total } = await this.service.list(
       { requesterId: query.requesterId, status: query.status },
       query.limit,
       query.offset,
+      user,
     );
     return buildPageResult(rows.map(toDto), total, query.limit, query.offset);
   }
 
   @Get(':id')
-  @AuthzGap('no ownership check — any authenticated caller can read any access request by id.')
+  @AuthorizedInService(
+    'assertParty on the requester, else access_request.read',
+    'request-visibility.e2e.spec.ts',
+  )
   @ApiOperation({ summary: 'Get an access request by id' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 404)
-  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<AccessRequestResponseDto> {
-    return toDto(await this.service.getById(id));
+  async getById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<AccessRequestResponseDto> {
+    return toDto(await this.service.getById(id, user));
   }
 
   @Post()

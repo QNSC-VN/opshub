@@ -14,6 +14,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PermissionDeniedException } from '@platform';
+import { ActorScope } from '@platform';
 import { WorkforceService } from './workforce.service';
 
 const mockRepo = {
@@ -44,6 +45,9 @@ function service(): WorkforceService {
     mockEngine as never,
     mockStorage as never,
     mockAuthz as never,
+    // The real ActorScope over the mocked AuthzService — narrowToActor now delegates to it, so
+    // stubbing it would remove the logic these tests exist to check.
+    new ActorScope(mockAuthz as never),
   );
 }
 

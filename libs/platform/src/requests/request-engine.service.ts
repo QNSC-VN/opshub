@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { newId, type Actor } from '@shared-kernel';
 import { InjectDrizzle, type DrizzleDB } from '../database/drizzle.provider';
 import { AuthzService } from '../auth/authz.service';
+import { ActorScope } from '../auth/actor-scope.service';
 import {
   NotFoundException,
   PreconditionFailedException,
@@ -43,6 +44,7 @@ export class RequestEngine {
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly registry: RequestRegistry,
     private readonly authz: AuthzService,
+    private readonly actorScope: ActorScope,
     private readonly delegation: DelegationService,
     private readonly notifScheduler: NotificationSchedulerService,
     private readonly webhookEnqueue: WebhookEnqueueService,
@@ -413,7 +415,33 @@ export class RequestEngine {
 
   // ── Query ──────────────────────────────────────────────────────────────────
 
-  async getById(id: string): Promise<RequestItemWithApprovals | null> {
+  /**
+   * Read one request, if the actor is a party to it or holds `request.read`.
+   *
+   * Performed no check at all before: any authenticated caller could read any request by id,
+   * including its approval chain and the requester's justification.
+   *
+   * The check lives HERE and not in {@link loadUnchecked}, which the transitions use. An
+   * approver is frequently neither the requester nor the current assignee — a multi-step chain
+   * resolves the next assignee only when it advances — and `approve` already gates on the
+   * step's own `requiredPermission`. Asserting party on the internal read would have refused
+   * exactly the approvals this engine exists to route.
+   */
+  async getById(id: string, actor: Actor): Promise<RequestItemWithApprovals | null> {
+    const item = await this.loadUnchecked(id);
+    if (!item) return null;
+
+    await this.actorScope.assertParty(
+      [item.requesterId, item.assigneeId],
+      actor,
+      'request.read',
+      'request',
+    );
+    return item;
+  }
+
+  /** The raw read, with no authorization: for transitions that gate on their own permission. */
+  private async loadUnchecked(id: string): Promise<RequestItemWithApprovals | null> {
     const [row] = await this.db.select().from(requestItems).where(eq(requestItems.id, id)).limit(1);
     if (!row) return null;
 
@@ -421,17 +449,36 @@ export class RequestEngine {
       .select()
       .from(requestApprovals)
       .where(eq(requestApprovals.requestId, id))
-      .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt), asc(requestApprovals.id));
+      .orderBy(
+        asc(requestApprovals.step),
+        asc(requestApprovals.decidedAt),
+        asc(requestApprovals.id),
+      );
 
     return { ...row, approvals: approvalRows };
   }
 
+  /**
+   * List requests the actor may see.
+   *
+   * NARROWS TO THE ACTOR WITHOUT `request.read`. Every condition below is derived from an
+   * OPTIONAL filter, so `where` was `undefined` for an unfiltered call and this returned EVERY
+   * request in the system — leave, onboarding, access, catalog — to any authenticated caller.
+   * `actorId` was used for nothing but the `myQueue` shortcut. Found while giving each route an
+   * explicit authorization declaration; no test covered it because no test called it unfiltered
+   * as a principal without permissions.
+   *
+   * A party to a request is its requester OR its assignee, so the narrowed form is that
+   * disjunction rather than `requesterId = actor` — an approver must still see their queue.
+   */
   async list(
     filters: RequestFilters,
     actorId: string,
     limit: number,
     offset: number,
   ): Promise<{ rows: RequestItemWithApprovals[]; total: number }> {
+    const unrestricted = await this.authz.check(actorId, 'request.read');
+
     const conditions = [
       filters.type ? eq(requestItems.type, filters.type) : undefined,
       filters.requesterId ? eq(requestItems.requesterId, filters.requesterId) : undefined,
@@ -444,6 +491,11 @@ export class RequestEngine {
         : filters.assigneeId
           ? eq(requestItems.assigneeId, filters.assigneeId)
           : undefined,
+      // The narrowing predicate, ANDed with whatever the caller asked for. Applied here rather
+      // than by rewriting `filters` so a caller cannot widen it back out with `requesterId`.
+      unrestricted
+        ? undefined
+        : or(eq(requestItems.requesterId, actorId), eq(requestItems.assigneeId, actorId)),
     ].filter(Boolean);
 
     const where = conditions.length ? and(...conditions) : undefined;
@@ -469,7 +521,11 @@ export class RequestEngine {
             .select()
             .from(requestApprovals)
             .where(inArray(requestApprovals.requestId, ids))
-            .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt), asc(requestApprovals.id))
+            .orderBy(
+              asc(requestApprovals.step),
+              asc(requestApprovals.decidedAt),
+              asc(requestApprovals.id),
+            )
         : [];
 
     const approvalMap = new Map<string, RequestItemWithApprovals['approvals']>();
@@ -508,7 +564,15 @@ export class RequestEngine {
   /** Post a discussion comment on a request. Does not trigger any state transition. */
   async addComment(requestId: string, body: string, actor: Actor): Promise<RequestComment> {
     // Verify request exists (throws if not)
-    await this.getOrFail(requestId);
+    const request = await this.getOrFail(requestId);
+    // Commenting used to require only that the request EXISTED, so any authenticated caller
+    // could post onto anyone's request — a write, on a record they cannot otherwise read.
+    await this.actorScope.assertParty(
+      [request.requesterId, request.assigneeId],
+      actor,
+      'request.read',
+      'request',
+    );
 
     const [row] = await this.db
       .insert(requestComments)
@@ -524,7 +588,16 @@ export class RequestEngine {
   }
 
   /** List comments for a request, ordered oldest-first. */
-  async listComments(requestId: string): Promise<RequestComment[]> {
+  /** Comments are readable by the request's parties, or a holder of `request.read`. */
+  async listComments(requestId: string, actor: Actor): Promise<RequestComment[]> {
+    const request = await this.getOrFail(requestId);
+    await this.actorScope.assertParty(
+      [request.requesterId, request.assigneeId],
+      actor,
+      'request.read',
+      'request',
+    );
+
     const rows = await this.db
       .select()
       .from(requestComments)
@@ -536,7 +609,7 @@ export class RequestEngine {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   private async getOrFail(id: string): Promise<RequestItem> {
-    const item = await this.getById(id);
+    const item = await this.loadUnchecked(id);
     if (!item) throw new NotFoundException('REQUEST_NOT_FOUND', `Request ${id} not found`);
     return item;
   }

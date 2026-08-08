@@ -6,6 +6,7 @@ import {
   ErrorCodes,
   PreconditionFailedException,
   RequestEngine,
+  ActorScope,
 } from '@platform';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { newId, MS_PER_HOUR } from '@shared-kernel';
@@ -30,6 +31,7 @@ export class AccessRequestService {
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly engine: RequestEngine,
     private readonly audit: AuditService,
+    private readonly actorScope: ActorScope,
   ) {}
 
   async submit(
@@ -74,20 +76,49 @@ export class AccessRequestService {
     return { ...domainRow, requestId: engineItem.id };
   }
 
-  async getById(id: string): Promise<AccessRequest> {
+  /**
+   * Read one access request, if the actor requested it or holds `access_request.read`.
+   *
+   * `actor` is optional ONLY for internal callers that have already authorized the read —
+   * `approve`/`reject` gate on their own step permission, and an approver is not the requester.
+   * A route must always pass it.
+   */
+  async getById(id: string, actor?: { sub: string }): Promise<AccessRequest> {
     const request = await this.repo.findById(id);
     if (!request) {
       throw new NotFoundException(ErrorCodes.ACCESS_REQUEST_NOT_FOUND, 'Access request not found');
     }
+    if (actor) {
+      await this.actorScope.assertParty(
+        [request.requesterId],
+        actor,
+        'access_request.read',
+        'access request',
+      );
+    }
     return request;
   }
 
+  /**
+   * List access requests, narrowed to the caller without `access_request.read`.
+   *
+   * The repository applies `requesterId` only when it is supplied, so an unfiltered call used to
+   * return every access request in the system — target system, justification and approval state
+   * included — to any authenticated caller.
+   */
   async list(
     filters: AccessRequestFilters,
     limit: number,
     offset: number,
+    actor: { sub: string },
   ): Promise<{ rows: AccessRequest[]; total: number }> {
-    return this.repo.list(filters, limit, offset);
+    const scoped = await this.actorScope.narrowFilter(
+      filters,
+      'requesterId',
+      actor,
+      'access_request.read',
+    );
+    return this.repo.list(scoped, limit, offset);
   }
 
   /**
