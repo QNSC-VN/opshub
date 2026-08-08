@@ -1,7 +1,13 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
-import { timesheetStatusEnum, leaveTypeEnum, leaveStatusEnum, overtimeStatusEnum, shiftTypeEnum } from '@db/schema/enums';
+import {
+  timesheetStatusEnum,
+  leaveTypeEnum,
+  leaveStatusEnum,
+  overtimeStatusEnum,
+  shiftTypeEnum,
+} from '@db/schema/enums';
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 
@@ -13,10 +19,12 @@ export const CreateTimesheetSchema = z.object({
 });
 export class CreateTimesheetDto extends createZodDto(CreateTimesheetSchema) {}
 
-export const ListTimesheetsQuerySchema = z.object({
-  employeeId: z.string().uuid().optional(),
-  status: z.enum(timesheetStatusEnum.enumValues).optional(),
-}).merge(PaginationQuerySchema);
+export const ListTimesheetsQuerySchema = z
+  .object({
+    employeeId: z.string().uuid().optional(),
+    status: z.enum(timesheetStatusEnum.enumValues).optional(),
+  })
+  .merge(PaginationQuerySchema);
 export class ListTimesheetsQueryDto extends createZodDto(ListTimesheetsQuerySchema) {}
 
 export class TimesheetResponseDto {
@@ -45,10 +53,12 @@ export const CreateLeaveSchema = z
   });
 export class CreateLeaveDto extends createZodDto(CreateLeaveSchema) {}
 
-export const ListLeaveQuerySchema = z.object({
-  employeeId: z.string().uuid().optional(),
-  status: z.enum(leaveStatusEnum.enumValues).optional(),
-}).merge(PaginationQuerySchema);
+export const ListLeaveQuerySchema = z
+  .object({
+    employeeId: z.string().uuid().optional(),
+    status: z.enum(leaveStatusEnum.enumValues).optional(),
+  })
+  .merge(PaginationQuerySchema);
 export class ListLeaveQueryDto extends createZodDto(ListLeaveQuerySchema) {}
 
 export class LeaveResponseDto {
@@ -58,6 +68,14 @@ export class LeaveResponseDto {
   startDate!: string;
   endDate!: string;
   reason!: string | null;
+  /**
+   * Working days this request costs, excluding weekends and public holidays, frozen at submit.
+   *
+   * `null` only for rows predating the column. Surfaced because an approver deciding a request
+   * needs to know what it takes out of the balance — the number is useless if only the server
+   * can see it.
+   */
+  workingDays!: number | null;
   status!: string;
   reviewerId!: string | null;
   reviewedAt!: string | null;
@@ -72,10 +90,12 @@ export const CreateOvertimeSchema = z.object({
 });
 export class CreateOvertimeDto extends createZodDto(CreateOvertimeSchema) {}
 
-export const ListOvertimeQuerySchema = z.object({
-  employeeId: z.string().uuid().optional(),
-  status: z.enum(overtimeStatusEnum.enumValues).optional(),
-}).merge(PaginationQuerySchema);
+export const ListOvertimeQuerySchema = z
+  .object({
+    employeeId: z.string().uuid().optional(),
+    status: z.enum(overtimeStatusEnum.enumValues).optional(),
+  })
+  .merge(PaginationQuerySchema);
 export class ListOvertimeQueryDto extends createZodDto(ListOvertimeQuerySchema) {}
 
 export class OvertimeResponseDto {
@@ -104,10 +124,12 @@ export const CreateShiftLogSchema = z
   });
 export class CreateShiftLogDto extends createZodDto(CreateShiftLogSchema) {}
 
-export const ListShiftLogsQuerySchema = z.object({
-  employeeId: z.string().uuid().optional(),
-  shiftType: z.enum(shiftTypeEnum.enumValues).optional(),
-}).merge(PaginationQuerySchema);
+export const ListShiftLogsQuerySchema = z
+  .object({
+    employeeId: z.string().uuid().optional(),
+    shiftType: z.enum(shiftTypeEnum.enumValues).optional(),
+  })
+  .merge(PaginationQuerySchema);
 export class ListShiftLogsQueryDto extends createZodDto(ListShiftLogsQuerySchema) {}
 
 export class ShiftLogResponseDto {
@@ -167,7 +189,11 @@ export class OffboardingResponseDto {
 export const PresignLeaveDocumentSchema = z.object({
   fileName: z.string().min(1).max(255),
   mimeType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
-  sizeBytes: z.number().int().positive().max(10 * 1024 * 1024),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024),
 });
 export class PresignLeaveDocumentDto extends createZodDto(PresignLeaveDocumentSchema) {}
 
@@ -175,3 +201,57 @@ export const ConfirmLeaveDocumentSchema = z.object({
   fileId: z.string().uuid(),
 });
 export class ConfirmLeaveDocumentDto extends createZodDto(ConfirmLeaveDocumentSchema) {}
+
+// ── Leave entitlement, balances and the holiday calendar ─────────────────────
+
+/**
+ * `year` is optional and defaults to the CURRENT year in the controller rather than here: a
+ * default baked into the schema would be evaluated when the module loads, so a process running
+ * across New Year would keep serving last year's balances until it restarted.
+ */
+export const LeaveBalanceQuerySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+export class LeaveBalanceQueryDto extends createZodDto(LeaveBalanceQuerySchema) {}
+
+export class LeaveBalanceResponseDto {
+  leaveType!: string;
+  year!: number;
+  grantedDays!: number;
+  carriedOverDays!: number;
+  /** Working days already committed — approved AND still-pending requests. */
+  consumedDays!: number;
+  remainingDays!: number;
+}
+
+export const SetLeaveEntitlementSchema = z.object({
+  employeeId: z.string().uuid(),
+  leaveType: z.enum(leaveTypeEnum.enumValues),
+  year: z.coerce.number().int().min(2000).max(2100),
+  // Half-days are real, so this is not an integer. Capped well below a year's working days.
+  grantedDays: z.number().min(0).max(365),
+  carriedOverDays: z.number().min(0).max(365).optional(),
+  note: z.string().max(500).optional(),
+});
+export class SetLeaveEntitlementDto extends createZodDto(SetLeaveEntitlementSchema) {}
+
+export const HolidayQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+export class HolidayQueryDto extends createZodDto(HolidayQuerySchema) {}
+
+export const CreateHolidaySchema = z.object({
+  date: z.string().date(),
+  name: z.string().min(1).max(160),
+  /** 'ALL' for a national holiday; a region code narrows it. */
+  region: z.string().min(1).max(32).optional(),
+});
+export class CreateHolidayDto extends createZodDto(CreateHolidaySchema) {}
+
+export class HolidayResponseDto {
+  id!: string;
+  date!: string;
+  name!: string;
+  region!: string;
+}

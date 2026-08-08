@@ -1,5 +1,23 @@
-import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import {
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   Auth,
   RequirePermission,
@@ -8,6 +26,7 @@ import {
   buildPageResult,
   CurrentUser,
   SelfScoped,
+  SharedRead,
   AuthorizedInService,
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
@@ -15,6 +34,12 @@ import { EmployeeService } from '@modules/identity';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { WorkforceService } from '../../application/workforce.service';
 import {
+  CreateHolidayDto,
+  HolidayQueryDto,
+  HolidayResponseDto,
+  LeaveBalanceQueryDto,
+  LeaveBalanceResponseDto,
+  SetLeaveEntitlementDto,
   CreateTimesheetDto,
   ListTimesheetsQueryDto,
   TimesheetResponseDto,
@@ -64,6 +89,9 @@ function toLeaveDto(l: LeaveRequest): LeaveResponseDto {
     startDate: l.startDate,
     endDate: l.endDate,
     reason: l.reason,
+    // numeric(5,2) arrives from the driver as a string; the API contract is a number.
+    workingDays:
+      l.workingDays === null || l.workingDays === undefined ? null : Number(l.workingDays),
     status: l.status,
     reviewerId: l.reviewerId,
     reviewedAt: l.reviewedAt ? l.reviewedAt.toISOString() : null,
@@ -502,5 +530,95 @@ export class WorkforceController {
   @ApiCommonErrors(401, 404)
   async getLeaveDocumentUrl(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getLeaveDocumentUrl(id);
+  }
+
+  // ── Leave balances, entitlements and the holiday calendar ───────────────────
+
+  /**
+   * The caller's leave balances, or another employee's with `workforce.read`.
+   *
+   * Reuses the same narrowing rule as the leave list: asking for someone else without the
+   * permission is a 403, never a silently substituted set of your own numbers.
+   */
+  @Get('leave/balance')
+  @AuthorizedInService(
+    'optional employeeId — narrowed to the actor without workforce.read',
+    'leave-balance.e2e.spec.ts',
+  )
+  @ApiOperation({
+    summary: 'Leave balances for a year',
+    description:
+      'granted + carriedOver − consumed, where consumed counts APPROVED and still-PENDING ' +
+      'requests. A leave type with no entitlement row is untracked and absent from the result.',
+  })
+  @ApiOkResponse({ type: [LeaveBalanceResponseDto] })
+  @ApiCommonErrors(401, 403)
+  async listLeaveBalances(
+    @Query() query: LeaveBalanceQueryDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<LeaveBalanceResponseDto[]> {
+    return this.service.listLeaveBalances(query.employeeId, query.year, user);
+  }
+
+  /** Declare an employee's allowance for a leave type and year. */
+  @Put('leave/entitlement')
+  @RequirePermission('workforce.manage')
+  @ApiOperation({
+    summary: 'Set an annual leave entitlement',
+    description:
+      'Upsert: an allowance is corrected more often than created (a mid-year joiner, a policy ' +
+      'change), so a second call updates rather than conflicting.',
+  })
+  @ApiNoContentResponse()
+  @HttpCode(204)
+  @ApiCommonErrors(401, 403, 422)
+  async setLeaveEntitlement(
+    @Body() dto: SetLeaveEntitlementDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    // Refuse an allowance for an employee who does not exist: the table carries no cross-schema
+    // FK (matching every other workforce table), so a typo'd uuid would otherwise become an
+    // orphan row that no screen can show and no balance can use.
+    await this.employeeService.getById(dto.employeeId);
+    await this.service.setLeaveEntitlement(dto, user);
+  }
+
+  @Get('holidays')
+  @SharedRead('the public holiday calendar is unowned reference data every employee needs')
+  @ApiOperation({ summary: 'Public holidays for a year' })
+  @ApiOkResponse({ type: [HolidayResponseDto] })
+  @ApiCommonErrors(401)
+  async listHolidays(@Query() query: HolidayQueryDto): Promise<HolidayResponseDto[]> {
+    return this.service.listHolidays(query.year);
+  }
+
+  @Post('holidays')
+  @RequirePermission('workforce.manage')
+  @ApiOperation({
+    summary: 'Declare a public holiday',
+    description:
+      'Does NOT change what existing requests cost — working_days is frozen per request at ' +
+      'submit, so leave already approved keeps the charge it was approved with.',
+  })
+  @ApiCreatedResponse({ type: HolidayResponseDto })
+  @ApiCommonErrors(401, 403, 422)
+  async addHoliday(
+    @Body() dto: CreateHolidayDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ id: string }> {
+    return this.service.addHoliday(dto, user);
+  }
+
+  @Delete('holidays/:id')
+  @RequirePermission('workforce.manage')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Remove a public holiday' })
+  @ApiNoContentResponse()
+  @ApiCommonErrors(401, 403, 404)
+  async removeHoliday(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    await this.service.removeHoliday(id, user);
   }
 }
