@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { and, eq, isNull, lte, inArray } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { ExclusiveJob, InjectDrizzle, type DrizzleDB } from '@platform';
 import { NotificationSchedulerService } from '@platform';
 import { requestItems } from '../../../../db/schema';
+
+/** Under the 15-minute interval, so a crashed pod cannot block the next sweep. */
+const LOCK_TTL_MS = 14 * 60_000;
 
 /**
  * SlaBreachCron — runs every 15 minutes to detect requests that have
@@ -19,22 +22,19 @@ import { requestItems } from '../../../../db/schema';
 @Injectable()
 export class SlaBreachCron {
   private readonly logger = new Logger(SlaBreachCron.name);
-  private running = false;
 
   constructor(
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly notifScheduler: NotificationSchedulerService,
+    private readonly exclusive: ExclusiveJob,
   ) {}
 
   @Interval(15 * 60_000) // every 15 minutes
   async tick(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
-      await this.process();
-    } finally {
-      this.running = false;
-    }
+    // ExclusiveJob replaces the private `running` flag this class used to hold: an
+    // @Interval timer starts with its pod, so two pods drift out of phase and the
+    // in-process flag never sees the other one's run.
+    await this.exclusive.run('sla-breach', LOCK_TTL_MS, () => this.process());
   }
 
   private async process(): Promise<void> {

@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { RequestEngine } from '@platform';
+import { ExclusiveJob, RequestEngine } from '@platform';
+
+/** Under the 5-minute interval, so a crashed pod cannot block the next sweep. */
+const LOCK_TTL_MS = 4 * 60_000;
 
 /**
  * Expiry cron — runs every 5 minutes and transitions pending/in_review
@@ -13,15 +16,17 @@ import { RequestEngine } from '@platform';
 @Injectable()
 export class RequestExpiryCron {
   private readonly logger = new Logger(RequestExpiryCron.name);
-  private running = false;
 
-  constructor(private readonly engine: RequestEngine) {}
+  constructor(
+    private readonly engine: RequestEngine,
+    private readonly exclusive: ExclusiveJob,
+  ) {}
 
   @Interval(5 * 60_000) // every 5 minutes
   async tick(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
+    // ExclusiveJob replaces the private `running` flag: that only ever guarded this pod,
+    // and @Interval timers on two pods drift independently.
+    await this.exclusive.run('request-expiry', LOCK_TTL_MS, async () => {
       const ids = await this.engine.findExpired(100);
       if (ids.length === 0) return;
 
@@ -35,8 +40,6 @@ export class RequestExpiryCron {
         }
       }
       if (expired > 0) this.logger.log(`Expired ${expired} request(s)`);
-    } finally {
-      this.running = false;
-    }
+    });
   }
 }

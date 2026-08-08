@@ -20,6 +20,7 @@ import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
 import { ResilienceService } from './resilience/resilience.service';
 import { EMAIL_PROVIDER } from './email/email.provider';
+import { ExclusiveJob } from './scheduling/exclusive-job.service';
 import { DevEmailProvider } from './email/providers/dev.provider';
 import { ResendEmailProvider } from './email/providers/resend.provider';
 import { EmailService } from './email/email.service';
@@ -108,9 +109,11 @@ import { StorageService } from './storage/storage.service';
     DelegationService,
     WebhookEnqueueService,
     StorageService,
+    ExclusiveJob,
   ],
   exports: [
     StorageService,
+    ExclusiveJob,
     AppConfigModule,
     DatabaseModule,
     JwtModule,
