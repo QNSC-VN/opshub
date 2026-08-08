@@ -8,6 +8,7 @@ import {
   ErrorCodes,
   RequestEngine,
   StorageService,
+  ActorScope,
 } from '@platform';
 import type { PresignUploadResult } from '@platform';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
@@ -43,6 +44,7 @@ export class WorkforceService {
     private readonly engine: RequestEngine,
     private readonly storage: StorageService,
     private readonly authz: AuthzService,
+    private readonly actorScope: ActorScope,
   ) {}
 
   // ── Access narrowing ───────────────────────────────────────────────────────
@@ -75,18 +77,12 @@ export class WorkforceService {
    * the wrong person's data — indistinguishable, to the caller, from "that employee
    * has no records", which is a worse answer than a 403.
    */
-  private async narrowToActor<T extends { employeeId?: string }>(
-    filters: T,
-    actor: Actor,
-  ): Promise<T> {
-    if (await this.authz.check(actor.sub, 'workforce.read')) return filters;
-
-    if (filters.employeeId && filters.employeeId !== actor.sub) {
-      throw new PermissionDeniedException(
-        'Missing permission: workforce.read — you may only list your own records',
-      );
-    }
-    return { ...filters, employeeId: actor.sub };
+  private narrowToActor<T extends { employeeId?: string }>(filters: T, actor: Actor): Promise<T> {
+    // Delegates to ActorScope, which is this method generalised: the request engine and the
+    // access-request module needed the identical rule, and a third copy of an authorization
+    // decision is a third chance for one to drift. The rule itself is unchanged — asking for
+    // someone else's records without the permission is DENIED, not silently narrowed.
+    return this.actorScope.narrowFilter(filters, 'employeeId', actor, 'workforce.read');
   }
 
   /**

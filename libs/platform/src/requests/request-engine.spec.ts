@@ -7,6 +7,7 @@
  * intercepted identically.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { ActorScope } from '../auth/actor-scope.service';
 import { RequestEngine } from './request-engine.service';
 import type { RequestItem } from './request-engine.types';
 import {
@@ -61,9 +62,23 @@ function makeTypeDef(overrides: Record<string, unknown> = {}) {
 /** Build a mock Drizzle query-builder chain (select/insert/update/delete). */
 function makeQueryChain(returnValue: unknown) {
   const chain: Record<string, unknown> = {};
-  const methods = ['select', 'insert', 'update', 'delete', 'from', 'where',
-    'set', 'values', 'returning', 'limit', 'offset', 'orderBy',
-    'innerJoin', 'for', 'groupBy'];
+  const methods = [
+    'select',
+    'insert',
+    'update',
+    'delete',
+    'from',
+    'where',
+    'set',
+    'values',
+    'returning',
+    'limit',
+    'offset',
+    'orderBy',
+    'innerJoin',
+    'for',
+    'groupBy',
+  ];
   for (const m of methods) {
     chain[m] = vi.fn().mockReturnValue(chain);
   }
@@ -122,17 +137,32 @@ function buildEngine(opts: {
   // -- NotificationSchedulerService mock --
   const notifScheduler = { schedule: vi.fn().mockResolvedValue(undefined) };
 
+  // ActorScope is the real class over the mocked AuthzService: its narrow/assert logic is what
+  // the read paths now depend on, so stubbing it would test nothing.
+  const actorScope = new ActorScope(authz as never);
+
   // Construct without NestJS DI — pass all deps directly.
   const engine = new RequestEngine(
     db as never,
     registry as never,
     authz as never,
+    actorScope,
     delegation as never,
     notifScheduler as never,
     webhookEnqueue,
   );
 
-  return { engine, db, registry, authz, webhookEnqueue, delegation, notifScheduler, updateChain, insertChain };
+  return {
+    engine,
+    db,
+    registry,
+    authz,
+    webhookEnqueue,
+    delegation,
+    notifScheduler,
+    updateChain,
+    insertChain,
+  };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -186,7 +216,8 @@ describe('RequestEngine.submit()', () => {
     await engine.submit('leave', {}, REQUESTER);
     const after = Date.now();
 
-    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Record<string, unknown>;
     expect(insertValues['expiresAt']).toBeDefined();
     const expiresMs = (insertValues['expiresAt'] as Date).getTime();
     expect(expiresMs).toBeGreaterThanOrEqual(before + 48 * 3_600_000 - 100);
@@ -208,7 +239,8 @@ describe('RequestEngine.submit()', () => {
 
     await engine.submit('onboarding', {}, REQUESTER);
 
-    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Record<string, unknown>;
     expect(insertValues['totalSteps']).toBe(3);
   });
 });
@@ -247,9 +279,7 @@ describe('RequestEngine.approve() — single-step', () => {
       actorHasPermission: false,
     });
 
-    await expect(engine.approve('req-1', null, ACTOR)).rejects.toThrow(
-      PermissionDeniedException,
-    );
+    await expect(engine.approve('req-1', null, ACTOR)).rejects.toThrow(PermissionDeniedException);
   });
 
   it('throws PermissionDeniedException on SoD violation (requester = approver)', async () => {
@@ -259,8 +289,9 @@ describe('RequestEngine.approve() — single-step', () => {
       actorHasPermission: true,
     });
 
-    await expect(engine.approve('req-1', null, { sub: sameUser, email: 'x@x.com' }))
-      .rejects.toThrow(PermissionDeniedException);
+    await expect(
+      engine.approve('req-1', null, { sub: sameUser, email: 'x@x.com' }),
+    ).rejects.toThrow(PermissionDeniedException);
   });
 
   it('throws NotFoundException when request does not exist', async () => {
@@ -272,9 +303,7 @@ describe('RequestEngine.approve() — single-step', () => {
     const { engine } = buildEngine({
       requestRow: makeRequest({ status: 'approved' }),
     });
-    await expect(engine.approve('req-1', null, ACTOR)).rejects.toThrow(
-      PreconditionFailedException,
-    );
+    await expect(engine.approve('req-1', null, ACTOR)).rejects.toThrow(PreconditionFailedException);
   });
 
   it('allows approval when actor is a delegate of the original approver', async () => {
@@ -290,8 +319,8 @@ describe('RequestEngine.approve() — single-step', () => {
 
     // delegator has permission
     authz.check
-      .mockResolvedValueOnce(false)  // actor check
-      .mockResolvedValueOnce(true);  // delegator check
+      .mockResolvedValueOnce(false) // actor check
+      .mockResolvedValueOnce(true); // delegator check
 
     const updateChain = makeQueryChain([approvedRow]);
     db.update.mockReturnValue(updateChain);
@@ -328,7 +357,13 @@ describe('RequestEngine.approve() — multi-step (3-step onboarding)', () => {
 
     expect(result.status).toBe('in_review');
     expect(onStepApproved).toHaveBeenCalledWith(
-      expect.anything(), 'req-1', 1, 2, null, ACTOR.sub, expect.anything(),
+      expect.anything(),
+      'req-1',
+      1,
+      2,
+      null,
+      ACTOR.sub,
+      expect.anything(),
     );
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
@@ -393,18 +428,14 @@ describe('RequestEngine.reject()', () => {
       requestRow: makeRequest(),
       actorHasPermission: false,
     });
-    await expect(engine.reject('req-1', null, ACTOR)).rejects.toThrow(
-      PermissionDeniedException,
-    );
+    await expect(engine.reject('req-1', null, ACTOR)).rejects.toThrow(PermissionDeniedException);
   });
 
   it('enforces SoD on reject — requester cannot reject own request', async () => {
     const { engine } = buildEngine({
       requestRow: makeRequest({ requesterId: ACTOR.sub }),
     });
-    await expect(engine.reject('req-1', null, ACTOR)).rejects.toThrow(
-      PermissionDeniedException,
-    );
+    await expect(engine.reject('req-1', null, ACTOR)).rejects.toThrow(PermissionDeniedException);
   });
 });
 
@@ -462,9 +493,7 @@ describe('RequestEngine.cancel()', () => {
     const { engine } = buildEngine({
       requestRow: makeRequest({ requesterId: REQUESTER.sub, status: 'approved' }),
     });
-    await expect(engine.cancel('req-1', REQUESTER)).rejects.toThrow(
-      PreconditionFailedException,
-    );
+    await expect(engine.cancel('req-1', REQUESTER)).rejects.toThrow(PreconditionFailedException);
   });
 });
 

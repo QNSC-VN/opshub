@@ -2,27 +2,28 @@
  * Unit tests — AccessRequestService (focused on submit, getById, approve, reject)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ActorScope } from '@platform';
 import { AccessRequestService } from './access-request.service';
 import { NotFoundException } from '@platform';
 
 const mockRepo = {
-  findById:          vi.fn(),
-  create:            vi.fn(),
-  updateStatus:      vi.fn(),
-  list:              vi.fn(),
-  listActiveGrants:  vi.fn(),
+  findById: vi.fn(),
+  create: vi.fn(),
+  updateStatus: vi.fn(),
+  list: vi.fn(),
+  listActiveGrants: vi.fn(),
 };
 
 const mockDb = {
   update: vi.fn().mockReturnThis(),
-  set:    vi.fn().mockReturnThis(),
-  where:  vi.fn().mockResolvedValue(undefined),
+  set: vi.fn().mockReturnThis(),
+  where: vi.fn().mockResolvedValue(undefined),
 };
 
 const mockEngine = {
-  submit:   vi.fn(),
-  approve:  vi.fn(),
-  reject:   vi.fn(),
+  submit: vi.fn(),
+  approve: vi.fn(),
+  reject: vi.fn(),
 };
 
 const mockAudit = { record: vi.fn() };
@@ -46,11 +47,14 @@ const ACCESS_REQUEST = {
 };
 
 function makeService() {
+  // The real ActorScope over a permissive AuthzService: the narrowing logic is under test
+  // elsewhere, and stubbing it here would hide a signature change.
   return new AccessRequestService(
     mockRepo as never,
     mockDb as never,
     mockEngine as never,
     mockAudit as never,
+    new ActorScope({ check: () => Promise.resolve(true) } as never),
   );
 }
 
@@ -82,8 +86,15 @@ describe('AccessRequestService.submit()', () => {
     );
 
     expect(mockRepo.create).toHaveBeenCalledOnce();
-    expect(mockEngine.submit).toHaveBeenCalledWith('access_request', expect.objectContaining({ accessType: 'vpn' }), ACTOR, expect.any(Object));
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'access_request.submitted' }));
+    expect(mockEngine.submit).toHaveBeenCalledWith(
+      'access_request',
+      expect.objectContaining({ accessType: 'vpn' }),
+      ACTOR,
+      expect.any(Object),
+    );
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'access_request.submitted' }),
+    );
     expect(result.requestId).toBe('req-1');
   });
 });
@@ -93,7 +104,16 @@ describe('AccessRequestService.approve()', () => {
 
   it('finds the pending request and approves via DB', async () => {
     mockRepo.findById.mockResolvedValue(ACCESS_REQUEST);
-    const grant = { id: 'grant-1', requestId: 'ar-1', granteeId: 'user-1', accessType: 'vpn', target: 'production-vpn', grantedAt: new Date(), expiresAt: new Date(Date.now() + 8 * 3_600_000), revokedAt: null };
+    const grant = {
+      id: 'grant-1',
+      requestId: 'ar-1',
+      granteeId: 'user-1',
+      accessType: 'vpn',
+      target: 'production-vpn',
+      grantedAt: new Date(),
+      expiresAt: new Date(Date.now() + 8 * 3_600_000),
+      revokedAt: null,
+    };
     // approve() uses db.transaction internally — mock it:
     const selectBuilder = {
       from: vi.fn().mockReturnThis(),
@@ -101,17 +121,37 @@ describe('AccessRequestService.approve()', () => {
       orderBy: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue([grant]),
     };
-    const dbWithTx = { transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})), select: vi.fn().mockReturnValue(selectBuilder), insert: vi.fn().mockReturnThis(), values: vi.fn().mockResolvedValue(undefined), update: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(undefined) };
+    const dbWithTx = {
+      transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      select: vi.fn().mockReturnValue(selectBuilder),
+      insert: vi.fn().mockReturnThis(),
+      values: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue(undefined),
+    };
 
     // Build service with tx-capable db mock
-    const svc = new AccessRequestService(mockRepo as never, dbWithTx as never, mockEngine as never, mockAudit as never);
+    const svc = new AccessRequestService(
+      mockRepo as never,
+      dbWithTx as never,
+      mockEngine as never,
+      mockAudit as never,
+      new ActorScope({ check: () => Promise.resolve(true) } as never),
+    );
     (svc as unknown as { db: typeof dbWithTx }).db = dbWithTx;
 
     // approve() reads from db internally — mock relevant repo calls
     mockRepo.findById.mockResolvedValue(ACCESS_REQUEST);
     // Simulate the grant creation through the mocked db.transaction
     dbWithTx.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
-      return fn({ insert: vi.fn().mockReturnThis(), values: vi.fn().mockResolvedValue([grant]), update: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(undefined) });
+      return fn({
+        insert: vi.fn().mockReturnThis(),
+        values: vi.fn().mockResolvedValue([grant]),
+        update: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue(undefined),
+      });
     });
 
     // approve() returns the grant — just verify it doesn't throw

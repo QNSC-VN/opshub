@@ -48,6 +48,14 @@ export const PERMISSION = {
 
   // ── access requests ────────────────────────────────────────────────────────
   ACCESS_REQUEST_READ: 'access_request.read',
+  /**
+   * Read requests in the generic approval engine that you are not a party to.
+   *
+   * Without it, `GET /requests` narrows to the caller's own requests plus the ones assigned to
+   * them, and a by-id read they are not a party to is refused. The `employee` tier holds no
+   * codes at all, so self-service works entirely through that narrowing.
+   */
+  REQUEST_READ: 'request.read',
   ACCESS_REQUEST_APPROVE: 'access_request.approve',
   ACCESS_REQUEST_SECURITY_APPROVE: 'access_request.security_approve',
 
@@ -113,6 +121,7 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
   [PERMISSION.ASSET_REASSIGN]: 'Reassign assets between employees',
   [PERMISSION.ACCESS_REQUEST_READ]: 'View privileged-access requests',
+  [PERMISSION.REQUEST_READ]: 'View requests you are not the requester or approver of',
   [PERMISSION.ACCESS_REQUEST_APPROVE]: 'Step-1 approval for access requests (manager tier)',
   [PERMISSION.ACCESS_REQUEST_SECURITY_APPROVE]: 'Step-2 IT-Security approval for access requests',
   [PERMISSION.COMPLIANCE_READ]: 'View compliance findings and software catalog',
@@ -225,6 +234,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.ASSET_WRITE,
     PERMISSION.ASSET_REASSIGN,
     PERMISSION.ACCESS_REQUEST_READ,
+    PERMISSION.REQUEST_READ,
     PERMISSION.ACCESS_REQUEST_APPROVE,
     PERMISSION.ACCESS_REQUEST_SECURITY_APPROVE,
     PERMISSION.COMPLIANCE_READ,
@@ -248,6 +258,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.ACCESS_REQUEST_READ,
     PERMISSION.ACCESS_REQUEST_APPROVE,
     PERMISSION.ACCESS_REQUEST_SECURITY_APPROVE,
+    PERMISSION.REQUEST_READ,
     PERMISSION.AUDIT_READ,
     PERMISSION.REPORTS_READ,
     PERMISSION.LICENSE_READ,
@@ -261,6 +272,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
     PERMISSION.WORKFORCE_OVERTIME_REVIEW,
+    PERMISSION.REQUEST_READ,
     PERMISSION.AUDIT_READ,
     PERMISSION.REPORTS_READ,
     PERMISSION.ONBOARDING_APPROVE,
@@ -276,6 +288,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.WORKFORCE_OVERTIME_REVIEW,
     PERMISSION.ACCESS_REQUEST_READ,
     PERMISSION.ACCESS_REQUEST_APPROVE,
+    PERMISSION.REQUEST_READ,
     PERMISSION.REPORTS_READ,
     PERMISSION.ONBOARDING_APPROVE,
   ],
@@ -284,6 +297,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.ASSET_READ,
     PERMISSION.ASSET_WRITE,
     PERMISSION.ACCESS_REQUEST_READ,
+    PERMISSION.REQUEST_READ,
     PERMISSION.EMPLOYEE_READ,
   ],
 
@@ -294,6 +308,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.SECURITY_VIEW,
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.ASSET_READ,
+    PERMISSION.REQUEST_READ,
     PERMISSION.REPORTS_READ,
     PERMISSION.LICENSE_READ,
   ],

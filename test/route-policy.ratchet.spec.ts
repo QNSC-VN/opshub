@@ -52,14 +52,17 @@ import { describe, expect, it } from 'vitest';
 const MAX_UNPOLICED_ROUTES = 0;
 
 /**
- * Routes carrying `@AuthzGap` — a DECLARED missing check. MAY ONLY FALL.
+ * Routes carrying `@AuthzGap` — a DECLARED missing check. MAY ONLY FALL, and is now 0.
  *
- * All six are the same defect in two modules: the WHERE clause is built from optional
- * filters, so an unfiltered call returns every row, and the by-id reads perform no ownership
- * check at all. They are declared rather than silently narrowed because choosing who may see
- * all requests is a product decision, and labelling them `@SelfScoped` would have been false.
+ * It was 6 for one commit: the request engine and the access-request module built their WHERE
+ * from optional filters, so an unfiltered call returned every row, and their by-id reads had no
+ * ownership check at all. Declaring them was how they stopped being invisible among 43
+ * undecorated routes; `request.read` and `ActorScope` are how they were closed.
+ *
+ * At 0 this is the real assertion: `@AuthzGap` exists, so a future known hole can be shipped
+ * deliberately, but doing so has to raise this number in review rather than pass silently.
  */
-const MAX_AUTHZ_GAPS = 6;
+const MAX_AUTHZ_GAPS = 0;
 
 /** Sanity floor: if the scanner stops finding routes, fail loudly, not silently. */
 const MIN_ROUTES_FOUND = 100;

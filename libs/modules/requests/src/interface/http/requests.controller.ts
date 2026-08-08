@@ -13,7 +13,6 @@ import {
   type RequestComment,
   ApiPagedResponse,
   AuthorizedInService,
-  AuthzGap,
 } from '@platform';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import {
@@ -84,8 +83,8 @@ export class RequestsController {
     private readonly audit: AuditService,
   ) {}
 
-  private async mustGetById(id: string): Promise<RequestItemWithApprovals> {
-    const item = await this.engine.getById(id);
+  private async mustGetById(id: string, actor: JwtPayload): Promise<RequestItemWithApprovals> {
+    const item = await this.engine.getById(id, actor);
     if (!item) {
       throw new NotFoundException(ErrorCodes.REQUEST_NOT_FOUND, 'Request not found');
     }
@@ -97,8 +96,9 @@ export class RequestsController {
    * Use `myQueue=true` to get requests awaiting the caller's action.
    */
   @Get()
-  @AuthzGap(
-    'RequestEngine.list builds its WHERE from optional filters only, so an unfiltered call returns EVERY request. Needs a product decision on who may see all requests before it can be narrowed.',
+  @AuthorizedInService(
+    'narrows to requester-or-assignee unless the caller holds request.read',
+    'request-visibility.e2e.spec.ts',
   )
   @ApiOperation({ summary: 'List request items (unified inbox)' })
   @ApiPagedResponse(RequestItemResponseDto)
@@ -124,13 +124,17 @@ export class RequestsController {
 
   /** Get a single request item with its full approval history. */
   @Get(':id')
-  @AuthzGap(
-    'RequestEngine.getById performs no ownership or participant check — any authenticated caller can read any request by id.',
+  @AuthorizedInService(
+    'assertParty on requester/assignee, else request.read',
+    'request-visibility.e2e.spec.ts',
   )
   @ApiOperation({ summary: 'Get request item with approval history' })
   @ApiOkResponse({ type: RequestItemResponseDto })
-  async getById(@Param('id', ParseUUIDPipe) id: string): Promise<RequestItemResponseDto> {
-    return toDto(await this.mustGetById(id));
+  async getById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<RequestItemResponseDto> {
+    return toDto(await this.mustGetById(id, user));
   }
 
   /** Approve a pending request. Requires the relevant `*.approve` permission. */
@@ -155,7 +159,7 @@ export class RequestsController {
       resourceId: id,
       metadata: { note: dto.note ?? null },
     });
-    return toDto(await this.mustGetById(id));
+    return toDto(await this.mustGetById(id, user));
   }
 
   /** Reject a pending request. Requires the relevant `*.approve` permission. */
@@ -177,7 +181,7 @@ export class RequestsController {
       resourceId: id,
       metadata: { note: dto.note ?? null },
     });
-    return toDto(await this.mustGetById(id));
+    return toDto(await this.mustGetById(id, user));
   }
 
   /** Cancel a pending request (requester or admin). */
@@ -198,7 +202,7 @@ export class RequestsController {
       resourceType: AUDIT_RESOURCE.REQUEST,
       resourceId: id,
     });
-    return toDto(await this.mustGetById(id));
+    return toDto(await this.mustGetById(id, user));
   }
 
   // ── Comments ───────────────────────────────────────────────────────────────
@@ -208,20 +212,27 @@ export class RequestsController {
    * Comments are informational only — they do not affect request state.
    */
   @Get(':id/comments')
-  @AuthzGap('listComments filters on requestId alone, with no participant check.')
+  @AuthorizedInService(
+    'assertParty on the owning request, else request.read',
+    'request-visibility.e2e.spec.ts',
+  )
   @ApiOperation({ summary: 'List comments on a request' })
   @ApiOkResponse({ type: [RequestCommentResponseDto] })
-  async listComments(@Param('id', ParseUUIDPipe) id: string): Promise<RequestCommentResponseDto[]> {
-    // Ensure request exists (throws 404 if not)
-    await this.mustGetById(id);
-    const comments = await this.engine.listComments(id);
+  async listComments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<RequestCommentResponseDto[]> {
+    // Ensure request exists (throws 404 if not) and the caller is a party to it
+    await this.mustGetById(id, user);
+    const comments = await this.engine.listComments(id, user);
     return comments.map(toCommentDto);
   }
 
   /** Post a discussion comment. Does not trigger any state transition. */
   @Post(':id/comments')
-  @AuthzGap(
-    'addComment verifies only that the request exists — any authenticated caller can comment on any request.',
+  @AuthorizedInService(
+    'assertParty on the owning request before the write, else request.read',
+    'request-visibility.e2e.spec.ts',
   )
   @HttpCode(201)
   @ApiOperation({ summary: 'Post a comment on a request' })

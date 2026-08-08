@@ -22,6 +22,7 @@ import { ResilienceService } from './resilience/resilience.service';
 import { EMAIL_PROVIDER } from './email/email.provider';
 import { DiscoveryModule } from '@nestjs/core';
 import { ExclusiveJob } from './scheduling/exclusive-job.service';
+import { ActorScope } from './auth/actor-scope.service';
 import { RouteAuthzAudit } from './auth/route-authz-audit';
 import { DevEmailProvider } from './email/providers/dev.provider';
 import { ResendEmailProvider } from './email/providers/resend.provider';
@@ -90,6 +91,7 @@ import { StorageService } from './storage/storage.service';
     ScopeEvaluator,
     ResourceScopeResolver,
     AuthzService,
+    ActorScope,
     PolicyGuard,
     RequestRegistry,
     RequestEngine,
@@ -120,6 +122,7 @@ import { StorageService } from './storage/storage.service';
   ],
   exports: [
     StorageService,
+    ActorScope,
     ExclusiveJob,
     AppConfigModule,
     DatabaseModule,
