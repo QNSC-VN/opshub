@@ -119,10 +119,19 @@ jobs:
           console.log('JWT keypair generated');
           EOF
 
-      # `pnpm db:migrate` also seeds — the RBAC catalogue and one employee per system role,
-      # which is where the `admin@opshub.local` principal the specs sign in as comes from.
+      # `pnpm db:migrate` always ensures the RBAC catalogue, but the login-able DEMO EMPLOYEES
+      # are fixtures behind `SEED_ON_DEPLOY` — and `admin@opshub.local`, the principal
+      # global-setup signs in as, is one of them. Without this the migrate step succeeds and
+      # dev-login then answers `401 AUTH_INVALID_CREDENTIALS: No active account exists for this
+      # email`, which is what the first run of this workflow did.
+      #
+      # Safe here, and it has to be explicit: `db/migrate.ts` refuses the fixtures whenever
+      # `NODE_ENV=production`, which only deployed migrator tasks set. Backend · CI needs no
+      # equivalent because its e2e globalSetup resets and seeds the database itself.
       - name: Migrate + seed database
         run: pnpm db:migrate
+        env:
+          SEED_ON_DEPLOY: 'true'
 
       - name: Build API
         run: pnpm build:api
