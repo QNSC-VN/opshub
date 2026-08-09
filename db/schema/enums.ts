@@ -184,3 +184,35 @@ export const documentVersionStatusEnum = pgEnum('document_version_status', [
  * exists and its occupants keep it, but no new assignment may be made against it.
  */
 export const positionStatusEnum = pgEnum('position_status', ['active', 'frozen', 'closed']);
+
+/**
+ * Kind of employment agreement.
+ *
+ * Drives whether an end date is REQUIRED or FORBIDDEN, which is a database CHECK rather than a
+ * service convention: `permanent` with an end date is a fixed-term contract mislabelled, and a
+ * `fixed_term` without one is an open-ended contract nobody approved.
+ */
+export const contractTypeEnum = pgEnum('contract_type', [
+  'permanent',
+  'fixed_term',
+  'probation',
+  'internship',
+  'contractor',
+]);
+
+/**
+ * Lifecycle of an employment contract.
+ *
+ * `draft` exists because a contract is negotiated before it binds anyone, and only `active`
+ * competes for the one-per-employee slot. `expired` is reached by the passage of time and written
+ * by the sweep; `terminated` is a decision somebody made and carries a reason.
+ */
+export const contractStatusEnum = pgEnum('contract_status', [
+  'draft',
+  'active',
+  'expired',
+  'terminated',
+]);
+
+/** What the base salary figure is PER — a number without this is not an amount. */
+export const salaryPeriodEnum = pgEnum('salary_period', ['hourly', 'monthly', 'annual']);

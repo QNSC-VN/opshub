@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -122,6 +123,9 @@ export class DocumentsController {
 
   /** Acknowledge the version in force. Idempotent — a second call is the same acknowledgement. */
   @Post('versions/:id/acknowledge')
+  // A state transition, not a creation. Without this Nest answers 201 while `@ApiOkResponse`
+  // documents 200, so the generated client's contract disagreed with the server — measured.
+  @HttpCode(HttpStatus.OK)
   @SelfScoped('records the CALLER as having read the version; the actor is the subject')
   @ApiOperation({
     summary: 'Acknowledge a published document version',
@@ -228,6 +232,9 @@ export class DocumentsController {
   }
 
   @Post('versions/:id/submit')
+  // A state transition, not a creation. Without this Nest answers 201 while `@ApiOkResponse`
+  // documents 200, so the generated client's contract disagreed with the server — measured.
+  @HttpCode(HttpStatus.OK)
   @AuthorizedInService(
     'hands the draft to RequestEngine, which enforces the approval permission and separation of duties per step',
     'controlled-documents.e2e.spec.ts',
@@ -248,6 +255,9 @@ export class DocumentsController {
   }
 
   @Post('versions/:id/publish')
+  // A state transition, not a creation. Without this Nest answers 201 while `@ApiOkResponse`
+  // documents 200, so the generated client's contract disagreed with the server — measured.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('documents.publish')
   @ApiOperation({
     summary: 'Put an approved version into force',

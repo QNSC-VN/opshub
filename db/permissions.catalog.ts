@@ -49,6 +49,19 @@ export const PERMISSION = {
    * approving a headcount or moving somebody between roles changes the org structure.
    */
   POSITION_MANAGE: 'position.manage',
+  /** View employment contracts: terms, dates, notice, status — but NOT the money. */
+  CONTRACT_READ: 'contract.read',
+  /** Draft, activate, renew and terminate employment contracts. */
+  CONTRACT_MANAGE: 'contract.manage',
+  /**
+   * See the pay figures on a contract.
+   *
+   * Separate from `contract.read` because who may know an engagement exists and who may know what
+   * it pays are different questions — an auditor checking that every employee HAS a signed contract
+   * needs the first and not the second. Employees always see their OWN figures regardless: their
+   * pay is theirs, and that is a scope rule, not a permission.
+   */
+  CONTRACT_COMPENSATION_READ: 'contract.compensation.read',
 
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
@@ -149,6 +162,9 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.EMPLOYEE_WRITE]: 'Create and update employee records',
   [PERMISSION.POSITION_READ]: 'View positions, approved headcount and occupancy',
   [PERMISSION.POSITION_MANAGE]: 'Define positions and assign employees to them',
+  [PERMISSION.CONTRACT_READ]: 'View employment contracts (excluding pay)',
+  [PERMISSION.CONTRACT_MANAGE]: 'Draft, activate, renew and terminate employment contracts',
+  [PERMISSION.CONTRACT_COMPENSATION_READ]: 'See the pay figures on an employment contract',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -313,6 +329,9 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.EMPLOYEE_OFFBOARD,
     PERMISSION.POSITION_READ,
     PERMISSION.POSITION_MANAGE,
+    PERMISSION.CONTRACT_READ,
+    PERMISSION.CONTRACT_MANAGE,
+    PERMISSION.CONTRACT_COMPENSATION_READ,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -358,6 +377,9 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.ASSET_READ,
     PERMISSION.POSITION_READ,
+    // Deliberately WITHOUT `CONTRACT_COMPENSATION_READ`: an auditor checks that every employee has
+    // a signed contract, which does not require knowing what any of them pays.
+    PERMISSION.CONTRACT_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

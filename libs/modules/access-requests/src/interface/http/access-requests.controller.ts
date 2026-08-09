@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -130,6 +140,9 @@ export class AccessRequestsController {
   }
 
   @Post(':id/reject')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('access_request.security_approve')
   @ApiOperation({ summary: 'Reject a pending request' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
@@ -144,6 +157,9 @@ export class AccessRequestsController {
   }
 
   @Post('grants/:grantId/revoke')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('access_request.security_approve')
   @ApiOperation({ summary: 'Revoke an active grant' })
   @ApiOkResponse({ schema: { type: 'object', properties: { status: { type: 'string' } } } })

@@ -82,9 +82,11 @@ async function approveAsAdmin(versionId: string): Promise<void> {
     `/v1/documents/versions/${versionId}/submit`,
     security,
   );
-  expect(submitted.status, JSON.stringify(submitted.body)).toBe(201);
+  expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
   const approved = await post(`/v1/requests/${submitted.body.requestId}/approve`, admin);
-  expect(approved.status, JSON.stringify(approved.body)).toBe(201);
+  // 200: `POST /requests/:id/approve` is a transition, not a creation. It always documented 200;
+  // it now returns it. See test/post-status-contract.ratchet.spec.ts.
+  expect(approved.status, JSON.stringify(approved.body)).toBe(200);
 }
 
 beforeAll(async () => {
@@ -120,7 +122,7 @@ describe('controlled document approval', () => {
       `/v1/documents/versions/${v1Id}/submit`,
       security,
     );
-    expect(submitted.status, JSON.stringify(submitted.body)).toBe(201);
+    expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
     expect(submitted.body.status).toBe('in_review');
 
     // Separation of duties comes from RequestEngine's `allowSelfApproval: false`, so this asserts
@@ -129,7 +131,7 @@ describe('controlled document approval', () => {
     expect(selfApproved.status, JSON.stringify(selfApproved.body)).toBe(403);
 
     const approved = await post(`/v1/requests/${submitted.body.requestId}/approve`, admin);
-    expect(approved.status, JSON.stringify(approved.body)).toBe(201);
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200);
   });
 
   it('marks the version approved WITHOUT publishing it', async () => {
@@ -156,7 +158,7 @@ describe('controlled document approval', () => {
       admin,
       { reviewDueOn: '2028-01-01' },
     );
-    expect(published.status, JSON.stringify(published.body)).toBe(201);
+    expect(published.status, JSON.stringify(published.body)).toBe(200);
     expect(published.body.publishedAt).not.toBeNull();
 
     const owed = await outstanding(employee);
@@ -170,14 +172,14 @@ describe('controlled document approval', () => {
       `/v1/documents/versions/${v1Id}/acknowledge`,
       employee,
     );
-    expect(first.status).toBe(201);
+    expect(first.status).toBe(200);
     expect(first.body.alreadyAcknowledged).toBe(false);
 
     const second = await post<{ alreadyAcknowledged: boolean }>(
       `/v1/documents/versions/${v1Id}/acknowledge`,
       employee,
     );
-    expect(second.status).toBe(201);
+    expect(second.status).toBe(200);
     expect(
       second.body.alreadyAcknowledged,
       'a second click created a second acknowledgement instead of being idempotent',
@@ -202,7 +204,7 @@ describe('superseding a published document', () => {
 
     await approveAsAdmin(draft.body.id);
     const published = await post(`/v1/documents/versions/${draft.body.id}/publish`, admin);
-    expect(published.status, JSON.stringify(published.body)).toBe(201);
+    expect(published.status, JSON.stringify(published.body)).toBe(200);
 
     const all = await versions();
     expect(all.map((v) => [v.version, v.status])).toEqual([

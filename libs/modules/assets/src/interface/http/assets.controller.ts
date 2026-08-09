@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -113,6 +123,9 @@ export class AssetsController {
   }
 
   @Post(':id/assign')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('asset.reassign')
   @ApiOperation({ summary: 'Assign an asset to an employee' })
   @ApiOkResponse({ type: AssetResponseDto })
@@ -127,6 +140,9 @@ export class AssetsController {
   }
 
   @Post(':id/unassign')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('asset.reassign')
   @ApiOperation({ summary: 'Return an asset to stock' })
   @ApiOkResponse({ type: AssetResponseDto })
@@ -140,6 +156,9 @@ export class AssetsController {
   }
 
   @Post(':id/retire')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('asset.write')
   @ApiOperation({ summary: 'Retire an asset' })
   @ApiOkResponse({ type: AssetResponseDto })
@@ -155,6 +174,9 @@ export class AssetsController {
   // ── Photo upload ──────────────────────────────────────────────────────────
 
   @Post(':id/photo/presign')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('asset.write')
   @RateLimit('UPLOAD')
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an asset photo' })
@@ -178,6 +200,9 @@ export class AssetsController {
   }
 
   @Post(':id/photo/confirm')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('asset.write')
   @RateLimit('UPLOAD')
   @ApiOperation({ summary: 'Confirm asset photo upload completed' })

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Auth,
@@ -149,6 +160,9 @@ export class ComplianceController {
   }
 
   @Post('findings/:id/acknowledge')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Acknowledge an open finding' })
   @ApiOkResponse({ type: FindingResponseDto })
@@ -162,6 +176,9 @@ export class ComplianceController {
   }
 
   @Post('findings/:id/resolve')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Resolve (or risk-accept) a finding' })
   @ApiOkResponse({ type: FindingResponseDto })

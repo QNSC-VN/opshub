@@ -6,10 +6,10 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiNoContentResponse,
@@ -150,6 +150,9 @@ export class EmployeesController {
   // lets a `self`-scoped grant match its holder and a `dept`-scoped one match their
   // department. A global grant passes as before.
   @Post(':id/avatar/presign')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('employee.write', { resource: 'employee', from: 'param', field: 'id' })
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an employee avatar' })
   @ApiOkResponse({
@@ -172,6 +175,9 @@ export class EmployeesController {
   }
 
   @Post(':id/avatar/confirm')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('employee.write', { resource: 'employee', from: 'param', field: 'id' })
   @ApiOperation({ summary: 'Confirm avatar upload completed — links the photo to the employee' })
   @ApiOkResponse({

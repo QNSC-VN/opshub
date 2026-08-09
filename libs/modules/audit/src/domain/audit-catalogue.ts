@@ -111,6 +111,14 @@ export const AUDIT_ACTION = {
   POSITION_ASSIGNED: 'position.assigned',
   POSITION_UNASSIGNED: 'position.unassigned',
 
+  // ── Employment contracts ──
+  CONTRACT_DRAFTED: 'contract.drafted',
+  CONTRACT_UPDATED: 'contract.updated',
+  CONTRACT_ACTIVATED: 'contract.activated',
+  CONTRACT_RENEWED: 'contract.renewed',
+  CONTRACT_TERMINATED: 'contract.terminated',
+  CONTRACT_EXPIRED: 'contract.expired',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -177,6 +185,7 @@ export const AUDIT_RESOURCE = {
   DOCUMENT_VERSION: 'document_version',
   POSITION: 'position',
   EMPLOYEE_POSITION: 'employee_position',
+  EMPLOYMENT_CONTRACT: 'employment_contract',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

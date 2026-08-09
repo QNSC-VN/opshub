@@ -30,6 +30,7 @@ import { LicenseModule } from '@modules/license';
 import { CatalogModule } from '@modules/catalog';
 import { DocumentsModule } from '@modules/documents';
 import { PositionsModule } from '@modules/positions';
+import { ContractsModule } from '@modules/contracts';
 import { AiModule } from '@modules/ai';
 import { SecurityPostureModule } from '@modules/security-posture';
 
@@ -81,6 +82,7 @@ import { SecurityPostureModule } from '@modules/security-posture';
     CatalogModule,
     DocumentsModule,
     PositionsModule,
+    ContractsModule,
     AiModule,
     SecurityPostureModule,
   ],

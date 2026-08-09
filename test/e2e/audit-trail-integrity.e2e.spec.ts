@@ -253,7 +253,8 @@ describe('audit trail integrity', () => {
       headers: bearer(admin),
       payload: { employeeId: FIXTURE.NO_PERMISSIONS.id },
     });
-    expect(assignRes.statusCode, assignRes.body).toBe(201);
+    // 200: assigning an asset is a transition, not a creation — it always documented 200.
+    expect(assignRes.statusCode, assignRes.body).toBe(200);
 
     // Read immediately, with no polling: a transactional write needs no settle time, and
     // polling here would hide exactly the race this change removes.
