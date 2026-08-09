@@ -549,13 +549,20 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     return data<RecordRow>(created.body).id;
   }
 
-  async function put(presign: PresignRow, body: Buffer): Promise<number> {
+  /**
+   * PUT the bytes with exactly the signed headers.
+   *
+   * Returns the status AND the body: a signature or emulator mismatch comes back as a bare 400/403
+   * with the explanation only in the body, and asserting on the status alone turns that into
+   * "expected 400 to be 200" with nothing to act on. That cost one CI round trip.
+   */
+  async function put(presign: PresignRow, body: Buffer): Promise<{ status: number; body: string }> {
     const res = await fetch(presign.uploadUrl, {
       method: 'PUT',
       headers: presign.requiredHeaders,
       body: new Uint8Array(body),
     });
-    return res.status;
+    return { status: res.status, body: await res.text() };
   }
 
   it('round-trips: presign as the owner, PUT, confirm, list, download, delete', async () => {
@@ -580,7 +587,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     // the signature, and that failure carries no CORS headers.
     expect(presign.requiredHeaders['Content-Type']).toBe('application/pdf');
     expect(presign.requiredHeaders['Content-Disposition']).toContain('attachment');
-    expect(await put(presign, bytes)).toBe(200);
+    const uploaded = await put(presign, bytes);
+    expect(uploaded.status, uploaded.body).toBe(200);
 
     const confirmed = await req(
       employee,
@@ -642,8 +650,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
 
     // The signature pins content-length, so a different body is rejected at the edge; if a backend
     // ever accepts it, confirm's HeadObject comparison is the second line.
-    const putStatus = await put(presign, Buffer.from('too short'));
-    if (putStatus === 200) {
+    const putResult = await put(presign, Buffer.from('too short'));
+    if (putResult.status === 200) {
       const confirmed = await req(
         employee,
         'POST',
@@ -652,7 +660,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
       expect(confirmed.status).toBe(422);
       expect(errorCode(confirmed.body)).toBe('FILE_SIZE_MISMATCH');
     } else {
-      expect(putStatus).toBeGreaterThanOrEqual(400);
+      expect(putResult.status, putResult.body).toBeGreaterThanOrEqual(400);
     }
   });
 
@@ -698,7 +706,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
       );
       expect(presigned.status, `presign ${i}: ${JSON.stringify(presigned.body)}`).toBe(201);
       const presign = data<PresignRow>(presigned.body);
-      expect(await put(presign, body)).toBe(200);
+      const put_ = await put(presign, body);
+      expect(put_.status, put_.body).toBe(200);
       const confirmed = await req(
         employee,
         'POST',
@@ -776,7 +785,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
       checksumSha256: digest,
     });
     const presign = data<PresignRow>(presigned.body);
-    expect(await put(presign, bytes)).toBe(200);
+    const uploaded = await put(presign, bytes);
+    expect(uploaded.status, uploaded.body).toBe(200);
     expect(
       (await req(employee, 'POST', `/training/records/${a}/certificates/${presign.fileId}/confirm`))
         .status,

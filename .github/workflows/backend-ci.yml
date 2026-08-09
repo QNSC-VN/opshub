@@ -111,7 +111,10 @@ jobs:
       # that confirm rejects a size or checksum that does not match. Every one of those is invisible
       # to a stubbed StorageService — the stub would agree with whatever the code did.
       localstack:
-        image: localstack/localstack:3
+        # Pinned to the SAME major as docker-compose.dev.yml. They diverged once — CI on 3 while
+        # local ran 4 — and a presigned PUT that succeeded locally answered 400 in CI, which reads
+        # as a product bug rather than an emulator difference.
+        image: localstack/localstack:4
         env:
           SERVICES: s3
           DEBUG: '0'
