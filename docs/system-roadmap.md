@@ -13,7 +13,7 @@ says something is absent, that was checked.
 | System                                    | State                                                                                                                       | Missing                                                                                                            |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
-| **EMS** — employee management             | Solid core. `identity.employees` with `department`, `jobTitle`, `managerId`; status transitions; onboarding/offboarding workflows; assets; licences; access. **Positions**, approved headcount and assignment history | Contracts, training records, performance reviews                                                                   |
+| **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with approved headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal chain, expiry sweep, pay gated by its own permission | Training records, performance reviews                                                                              |
 | **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory, controlled policies with acknowledgement | **Risk register**, asset classification, controls / Statement of Applicability, incidents, vendor risk              |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking     | CAPA, non-conformance, internal audit, management review, training records                                          |
 
@@ -79,8 +79,8 @@ action. It does not add a `*_history` table.
 2. ~~**Controlled-document module**~~ — **done**: the shared primitive from decision 2,
    ahead of the ISMS policies and QMS SOPs that both need it.
 
-3. **EMS depth** — ~~positions and headcount~~ (**done**), then contracts and training
-   records.
+3. **EMS depth** — ~~positions and headcount~~ (**done**), ~~contracts~~ (**done**), then
+   training records.
    Before QMS and ISMS, because QMS competency/training records and ISMS policy
    acknowledgement both hang off employee and position data. Building those first means
    modelling training twice.
@@ -89,6 +89,11 @@ action. It does not add a `*_history` table.
    FOR a position and QMS competency is training required for A POSITION, so both would
    otherwise match on `employees.job_title`, which is free text on the person. That column
    is deliberately left in place — the Entra sync writes it and older screens read it.
+
+   Contracts came second and confirmed the ordering: `employment_contracts.position_id` is a
+   real reference, so "what does this role pay" and "who is on a fixed term ending this
+   quarter" are both queries rather than string matching. Training records are next and hang
+   off the same `position_id`.
 
 4. **ISMS** — risk register, controls / Statement of Applicability, incidents, asset
    classification, vendor risk.
@@ -137,6 +142,11 @@ step, which is the point.
 - **Tests** — unit specs for the domain rules, an API e2e spec for the flow **and** for
   authorization in both directions, and one Playwright journey through the surface
   (`apps/web/e2e/`). A per-page smoke check is not a journey.
+- **POST status** — a `@Post` that transitions state rather than creating a row needs
+  `@HttpCode(HttpStatus.OK)` alongside its `@ApiOkResponse`. Nest answers 201 otherwise, so the
+  OpenAPI document — and the client generated from it — promises a status the server never sends.
+  15 routes across six controllers were doing this. Enforced by
+  `test/post-status-contract.ratchet.spec.ts`, baseline 0.
 - **E2E reset** — add every new table to `FIXTURE_TABLES` in `db/reset.ts`. Nothing in the
   suite tears down what it creates, so an unlisted table keeps its rows forever and the
   failure arrives later, in someone else's spec, looking like a product bug. Positions found

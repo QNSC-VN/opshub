@@ -12,6 +12,8 @@ export type NotificationTemplateName =
   | 'asset.assigned'
   | 'asset.unassigned'
   | 'employee.offboarded'
+  | 'contract.expiring_soon'
+  | 'contract.expired'
   | 'request.sla_breach'
   | 'request.delegation_created'
   | 'request.step_ready'
@@ -37,14 +39,25 @@ export interface NotificationTemplateVars {
   };
   'asset.assigned': {
     assetName: string;
-    assetTag:  string;
+    assetTag: string;
   };
   'asset.unassigned': {
     assetName: string;
-    assetTag:  string;
+    assetTag: string;
   };
   'employee.offboarded': {
     employeeName: string;
+  };
+  'contract.expiring_soon': {
+    employeeName: string;
+    reference: string;
+    endDate: string; // YYYY-MM-DD
+    daysRemaining: number;
+  };
+  'contract.expired': {
+    employeeName: string;
+    reference: string;
+    endDate: string; // YYYY-MM-DD
   };
   'request.sla_breach': {
     requestType: string;
@@ -80,7 +93,7 @@ export interface NotificationTemplateVars {
 
 export interface RenderedNotification {
   title: string;
-  body:  string;
+  body: string;
 }
 
 // ── Template implementations ──────────────────────────────────────────────────
@@ -91,75 +104,87 @@ const templates: {
   'access_request.submitted'(v) {
     return {
       title: 'Access request submitted',
-      body:  `Your request for access to "${v.resourceName}" is pending approval.`,
+      body: `Your request for access to "${v.resourceName}" is pending approval.`,
     };
   },
   'access_request.approved'(v) {
     return {
       title: 'Access request approved ✓',
-      body:  `${v.approverName} approved your request for "${v.resourceName}".`,
+      body: `${v.approverName} approved your request for "${v.resourceName}".`,
     };
   },
   'access_request.denied'(v) {
     const extra = v.reason ? ` Reason: ${v.reason}` : '';
     return {
       title: 'Access request denied',
-      body:  `${v.approverName} denied your request for "${v.resourceName}".${extra}`,
+      body: `${v.approverName} denied your request for "${v.resourceName}".${extra}`,
     };
   },
   'asset.assigned'(v) {
     return {
       title: 'Asset assigned to you',
-      body:  `${v.assetName} (${v.assetTag}) has been assigned to you.`,
+      body: `${v.assetName} (${v.assetTag}) has been assigned to you.`,
     };
   },
   'asset.unassigned'(v) {
     return {
       title: 'Asset unassigned',
-      body:  `${v.assetName} (${v.assetTag}) has been unassigned from you.`,
+      body: `${v.assetName} (${v.assetTag}) has been unassigned from you.`,
     };
   },
   'employee.offboarded'(v) {
     return {
       title: 'Offboarding complete',
-      body:  `The offboarding process for ${v.employeeName} has been completed.`,
+      body: `The offboarding process for ${v.employeeName} has been completed.`,
+    };
+  },
+  'contract.expiring_soon'(v) {
+    return {
+      title: 'Contract expiring soon',
+      body: `${v.employeeName}'s contract ${v.reference} ends on ${v.endDate} — ${v.daysRemaining} day(s) away. Renew or terminate it before then.`,
+    };
+  },
+  'contract.expired'(v) {
+    return {
+      title: 'Contract expired',
+      body: `${v.employeeName}'s contract ${v.reference} reached its end date of ${v.endDate} and is now marked expired.`,
     };
   },
   'request.sla_breach'(v) {
     return {
       title: 'SLA breach warning',
-      body:  `Your ${v.requestType} request (${v.requestId}) has exceeded its SLA deadline of ${v.deadline}. Please take action.`,
+      body: `Your ${v.requestType} request (${v.requestId}) has exceeded its SLA deadline of ${v.deadline}. Please take action.`,
     };
   },
   'request.delegation_created'(v) {
     return {
       title: 'Approval delegation received',
-      body:  `${v.delegatorName} has delegated their approval authority to you until ${v.endsAt}.`,
+      body: `${v.delegatorName} has delegated their approval authority to you until ${v.endsAt}.`,
     };
   },
   'request.step_ready'(v) {
     return {
       title: `Action required: ${v.requestType} approval (step ${v.nextStep}/${v.totalSteps})`,
-      body:  `Step ${v.completedStep} has been approved. Your review is now required (step ${v.nextStep} of ${v.totalSteps}).`,
+      body: `Step ${v.completedStep} has been approved. Your review is now required (step ${v.nextStep} of ${v.totalSteps}).`,
     };
   },
   'request.submitted'(v) {
     return {
       title: `New ${v.requestType} request awaiting review`,
-      body:  `${v.requesterEmail} submitted a ${v.requestType} request (${v.requestId}) that requires your approval.`,
+      body: `${v.requesterEmail} submitted a ${v.requestType} request (${v.requestId}) that requires your approval.`,
     };
   },
   'request.approved'(v) {
     return {
       title: `Your ${v.requestType} request was approved`,
-      body:  `Your ${v.requestType} request (${v.requestId}) has been approved.`,
+      body: `Your ${v.requestType} request (${v.requestId}) has been approved.`,
     };
   },
   'request.rejected'(v) {
     const extra = v.reason ? ` Reason: ${v.reason}` : '';
     return {
       title: `Your ${v.requestType} request was rejected`,
-      body:  `Your ${v.requestType} request (${v.requestId}) has been rejected.${extra}`,
+      body: `Your ${v.requestType} request (${v.requestId}) has been rejected.${extra}`,
     };
   },
 };

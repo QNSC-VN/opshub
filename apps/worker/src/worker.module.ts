@@ -7,9 +7,11 @@ import { NotificationsModule } from '@modules/notifications';
 import { WebhooksModule } from '@modules/webhooks';
 import { ComplianceModule, ComplianceSyncCron } from '@modules/compliance';
 import { SecurityPostureModule, SecurityPostureSyncCron } from '@modules/security-posture';
+import { ContractsModule } from '@modules/contracts';
 import { RequestExpiryCron } from './cron/request-expiry.cron';
 import { SlaBreachCron } from './cron/sla-breach.cron';
 import { DelegationExpiryCron } from './cron/delegation-expiry.cron';
+import { ContractExpiryCron } from './cron/contract-expiry.cron';
 import { StorageCleanupCron } from './cron/storage-cleanup.cron';
 
 @Module({
@@ -32,6 +34,7 @@ import { StorageCleanupCron } from './cron/storage-cleanup.cron';
     WebhooksModule,
     ComplianceModule,
     SecurityPostureModule,
+    ContractsModule,
   ],
   providers: [
     ComplianceSyncCron,
@@ -39,6 +42,7 @@ import { StorageCleanupCron } from './cron/storage-cleanup.cron';
     RequestExpiryCron,
     SlaBreachCron,
     DelegationExpiryCron,
+    ContractExpiryCron,
     StorageCleanupCron,
   ],
 })

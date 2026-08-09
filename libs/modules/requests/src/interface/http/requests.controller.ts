@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Param, Query, Body, ParseUUIDPipe, HttpCode } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import {
   Auth,
@@ -139,6 +149,9 @@ export class RequestsController {
 
   /** Approve a pending request. Requires the relevant `*.approve` permission. */
   @Post(':id/approve')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @AuthorizedInService(
     'required permission comes from the request TYPE and current STEP; unions actor with an active delegator and enforces separation of duties',
     'request-engine.spec.ts',
@@ -164,6 +177,9 @@ export class RequestsController {
 
   /** Reject a pending request. Requires the relevant `*.approve` permission. */
   @Post(':id/reject')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @AuthorizedInService('same step-derived permission as approve', 'request-engine.spec.ts')
   @ApiOperation({ summary: 'Reject a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })
@@ -186,6 +202,9 @@ export class RequestsController {
 
   /** Cancel a pending request (requester or admin). */
   @Post(':id/cancel')
+  // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
+  // already promises 200 — without this the generated client's contract disagreed with the server.
+  @HttpCode(HttpStatus.OK)
   @AuthorizedInService('requester, or a holder of rbac.manage', 'request-engine.spec.ts')
   @ApiOperation({ summary: 'Cancel a pending request' })
   @ApiOkResponse({ type: RequestItemResponseDto })

@@ -53,6 +53,25 @@ export const ErrorCodes = {
   POSITION_HEADCOUNT_EXCEEDED: 'POSITION_HEADCOUNT_EXCEEDED',
   /** An assignment would end before it began — `ck_employee_position_window` in words. */
   POSITION_INVALID_WINDOW: 'POSITION_INVALID_WINDOW',
+
+  // ── Employment contracts ───────────────────────────────────────────────────
+  /** A contract date range runs backwards — `ck_contract_window` and its siblings in words. */
+  CONTRACT_INVALID_WINDOW: 'CONTRACT_INVALID_WINDOW',
+  /**
+   * The type and the end date disagree: `permanent` with an end date, or a fixed engagement
+   * without one. `ck_contract_type_end_date` in words.
+   */
+  CONTRACT_INVALID_TERM: 'CONTRACT_INVALID_TERM',
+  /** Only a draft may be edited — an active contract's terms are what somebody signed. */
+  CONTRACT_NOT_DRAFT: 'CONTRACT_NOT_DRAFT',
+  /** The employee already holds an active contract — `uq_employee_active_contract` in words. */
+  CONTRACT_ALREADY_ACTIVE: 'CONTRACT_ALREADY_ACTIVE',
+  /** The transition needs an active contract and this one is not. */
+  CONTRACT_NOT_ACTIVE: 'CONTRACT_NOT_ACTIVE',
+  /** A contract cannot be activated before both parties have signed it. */
+  CONTRACT_NOT_SIGNED: 'CONTRACT_NOT_SIGNED',
+  /** Activating a contract whose end date has already passed. */
+  CONTRACT_ALREADY_ENDED: 'CONTRACT_ALREADY_ENDED',
   /** Requested working days exceed the employee's remaining entitlement (pending included). */
   LEAVE_INSUFFICIENT_BALANCE: 'LEAVE_INSUFFICIENT_BALANCE',
   /** The window contains no working days — every date is a weekend or a public holiday. */

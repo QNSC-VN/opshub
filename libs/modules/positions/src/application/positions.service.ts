@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   ConflictException,
   ErrorCodes,
+  assertDateOrder,
   InjectDrizzle,
   NotFoundException,
   PreconditionFailedException,
@@ -43,24 +44,6 @@ export class PositionsService {
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly audit: AuditService,
   ) {}
-
-  /**
-   * `ck_employee_position_window` stated as a domain rule, because a CHECK violation reaches the
-   * caller as a 500.
-   *
-   * Both writes that can close an assignment need it: a backdated transfer sets the outgoing row's
-   * `effective_to` to the incoming `effective_from`, and an explicit close sets it directly. Dates
-   * are ISO `YYYY-MM-DD`, so lexicographic order IS chronological order — no parsing, and no
-   * timezone to get wrong.
-   */
-  private assertWindowOrdered(effectiveFrom: string, effectiveTo: string, what: string): void {
-    if (effectiveTo < effectiveFrom) {
-      throw new PreconditionFailedException(
-        ErrorCodes.POSITION_INVALID_WINDOW,
-        `${what}: an assignment cannot end (${effectiveTo}) before it began (${effectiveFrom})`,
-      );
-    }
-  }
 
   // ── Positions ────────────────────────────────────────────────────────────────
 
@@ -181,10 +164,11 @@ export class PositionsService {
       // outgoing assignment.
       if (current) {
         // A transfer dated before the current assignment started would close it in its own past.
-        this.assertWindowOrdered(
+        assertDateOrder(
           current.effectiveFrom,
           input.effectiveFrom,
-          `Cannot transfer as of ${input.effectiveFrom}`,
+          ErrorCodes.POSITION_INVALID_WINDOW,
+          'An assignment cannot end before it began — cannot transfer as of this date',
         );
         await this.repo.endAssignment(
           current.id,
@@ -236,10 +220,11 @@ export class PositionsService {
       // open-only WHERE clause below — this read could be raced, that clause cannot.
       const existing = await this.repo.findAssignmentById(id, tx);
       if (existing && existing.effectiveTo === null) {
-        this.assertWindowOrdered(
+        assertDateOrder(
           existing.effectiveFrom,
           input.effectiveTo,
-          'Cannot end assignment',
+          ErrorCodes.POSITION_INVALID_WINDOW,
+          'An assignment cannot end before it began',
         );
       }
 

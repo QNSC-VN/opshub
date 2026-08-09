@@ -104,6 +104,9 @@ export const FIXTURE_TABLES = [
    */
   'positions.employee_positions',
   'positions.positions',
+  // employment contracts — `uq_employee_active_contract` is per employee, so one left active by a
+  // previous run makes the next run's first activation a 409 that names a contract nobody wrote.
+  'contracts.employment_contracts',
   // audit trail and uploaded file metadata
   'audit.audit_logs',
   'storage.stored_files',

@@ -60,6 +60,18 @@ export const FIXTURE = {
     email: 'manager@opshub.local',
   },
   /**
+   * Read-only across the platform, and the tier for FIELD-LEVEL redaction.
+   *
+   * Holds `contract.read` but NOT `contract.compensation.read` — deliberately, in the catalogue: an
+   * auditor checks that every employee has a signed contract, which does not require knowing what
+   * any of them pays. So this fixture is the only one that can prove a field is hidden while the
+   * record around it is still visible; `NO_PERMISSIONS` gets a 403 and sees no field either way.
+   */
+  AUDITOR: {
+    id: '00000000-0000-7000-8000-000000000007',
+    email: 'auditor@opshub.local',
+  },
+  /**
    * Holds `documents.manage`, `documents.approve` and `documents.publish` — the ISMS owner, and
    * the AUTHOR in the controlled-document specs. Kept distinct from ADMIN on purpose: separation
    * of duties can only be tested with two identities, since an author may not approve their own

@@ -50,6 +50,8 @@
       "@modules/license/*": ["./libs/modules/license/src/*"],
       "@modules/positions": ["./libs/modules/positions/src/index"],
       "@modules/positions/*": ["./libs/modules/positions/src/*"],
+      "@modules/contracts": ["./libs/modules/contracts/src/index"],
+      "@modules/contracts/*": ["./libs/modules/contracts/src/*"],
       "@modules/documents": ["./libs/modules/documents/src/index"],
       "@modules/documents/*": ["./libs/modules/documents/src/*"],
       "@modules/catalog": ["./libs/modules/catalog/src/index"],
