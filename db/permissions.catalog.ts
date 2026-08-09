@@ -65,6 +65,14 @@ export const PERMISSION = {
 
   // ── workforce (timesheets, leave, overtime) ────────────────────────────────
   WORKFORCE_READ: 'workforce.read',
+  /**
+   * Administer the leave POLICY — the holiday calendar and annual entitlements.
+   *
+   * Distinct from `workforce.approve`, which decides individual requests. Setting someone's
+   * allowance or declaring a public holiday changes what every future request costs, so it is a
+   * different act with a different blast radius, and an approver should not automatically hold it.
+   */
+  WORKFORCE_MANAGE: 'workforce.manage',
   WORKFORCE_APPROVE: 'workforce.approve',
   WORKFORCE_LEAVE_REVIEW: 'workforce.leave.review',
   WORKFORCE_OVERTIME_REVIEW: 'workforce.overtime.review',
@@ -127,6 +135,7 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.COMPLIANCE_READ]: 'View compliance findings and software catalog',
   [PERMISSION.COMPLIANCE_MANAGE]: 'Resolve findings and manage compliance data',
   [PERMISSION.WORKFORCE_READ]: 'View timesheets, leave and overtime entries',
+  [PERMISSION.WORKFORCE_MANAGE]: 'Manage the holiday calendar and annual leave entitlements',
   [PERMISSION.WORKFORCE_APPROVE]: 'Approve or reject workforce requests (legacy)',
   [PERMISSION.WORKFORCE_LEAVE_REVIEW]: 'Approve or reject leave requests via the approval engine',
   [PERMISSION.WORKFORCE_OVERTIME_REVIEW]:
@@ -272,6 +281,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
     PERMISSION.WORKFORCE_OVERTIME_REVIEW,
+    PERMISSION.WORKFORCE_MANAGE,
     PERMISSION.REQUEST_READ,
     PERMISSION.AUDIT_READ,
     PERMISSION.REPORTS_READ,

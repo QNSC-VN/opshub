@@ -2,12 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, desc, eq, lte, gte, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
-import {
-  timesheets,
-  leaveRequests,
-  overtimeEntries,
-  shiftLogs,
-} from '../../../../../../db/schema';
+import { timesheets, leaveRequests, overtimeEntries, shiftLogs } from '../../../../../../db/schema';
 import type { IWorkforceRepository } from '../../domain/ports/workforce.repository';
 import type {
   CreateLeaveInput,
@@ -48,7 +43,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
 
   async findTimesheetById(id: string): Promise<Timesheet | null> {
     const [row] = await this.db.select().from(timesheets).where(eq(timesheets.id, id)).limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listTimesheets(
@@ -91,7 +86,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(timesheets.id, id))
       .returning();
-    return (row) ?? null;
+    return row ?? null;
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────────
@@ -104,6 +99,9 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         leaveType: input.leaveType,
         startDate: input.startDate,
         endDate: input.endDate,
+        // Stored as a string: numeric(5,2) round-trips through the driver as text, and letting a
+        // JS number through here would silently become '3' vs '3.00' depending on the value.
+        workingDays: input.workingDays === undefined ? null : String(input.workingDays),
         reason: input.reason ?? null,
         requestId: input.requestId ?? null,
       })
@@ -117,7 +115,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .from(leaveRequests)
       .where(eq(leaveRequests.id, id))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listLeave(
@@ -160,21 +158,15 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(leaveRequests.id, id))
       .returning();
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async setLeaveRequestId(id: string, requestId: string): Promise<void> {
-    await this.db
-      .update(leaveRequests)
-      .set({ requestId })
-      .where(eq(leaveRequests.id, id));
+    await this.db.update(leaveRequests).set({ requestId }).where(eq(leaveRequests.id, id));
   }
 
   async updateLeaveDocument(id: string, documentStorageKey: string | null): Promise<void> {
-    await this.db
-      .update(leaveRequests)
-      .set({ documentStorageKey })
-      .where(eq(leaveRequests.id, id));
+    await this.db.update(leaveRequests).set({ documentStorageKey }).where(eq(leaveRequests.id, id));
   }
 
   async hasOverlappingLeave(
@@ -218,7 +210,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .from(overtimeEntries)
       .where(eq(overtimeEntries.id, id))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listOvertime(
@@ -261,14 +253,11 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(overtimeEntries.id, id))
       .returning();
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async setOvertimeRequestId(id: string, requestId: string): Promise<void> {
-    await this.db
-      .update(overtimeEntries)
-      .set({ requestId })
-      .where(eq(overtimeEntries.id, id));
+    await this.db.update(overtimeEntries).set({ requestId }).where(eq(overtimeEntries.id, id));
   }
 
   // ── Shift logs ─────────────────────────────────────────────────────────────
@@ -289,7 +278,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
 
   async findShiftLogById(id: string): Promise<ShiftLog | null> {
     const [row] = await this.db.select().from(shiftLogs).where(eq(shiftLogs.id, id)).limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listShiftLogs(

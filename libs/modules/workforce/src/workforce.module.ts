@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '@modules/audit';
 import { IdentityModule } from '@modules/identity';
+import { LeaveBalanceService } from './application/leave-balance.service';
 import { WorkforceService } from './application/workforce.service';
 import { GraphProvisioningService } from './application/graph-provisioning.service';
 import { LeaveRequestTypeDef } from './application/leave-request.type-def';
@@ -16,6 +17,7 @@ import { WORKFORCE_REPOSITORY } from './domain/ports/workforce.repository';
   controllers: [WorkforceController],
   providers: [
     WorkforceService,
+    LeaveBalanceService,
     GraphProvisioningService,
     LeaveRequestTypeDef,
     OvertimeTypeDef,
@@ -23,6 +25,6 @@ import { WORKFORCE_REPOSITORY } from './domain/ports/workforce.repository';
     OffboardingTypeDef,
     { provide: WORKFORCE_REPOSITORY, useClass: WorkforceDrizzleRepository },
   ],
-  exports: [WorkforceService, GraphProvisioningService],
+  exports: [WorkforceService, GraphProvisioningService, LeaveBalanceService],
 })
 export class WorkforceModule {}

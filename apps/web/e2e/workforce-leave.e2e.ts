@@ -29,14 +29,22 @@ import { expect, gotoInShell, settle } from './support/fixtures';
  * uniqueness has to come from the test.
  *
  * Derived from the clock in whole days, so two runs collide only inside the same second.
+ *
+ * ALWAYS LANDS ON A MONDAY. The API now refuses a window containing no working days
+ * (`LEAVE_NO_WORKING_DAYS`): a Saturday-to-Sunday request costs nothing and is almost certainly a
+ * mistyped date range. An arbitrary offset hits a weekend two days in seven, so this spec would
+ * have failed about a third of its runs with a message about dates rather than about anything it
+ * tests. Monday to Tuesday is two working days in every week of the year.
  */
 function uniqueLeaveWindow(): { start: string; end: string } {
   const day = 86_400_000;
   // Base far in the future so nothing here can collide with seeded or hand-made data.
   const base = Date.UTC(2030, 0, 1);
   const startMs = base + (Math.floor(Date.now() / 1000) % 3000) * day;
+  // Advance to the next Monday. getUTCDay: 0 = Sunday, 1 = Monday.
+  const mondayMs = startMs + ((8 - new Date(startMs).getUTCDay()) % 7) * day;
   const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-  return { start: iso(startMs), end: iso(startMs + day) };
+  return { start: iso(mondayMs), end: iso(mondayMs + day) };
 }
 
 test.describe('workforce leave', () => {

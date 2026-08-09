@@ -48,6 +48,12 @@ function service(): WorkforceService {
     // The real ActorScope over the mocked AuthzService — narrowToActor now delegates to it, so
     // stubbing it would remove the logic these tests exist to check.
     new ActorScope(mockAuthz as never),
+    // LeaveBalanceService is unused by the narrowing paths under test; a stub keeps this spec
+    // about scoping rather than about leave arithmetic, which has its own suite.
+    {} as never,
+    // db: only the entitlement/holiday writes open a transaction, and none of those are exercised
+    // by the narrowing paths under test.
+    {} as never,
   );
 }
 

@@ -73,7 +73,10 @@ export default defineConfig({
       // green. `pnpm check:coverage-floors` now fails when any floor falls more than 3 points
       // behind actual, so raising these is no longer a thing to remember.
       //
-      // Measured 2026-08-06: lines 23.43 / statements 23.41 / branches 19.06 / functions 16.27.
+      // Measured 2026-08-08: lines 25.85 / statements 26.01 / branches 21.37 / functions 17.46.
+      // Raised from 23/16/19/23 when the leave-entitlement work landed — `check:coverage-floors`
+      // refused the change until they moved, which is the mechanism working: a floor 3 points
+      // behind reality protects nothing.
       //
       // These went 21/14/17/21 → 24/24/19/16 when abstract-outbox-relay.spec.ts landed, then
       // DOWN to 23 when the unconsumed outbox leg was deleted (migration 0013). Lowering a
@@ -85,10 +88,10 @@ export default defineConfig({
       // until the floors moved up, then refused the delete until they moved down — which is
       // why the number can be trusted to track reality rather than intent.
       thresholds: {
-        lines: 23,
-        functions: 16,
-        branches: 19,
-        statements: 23,
+        lines: 25,
+        functions: 17,
+        branches: 21,
+        statements: 26,
       },
     },
   },

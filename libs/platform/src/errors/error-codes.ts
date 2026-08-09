@@ -49,6 +49,10 @@ export const ErrorCodes = {
   LEAVE_REQUEST_NOT_FOUND: 'LEAVE_REQUEST_NOT_FOUND',
   LEAVE_REQUEST_NOT_PENDING: 'LEAVE_REQUEST_NOT_PENDING',
   LEAVE_OVERLAPPING: 'LEAVE_OVERLAPPING',
+  /** Requested working days exceed the employee's remaining entitlement (pending included). */
+  LEAVE_INSUFFICIENT_BALANCE: 'LEAVE_INSUFFICIENT_BALANCE',
+  /** The window contains no working days — every date is a weekend or a public holiday. */
+  LEAVE_NO_WORKING_DAYS: 'LEAVE_NO_WORKING_DAYS',
   OVERTIME_NOT_FOUND: 'OVERTIME_NOT_FOUND',
   SHIFT_LOG_NOT_FOUND: 'SHIFT_LOG_NOT_FOUND',
 
