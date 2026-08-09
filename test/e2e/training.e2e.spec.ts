@@ -34,8 +34,22 @@ let app: NestFastifyApplication;
 let hr: Session;
 /** Holds `training.read` only — the tier that separates reading from managing. */
 let auditor: Session;
-/** Holds no permission codes at all; the subject of every record below. */
+/** Holds no permission codes at all — used only to prove the routes are closed to them. */
 let employee: Session;
+/**
+ * The SUBJECT of every record below, and deliberately NOT the shared `NO_PERMISSIONS` employee.
+ *
+ * The gap report needs its subject to hold a current position, so this suite assigns them to one —
+ * and `positions-headcount.e2e.spec.ts` and `contracts.e2e.spec.ts` both drive `NO_PERMISSIONS`
+ * through position transfers of their own. Sharing the fixture makes the three files
+ * order-dependent in BOTH directions: whichever runs first leaves an open assignment, and the next
+ * one's transfer is dated behind it and refused with `POSITION_INVALID_WINDOW`. That is exactly
+ * what happened in CI, where the file order differs from the local one.
+ *
+ * `SECURITY` holds no training permission either, so the self-service assertions below still prove
+ * what they claim: attaching evidence to your own record needs no permission code.
+ */
+let subject: Session;
 
 const RUN = Date.now().toString(36).toUpperCase().slice(-6);
 let seq = 0;
@@ -122,7 +136,7 @@ async function positionWithEmployee(effectiveFrom: string): Promise<string> {
   const positionId = data<{ id: string }>(created.body).id;
 
   const assigned = await req(hr, 'POST', `/positions/${positionId}/assignments`, {
-    employeeId: FIXTURE.NO_PERMISSIONS.id,
+    employeeId: FIXTURE.SECURITY.id,
     effectiveFrom,
   });
   expect(assigned.status, JSON.stringify(assigned.body)).toBe(201);
@@ -137,6 +151,7 @@ beforeAll(async () => {
   hr = await login(app, FIXTURE.HR);
   auditor = await login(app, FIXTURE.AUDITOR);
   employee = await login(app, FIXTURE.NO_PERMISSIONS);
+  subject = await login(app, FIXTURE.SECURITY);
 }, 60_000);
 
 afterAll(async () => {
@@ -189,7 +204,7 @@ describe('the course catalogue', () => {
     expect(required.status).toBe(412);
 
     const completed = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-01',
     });
@@ -201,7 +216,7 @@ describe('recording a completion', () => {
   it('derives the expiry from the course and freezes it against a later edit', async () => {
     const course = await createCourse({ validityMonths: 12 });
     const created = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-31',
       score: '91.50',
@@ -224,7 +239,7 @@ describe('recording a completion', () => {
   it('leaves the expiry null for a course that never lapses', async () => {
     const course = await createCourse({ validityMonths: null });
     const created = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-05',
     });
@@ -236,7 +251,7 @@ describe('recording a completion', () => {
     const course = await createCourse();
 
     const future = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2999-01-01',
     });
@@ -258,14 +273,14 @@ describe('retraining', () => {
     const first = data<RecordRow>(
       (
         await req(hr, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-01-15',
         })
       ).body,
     );
     const second = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-07-15',
     });
@@ -283,7 +298,7 @@ describe('retraining', () => {
         await req(
           hr,
           'GET',
-          `/training/records?employeeId=${FIXTURE.NO_PERMISSIONS.id}&courseId=${course.id}&currentOnly=true`,
+          `/training/records?employeeId=${FIXTURE.SECURITY.id}&courseId=${course.id}&currentOnly=true`,
         )
       ).body,
     );
@@ -296,7 +311,7 @@ describe('retraining', () => {
     expect(
       (
         await req(hr, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-06-01',
         })
@@ -304,7 +319,7 @@ describe('retraining', () => {
     ).toBe(201);
 
     const backdated = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-01',
     });
@@ -321,7 +336,7 @@ describe('verify and revoke', () => {
     const record = data<RecordRow>(
       (
         await req(hr, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-02-02',
         })
@@ -342,7 +357,7 @@ describe('verify and revoke', () => {
     const record = data<RecordRow>(
       (
         await req(hr, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-02-03',
         })
@@ -370,7 +385,7 @@ describe('verify and revoke', () => {
     const first = data<RecordRow>(
       (
         await req(hr, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-02-04',
         })
@@ -382,7 +397,7 @@ describe('verify and revoke', () => {
     ).toBe(200);
 
     const replacement = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-02-05',
     });
@@ -413,7 +428,7 @@ describe('the competency gap report', () => {
     ).toBe(201);
 
     const mine = () =>
-      req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.NO_PERMISSIONS.id}`).then((r) =>
+      req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`).then((r) =>
         data<GapRow[]>(r.body),
       );
 
@@ -428,7 +443,7 @@ describe('the competency gap report', () => {
         await req(
           hr,
           'GET',
-          `/training/gaps?employeeId=${FIXTURE.NO_PERMISSIONS.id}&includeRecommended=true`,
+          `/training/gaps?employeeId=${FIXTURE.SECURITY.id}&includeRecommended=true`,
         )
       ).body,
     );
@@ -437,7 +452,7 @@ describe('the competency gap report', () => {
     expect(
       (
         await req(hr, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: mandatory.id,
           completedOn: '2026-03-01',
         })
@@ -449,13 +464,8 @@ describe('the competency gap report', () => {
     // Same record, later date: the certificate has lapsed, and the reason distinguishes that from
     // never having taken it because one needs scheduling and the other rescheduling.
     const later = data<GapRow[]>(
-      (
-        await req(
-          hr,
-          'GET',
-          `/training/gaps?employeeId=${FIXTURE.NO_PERMISSIONS.id}&asOf=2027-06-01`,
-        )
-      ).body,
+      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}&asOf=2027-06-01`))
+        .body,
     );
     expect(later.find((g) => g.courseCode === mandatory.code)?.reason).toBe('expired');
   });
@@ -473,7 +483,7 @@ describe('the competency gap report', () => {
     ).toBe(201);
 
     const before = data<GapRow[]>(
-      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.NO_PERMISSIONS.id}`)).body,
+      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`)).body,
     );
     expect(before.map((g) => g.courseCode)).toContain(course.code);
 
@@ -481,14 +491,14 @@ describe('the competency gap report', () => {
     await positionWithEmployee('2053-01-01');
 
     const after = data<GapRow[]>(
-      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.NO_PERMISSIONS.id}`)).body,
+      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`)).body,
     );
     // No backfill ran; the report simply reads the CURRENT assignment.
     expect(after.map((g) => g.courseCode)).not.toContain(course.code);
   });
 
-  it('lets an employee see their own gaps with no permission', async () => {
-    const res = await req(employee, 'GET', '/training/me/gaps');
+  it('lets an employee see their own gaps with no training permission', async () => {
+    const res = await req(subject, 'GET', '/training/me/gaps');
     expect(res.status).toBe(200);
   });
 });
@@ -513,7 +523,7 @@ describe('authorization', () => {
     expect(
       (
         await req(auditor, 'POST', '/training/records', {
-          employeeId: FIXTURE.NO_PERMISSIONS.id,
+          employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-01-01',
         })
@@ -525,11 +535,13 @@ describe('authorization', () => {
     expect((await req(employee, 'GET', '/training/records')).status).toBe(403);
     expect((await req(employee, 'GET', '/training/courses')).status).toBe(403);
 
-    const mine = await req(employee, 'GET', '/training/me');
+    const mine = await req(subject, 'GET', '/training/me');
     expect(mine.status).toBe(200);
-    expect(
-      data<RecordRow[]>(mine.body).every((r) => r.employeeId === FIXTURE.NO_PERMISSIONS.id),
-    ).toBe(true);
+    // Their own rows and nobody else's — `/training/me` is keyed on the caller.
+    expect(data<RecordRow[]>(mine.body).length).toBeGreaterThan(0);
+    expect(data<RecordRow[]>(mine.body).every((r) => r.employeeId === FIXTURE.SECURITY.id)).toBe(
+      true,
+    );
   });
 });
 
@@ -537,11 +549,11 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
   const bytes = Buffer.from('%PDF-1.4 e2e certificate payload');
   const digest = createHash('sha256').update(bytes).digest('base64');
 
-  /** A record owned by the plain employee, so the self-service path is the one under test. */
+  /** A record owned by the SUBJECT, so the self-service path is the one under test. */
   async function ownRecord(): Promise<string> {
     const course = await createCourse({ validityMonths: null });
     const created = await req(hr, 'POST', '/training/records', {
-      employeeId: FIXTURE.NO_PERMISSIONS.id,
+      employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-04-01',
     });
@@ -570,7 +582,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
 
     // No permission code — an employee attaching evidence to their OWN record is self-service.
     const presigned = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
       {
@@ -591,7 +603,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     expect(uploaded.status, uploaded.body).toBe(200);
 
     const confirmed = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
     );
@@ -621,7 +633,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     expect(fetched.headers.get('content-disposition')).toContain('attachment');
 
     const removed = await req(
-      employee,
+      subject,
       'DELETE',
       `/training/records/${recordId}/certificates/${presign.fileId}`,
     );
@@ -636,7 +648,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
   it('refuses a size that does not match what was declared', async () => {
     const recordId = await ownRecord();
     const presigned = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
       {
@@ -653,7 +665,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const putResult = await put(presign, Buffer.from('too short'));
     if (putResult.status === 200) {
       const confirmed = await req(
-        employee,
+        subject,
         'POST',
         `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
       );
@@ -667,7 +679,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
   it('refuses to confirm a file that was never uploaded', async () => {
     const recordId = await ownRecord();
     const presigned = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
       {
@@ -679,7 +691,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const presign = data<PresignRow>(presigned.body);
 
     const confirmed = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
     );
@@ -694,7 +706,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     for (let i = 0; i < limit; i++) {
       const body = Buffer.concat([bytes, Buffer.from([i])]);
       const presigned = await req(
-        employee,
+        subject,
         'POST',
         `/training/records/${recordId}/certificates/presign`,
         {
@@ -709,7 +721,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
       const put_ = await put(presign, body);
       expect(put_.status, put_.body).toBe(200);
       const confirmed = await req(
-        employee,
+        subject,
         'POST',
         `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
       );
@@ -717,7 +729,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     }
 
     const overTheLine = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
       { fileName: 'sixth.pdf', mimeType: 'application/pdf', sizeBytes: bytes.length },
@@ -730,14 +742,14 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const recordId = await ownRecord();
     // SVG is active content: an "image" upload that renders inline is stored XSS the moment the
     // bytes come from an origin the app trusts.
-    const svg = await req(employee, 'POST', `/training/records/${recordId}/certificates/presign`, {
+    const svg = await req(subject, 'POST', `/training/records/${recordId}/certificates/presign`, {
       fileName: 'logo.svg',
       mimeType: 'image/svg+xml',
       sizeBytes: 100,
     });
     expect(svg.status).toBe(422);
 
-    const huge = await req(employee, 'POST', `/training/records/${recordId}/certificates/presign`, {
+    const huge = await req(subject, 'POST', `/training/records/${recordId}/certificates/presign`, {
       fileName: 'big.pdf',
       mimeType: 'application/pdf',
       sizeBytes: 21 * 1024 * 1024,
@@ -756,7 +768,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const foreignId = data<RecordRow>(hrOwn.body).id;
 
     const presigned = await req(
-      employee,
+      subject,
       'POST',
       `/training/records/${foreignId}/certificates/presign`,
       { fileName: 'not-mine.pdf', mimeType: 'application/pdf', sizeBytes: 10 },
@@ -778,7 +790,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const a = await ownRecord();
     const b = await ownRecord();
 
-    const presigned = await req(employee, 'POST', `/training/records/${a}/certificates/presign`, {
+    const presigned = await req(subject, 'POST', `/training/records/${a}/certificates/presign`, {
       fileName: 'a.pdf',
       mimeType: 'application/pdf',
       sizeBytes: bytes.length,
@@ -788,7 +800,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const uploaded = await put(presign, bytes);
     expect(uploaded.status, uploaded.body).toBe(200);
     expect(
-      (await req(employee, 'POST', `/training/records/${a}/certificates/${presign.fileId}/confirm`))
+      (await req(subject, 'POST', `/training/records/${a}/certificates/${presign.fileId}/confirm`))
         .status,
     ).toBe(200);
 
