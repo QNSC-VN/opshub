@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import swc from 'unplugin-swc';
@@ -56,5 +58,38 @@ export default defineConfig({
      * Adopted from rally, where both failure modes were diagnosed the hard way.
      */
     fileParallelism: false,
+  },
+  resolve: {
+    alias: {
+      /**
+       * ONE `nestjs-zod` instance, the CJS one.
+       *
+       * `GlobalExceptionFilter` maps a validation failure to 422 with field-level details by
+       * testing `exception instanceof ZodValidationException`. It ships from
+       * `@qnsc-vn/platform-http` as CJS and `require`s the CJS build of `nestjs-zod`; the app's
+       * own source is transformed by vite and imports the ESM build. Two module instances, a
+       * distinct class identity in each, so the `instanceof` is false — under vitest ONLY. Nest's
+       * default handling answers 400 `BAD_REQUEST` with `details: []`.
+       *
+       * Production is compiled CJS throughout and answers 422 `VALIDATION_FAILED` with the
+       * issues; verified against the running API. So the suite was asserting a status the product
+       * never emits, and would have kept passing if that mapping were deleted outright — the
+       * "different app" failure the harness docstring exists to prevent.
+       *
+       * Aliasing to the CJS entry puts the app on the same module object the externalised filter
+       * requires. `require.resolve` rather than a literal path because pnpm's store directory
+       * carries a content hash that changes on every dependency bump. Anchored at
+       * `process.cwd()` — vitest runs from the repo root — because the backend tsconfig compiles
+       * to CJS and rejects `import.meta.url` outright.
+       *
+       * Inlining `@qnsc-vn/platform-http` instead does NOT work: vite leaves the `require` calls
+       * inside a CJS dependency alone, so the filter still reaches the CJS copy. Measured.
+       *
+       * The durable fix belongs upstream — a cross-package `instanceof` is fragile for every
+       * consumer, and `platform-http` should test for `getZodError` structurally. Until that
+       * ships, this keeps the e2e contract honest.
+       */
+      'nestjs-zod': createRequire(join(process.cwd(), 'package.json')).resolve('nestjs-zod'),
+    },
   },
 });

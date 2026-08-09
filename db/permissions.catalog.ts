@@ -40,6 +40,15 @@ export const PERMISSION = {
   EMPLOYEE_READ: 'employee.read',
   EMPLOYEE_WRITE: 'employee.write',
   EMPLOYEE_OFFBOARD: 'employee.offboard',
+  /** View the position catalogue, approved headcount and occupancy. */
+  POSITION_READ: 'position.read',
+  /**
+   * Define positions and assign people to them.
+   *
+   * Separate from `employee.write`: changing someone's contact details is an HR-admin act, while
+   * approving a headcount or moving somebody between roles changes the org structure.
+   */
+  POSITION_MANAGE: 'position.manage',
 
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
@@ -138,6 +147,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.ROLE_ASSIGN]: 'Grant and revoke role assignments',
   [PERMISSION.EMPLOYEE_READ]: 'View employee directory records',
   [PERMISSION.EMPLOYEE_WRITE]: 'Create and update employee records',
+  [PERMISSION.POSITION_READ]: 'View positions, approved headcount and occupancy',
+  [PERMISSION.POSITION_MANAGE]: 'Define positions and assign employees to them',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -300,6 +311,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.EMPLOYEE_WRITE,
     PERMISSION.EMPLOYEE_OFFBOARD,
+    PERMISSION.POSITION_READ,
+    PERMISSION.POSITION_MANAGE,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -317,6 +330,7 @@ export const ROLE_PERMISSIONS: Record<
 
   [ROLE.MANAGER]: [
     PERMISSION.EMPLOYEE_READ,
+    PERMISSION.POSITION_READ,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -343,6 +357,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.SECURITY_VIEW,
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.ASSET_READ,
+    PERMISSION.POSITION_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

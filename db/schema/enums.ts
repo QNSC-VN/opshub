@@ -176,3 +176,11 @@ export const documentVersionStatusEnum = pgEnum('document_version_status', [
   'superseded',
   'rejected',
 ]);
+
+/**
+ * Lifecycle of a job position.
+ *
+ * `frozen` is the state a hiring pause needs and a boolean cannot express: the position still
+ * exists and its occupants keep it, but no new assignment may be made against it.
+ */
+export const positionStatusEnum = pgEnum('position_status', ['active', 'frozen', 'closed']);
