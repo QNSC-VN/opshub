@@ -1,0 +1,311 @@
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  ErrorCodes,
+  InjectDrizzle,
+  NotFoundException,
+  PreconditionFailedException,
+  RequestEngine,
+  type DrizzleDB,
+} from '@platform';
+import type { Actor } from '@shared-kernel';
+import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import {
+  DOCUMENTS_REPOSITORY,
+  type IDocumentsRepository,
+} from '../domain/ports/documents.repository';
+import type {
+  ControlledDocument,
+  CreateDocumentInput,
+  DocumentFilters,
+  DocumentVersion,
+  OutstandingAcknowledgement,
+} from '../domain/documents.types';
+import type { DocumentApprovalPayload } from './document-approval.type-def';
+
+/**
+ * Controlled-document lifecycle: draft → in review → approved → published → superseded.
+ *
+ * WHY THE APPROVAL IS NOT MODELLED HERE. Submitting a version for approval hands it to
+ * `RequestEngine`, which already owns multi-step chains, separation of duties, delegation, SLA
+ * deadlines, expiry and the audit entry. A `status` column walked by hand would be a second
+ * workflow engine without any of that — the exact smell the roadmap warns about. This service owns
+ * what the ENGINE cannot know: which version, what supersedes what, and who still has to
+ * acknowledge.
+ */
+@Injectable()
+export class DocumentsService {
+  constructor(
+    @Inject(DOCUMENTS_REPOSITORY) private readonly repo: IDocumentsRepository,
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    private readonly engine: RequestEngine,
+    private readonly audit: AuditService,
+  ) {}
+
+  // ── Documents ────────────────────────────────────────────────────────────────
+
+  /** Register a document and open its first draft, atomically. */
+  async createDocument(input: CreateDocumentInput, actor: Actor): Promise<ControlledDocument> {
+    if (await this.repo.findByCode(input.code)) {
+      throw new ConflictException(
+        ErrorCodes.CONFLICT,
+        `Document code '${input.code}' is already in use`,
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const doc = await this.repo.create(input, tx);
+      // A document with no version is a dead end: nothing to edit, submit or publish. Created
+      // together so that state cannot exist.
+      await this.repo.createVersion({ documentId: doc.id, version: 1, body: input.body }, tx);
+
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.DOCUMENT_CREATED,
+          resourceType: AUDIT_RESOURCE.DOCUMENT,
+          resourceId: doc.id,
+          changes: { after: { code: doc.code, title: doc.title, category: doc.category } },
+        },
+        tx,
+      );
+      return doc;
+    });
+  }
+
+  async getDocument(id: string): Promise<ControlledDocument> {
+    const doc = await this.repo.findById(id);
+    if (!doc) throw new NotFoundException(ErrorCodes.NOT_FOUND, `Document ${id} not found`);
+    return doc;
+  }
+
+  async listDocuments(filters: DocumentFilters, limit: number, offset: number) {
+    return this.repo.list(filters, limit, offset);
+  }
+
+  async listVersions(documentId: string): Promise<DocumentVersion[]> {
+    await this.getDocument(documentId);
+    return this.repo.listVersions(documentId);
+  }
+
+  /** Retire a document. Soft, because a superseded control still has to be explainable later. */
+  async retireDocument(id: string, actor: Actor): Promise<void> {
+    await this.getDocument(id);
+    await this.db.transaction(async (tx) => {
+      const retired = await this.repo.retire(id, tx);
+      if (!retired) {
+        throw new PreconditionFailedException(
+          ErrorCodes.PRECONDITION_FAILED,
+          'Document is already retired',
+        );
+      }
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.DOCUMENT_RETIRED,
+          resourceType: AUDIT_RESOURCE.DOCUMENT,
+          resourceId: id,
+        },
+        tx,
+      );
+    });
+  }
+
+  // ── Versions ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Open a new draft on top of the current content.
+   *
+   * The only way to change a published document: a published version is immutable, because ISO
+   * 9001 and 27001 both require knowing which revision was in force on a given date, and an
+   * in-place edit destroys exactly that.
+   */
+  async createDraft(
+    documentId: string,
+    input: { body?: string | null; changeSummary?: string | null },
+    actor: Actor,
+  ): Promise<DocumentVersion> {
+    await this.getDocument(documentId);
+
+    return this.db.transaction(async (tx) => {
+      const next = (await this.repo.maxVersion(documentId, tx)) + 1;
+      const version = await this.repo.createVersion(
+        { documentId, version: next, body: input.body, changeSummary: input.changeSummary },
+        tx,
+      );
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.DOCUMENT_DRAFT_CREATED,
+          resourceType: AUDIT_RESOURCE.DOCUMENT_VERSION,
+          resourceId: version.id,
+          changes: { after: { documentId, version: next } },
+        },
+        tx,
+      );
+      return version;
+    });
+  }
+
+  async updateDraft(
+    versionId: string,
+    input: { body?: string | null; changeSummary?: string | null },
+  ): Promise<DocumentVersion> {
+    // The repository's WHERE clause enforces draft-only, so a concurrent submit cannot slip
+    // between a check and a write. A null result therefore means "not a draft", not "missing".
+    const updated = await this.repo.updateVersionContent(versionId, input);
+    if (!updated) {
+      const exists = await this.repo.findVersionById(versionId);
+      if (!exists) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND, `Version ${versionId} not found`);
+      }
+      throw new PreconditionFailedException(
+        ErrorCodes.PRECONDITION_FAILED,
+        `Only a draft can be edited; this version is '${exists.status}'. Open a new draft instead.`,
+      );
+    }
+    return updated;
+  }
+
+  /** Hand a draft to the approval engine. */
+  async submitForApproval(versionId: string, actor: Actor): Promise<DocumentVersion> {
+    const version = await this.mustGetVersion(versionId);
+    if (version.status !== 'draft') {
+      throw new PreconditionFailedException(
+        ErrorCodes.PRECONDITION_FAILED,
+        `Only a draft can be submitted; this version is '${version.status}'`,
+      );
+    }
+    const doc = await this.getDocument(version.documentId);
+
+    const payload: DocumentApprovalPayload = {
+      documentId: doc.id,
+      documentCode: doc.code,
+      documentTitle: doc.title,
+      versionId: version.id,
+      version: version.version,
+      changeSummary: version.changeSummary,
+    };
+    const item = await this.engine.submit('document_approval', payload, actor);
+
+    const updated = await this.repo.setVersionStatus(versionId, 'in_review', {
+      requestId: item.id,
+    });
+    return updated!;
+  }
+
+  /**
+   * Publish an approved version, superseding whatever it replaces.
+   *
+   * ORDER MATTERS, AND THE DATABASE ENFORCES IT. `uq_document_published_version` is a partial
+   * unique index over (document_id) where the row is published and not superseded, so the outgoing
+   * version must be marked superseded BEFORE the incoming one is published — doing it the other
+   * way round hits the index. That is the intended behaviour rather than an obstacle: it means two
+   * concurrent publishes cannot both succeed, which no amount of service-level checking can
+   * guarantee.
+   */
+  async publish(
+    versionId: string,
+    input: { reviewDueOn?: string | null },
+    actor: Actor,
+  ): Promise<DocumentVersion> {
+    const version = await this.mustGetVersion(versionId);
+    if (version.status !== 'approved') {
+      throw new PreconditionFailedException(
+        ErrorCodes.PRECONDITION_FAILED,
+        `Only an approved version can be published; this version is '${version.status}'`,
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const now = new Date();
+      const current = await this.repo.findPublishedVersion(version.documentId, tx);
+      if (current && current.id !== versionId) {
+        // Supersede FIRST — see the docblock.
+        await this.repo.setVersionStatus(current.id, 'superseded', { supersededAt: now }, tx);
+      }
+
+      const published = await this.repo.setVersionStatus(
+        versionId,
+        'published',
+        { publishedAt: now, reviewDueOn: input.reviewDueOn ?? null },
+        tx,
+      );
+
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.DOCUMENT_PUBLISHED,
+          resourceType: AUDIT_RESOURCE.DOCUMENT_VERSION,
+          resourceId: versionId,
+          changes: {
+            before: current ? { supersededVersionId: current.id, version: current.version } : null,
+            after: { version: published!.version, reviewDueOn: input.reviewDueOn ?? null },
+          },
+        },
+        tx,
+      );
+      return published!;
+    });
+  }
+
+  // ── Acknowledgements ─────────────────────────────────────────────────────────
+
+  /**
+   * Record that an employee has read the version in force.
+   *
+   * Only a PUBLISHED version can be acknowledged: consenting to a draft means nothing, and
+   * consenting to a superseded one is worse than nothing because it reads as current compliance.
+   */
+  async acknowledge(versionId: string, actor: Actor): Promise<{ alreadyAcknowledged: boolean }> {
+    const version = await this.mustGetVersion(versionId);
+    if (version.status !== 'published' || version.supersededAt) {
+      throw new PreconditionFailedException(
+        ErrorCodes.PRECONDITION_FAILED,
+        'Only the published version of a document can be acknowledged',
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const inserted = await this.repo.acknowledge(versionId, actor.sub, tx);
+      // Only audit a NEW acknowledgement. A repeat click is the same fact, and writing it twice
+      // would make the trail imply two separate readings.
+      if (inserted) {
+        await this.audit.record(
+          {
+            actorId: actor.sub,
+            actorEmail: actor.email,
+            action: AUDIT_ACTION.DOCUMENT_ACKNOWLEDGED,
+            resourceType: AUDIT_RESOURCE.DOCUMENT_VERSION,
+            resourceId: versionId,
+          },
+          tx,
+        );
+      }
+      return { alreadyAcknowledged: !inserted };
+    });
+  }
+
+  /** Published versions this employee still owes an acknowledgement for. */
+  async listOutstanding(employeeId: string): Promise<OutstandingAcknowledgement[]> {
+    return this.repo.listOutstandingFor(employeeId);
+  }
+
+  /** Who has acknowledged a version — the compliance view for one document. */
+  async listAcknowledgedBy(versionId: string) {
+    await this.mustGetVersion(versionId);
+    return this.repo.listAcknowledgedBy(versionId);
+  }
+
+  private async mustGetVersion(id: string): Promise<DocumentVersion> {
+    const version = await this.repo.findVersionById(id);
+    if (!version) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND, `Document version ${id} not found`);
+    }
+    return version;
+  }
+}

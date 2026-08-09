@@ -105,6 +105,13 @@ export const AUDIT_ACTION = {
   ONBOARDING_SUBMITTED: 'onboarding.submitted',
   OFFBOARDING_SUBMITTED: 'offboarding.submitted',
 
+  // ── Controlled documents ──
+  DOCUMENT_CREATED: 'document.created',
+  DOCUMENT_RETIRED: 'document.retired',
+  DOCUMENT_DRAFT_CREATED: 'document.draft_created',
+  DOCUMENT_PUBLISHED: 'document.published',
+  DOCUMENT_ACKNOWLEDGED: 'document.acknowledged',
+
   // ── Webhooks ──
   WEBHOOK_SUBSCRIPTION_CREATED: 'webhook_subscription.created',
   WEBHOOK_SUBSCRIPTION_DELETED: 'webhook_subscription.deleted',
@@ -160,6 +167,8 @@ export const AUDIT_RESOURCE = {
   LEAVE_DOCUMENT: 'leave_document',
   LEAVE_ENTITLEMENT: 'leave_entitlement',
   HOLIDAY: 'holiday',
+  DOCUMENT: 'document',
+  DOCUMENT_VERSION: 'document_version',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

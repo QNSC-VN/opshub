@@ -101,6 +101,20 @@ export const PERMISSION = {
 
   // ── service catalog ────────────────────────────────────────────────────────
   CATALOG_MANAGE: 'catalog.manage',
+  /** Read the controlled-document library beyond what is published to everyone. */
+  DOCUMENTS_READ: 'documents.read',
+  /** Author documents and open new drafts. */
+  DOCUMENTS_MANAGE: 'documents.manage',
+  /** Approve a document version. Separate from publishing: approval says the content is correct. */
+  DOCUMENTS_APPROVE: 'documents.approve',
+  /**
+   * Put an approved version into force.
+   *
+   * Distinct from `documents.approve` because a policy is routinely approved before the date it
+   * takes effect, and because publishing supersedes whatever it replaces — a larger act than
+   * agreeing the text is right.
+   */
+  DOCUMENTS_PUBLISH: 'documents.publish',
 
   // ── software licences ──────────────────────────────────────────────────────
   LICENSE_READ: 'license.read',
@@ -151,6 +165,10 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.NOTIFICATIONS_MANAGE]: 'Manage notification preferences for all users',
   [PERMISSION.WEBHOOKS_MANAGE]: 'Create and manage outbound webhook subscriptions',
   [PERMISSION.CATALOG_MANAGE]: 'Create / edit / delete service catalog items',
+  [PERMISSION.DOCUMENTS_READ]: 'View all controlled documents, including drafts',
+  [PERMISSION.DOCUMENTS_MANAGE]: 'Author controlled documents and open new drafts',
+  [PERMISSION.DOCUMENTS_APPROVE]: 'Approve a controlled-document version',
+  [PERMISSION.DOCUMENTS_PUBLISH]: 'Put an approved document version into force',
   [PERMISSION.LICENSE_READ]: 'View software licenses, seats and utilization',
   [PERMISSION.LICENSE_MANAGE]: 'Create / edit licenses and assign / revoke seats',
 };
@@ -255,6 +273,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.ONBOARDING_PROVISION,
     PERMISSION.WEBHOOKS_MANAGE,
     PERMISSION.CATALOG_MANAGE,
+    PERMISSION.DOCUMENTS_READ,
     PERMISSION.LICENSE_READ,
     PERMISSION.LICENSE_MANAGE,
   ],
@@ -267,6 +286,10 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.ACCESS_REQUEST_READ,
     PERMISSION.ACCESS_REQUEST_APPROVE,
     PERMISSION.ACCESS_REQUEST_SECURITY_APPROVE,
+    PERMISSION.DOCUMENTS_READ,
+    PERMISSION.DOCUMENTS_MANAGE,
+    PERMISSION.DOCUMENTS_APPROVE,
+    PERMISSION.DOCUMENTS_PUBLISH,
     PERMISSION.REQUEST_READ,
     PERMISSION.AUDIT_READ,
     PERMISSION.REPORTS_READ,
@@ -282,6 +305,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
     PERMISSION.WORKFORCE_OVERTIME_REVIEW,
     PERMISSION.WORKFORCE_MANAGE,
+    PERMISSION.DOCUMENTS_READ,
+    PERMISSION.DOCUMENTS_MANAGE,
     PERMISSION.REQUEST_READ,
     PERMISSION.AUDIT_READ,
     PERMISSION.REPORTS_READ,
@@ -319,6 +344,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.ASSET_READ,
     PERMISSION.REQUEST_READ,
+    PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,
     PERMISSION.LICENSE_READ,
   ],

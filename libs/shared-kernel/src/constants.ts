@@ -15,6 +15,7 @@ export const REQUEST_TYPE = {
   LEAVE_REQUEST: 'leave_request',
   OVERTIME: 'overtime',
   CATALOG_REQUEST: 'catalog_request',
+  DOCUMENT_APPROVAL: 'document_approval',
 } as const;
 
 export type RequestType = (typeof REQUEST_TYPE)[keyof typeof REQUEST_TYPE];

@@ -146,3 +146,33 @@ export const baselineCheckStatusEnum = pgEnum('baseline_check_status', [
   'warning',
   'not_applicable',
 ]);
+
+/**
+ * Which management system a controlled document belongs to.
+ *
+ * The ONLY thing distinguishing a policy from an SOP from a handbook — everything else about their
+ * lifecycle is identical, which is why they share one table rather than three.
+ */
+export const documentCategoryEnum = pgEnum('document_category', [
+  'isms_policy',
+  'qms_procedure',
+  'work_instruction',
+  'hr_handbook',
+  'contract_template',
+]);
+
+/**
+ * Lifecycle of one document VERSION.
+ *
+ * `published` is terminal-ish: the row becomes immutable and only `superseded` follows, because a
+ * published revision is what someone was told to follow on a given date. Editing means a new
+ * version, never a status walk backwards.
+ */
+export const documentVersionStatusEnum = pgEnum('document_version_status', [
+  'draft',
+  'in_review',
+  'approved',
+  'published',
+  'superseded',
+  'rejected',
+]);
