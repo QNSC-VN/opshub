@@ -48,6 +48,8 @@
       "@modules/webhooks/*": ["./libs/modules/webhooks/src/*"],
       "@modules/license": ["./libs/modules/license/src/index"],
       "@modules/license/*": ["./libs/modules/license/src/*"],
+      "@modules/positions": ["./libs/modules/positions/src/index"],
+      "@modules/positions/*": ["./libs/modules/positions/src/*"],
       "@modules/documents": ["./libs/modules/documents/src/index"],
       "@modules/documents/*": ["./libs/modules/documents/src/*"],
       "@modules/catalog": ["./libs/modules/catalog/src/index"],

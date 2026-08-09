@@ -12,10 +12,10 @@ says something is absent, that was checked.
 
 | System                                    | State                                                                                                                       | Missing                                                                                                            |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **TMS** — time management                 | ~80%. Timesheets, leave, overtime and shift logs, each with a real approval workflow                                        | Leave **entitlement and balances**, holiday calendar, working-day calculation                                       |
-| **EMS** — employee management             | Solid core. `identity.employees` with `department`, `jobTitle`, `managerId`; status transitions; onboarding/offboarding workflows; assets; licences; access | Positions/headcount, contracts, training records, performance reviews                                              |
-| **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory | **Risk register**, asset classification, controls / Statement of Applicability, incidents, vendor risk, policy acknowledgement |
-| **QMS** — quality management              | **Nothing**                                                                                                                 | Controlled documents/SOPs, CAPA, non-conformance, internal audit, management review, training records               |
+| **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
+| **EMS** — employee management             | Solid core. `identity.employees` with `department`, `jobTitle`, `managerId`; status transitions; onboarding/offboarding workflows; assets; licences; access. **Positions**, approved headcount and assignment history | Contracts, training records, performance reviews                                                                   |
+| **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory, controlled policies with acknowledgement | **Risk register**, asset classification, controls / Statement of Applicability, incidents, vendor risk              |
+| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking     | CAPA, non-conformance, internal audit, management review, training records                                          |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
 `vendor` returns hits that are **not** domain tables — `risk_accepted` is a
@@ -69,21 +69,26 @@ action. It does not add a `*_history` table.
 
 ## Build order, and why this order
 
-1. **Finish TMS** — leave entitlement, balances, holiday calendar, working-day
-   calculation.
-   Smallest piece of work, and it completes a system that is otherwise done. Today
-   `leave_requests` stores start and end dates with **no day count at all**, nothing
-   computes working days, and no entitlement exists — so leave is approved without anyone
-   knowing what it costs or whether the employee had the days. That is a correctness gap in
-   a shipped feature, which outranks new systems.
+1. ~~**Finish TMS**~~ — **done**: leave entitlement, balances, holiday calendar,
+   working-day calculation.
+   Smallest piece of work, and it completed a system that was otherwise done.
+   `leave_requests` used to store start and end dates with **no day count at all**, so
+   leave was approved without anyone knowing what it cost or whether the employee had the
+   days. A correctness gap in a shipped feature, which outranked new systems.
 
-2. **Controlled-document module** — the shared primitive from decision 2, before ISMS
-   policies and QMS SOPs both need it.
+2. ~~**Controlled-document module**~~ — **done**: the shared primitive from decision 2,
+   ahead of the ISMS policies and QMS SOPs that both need it.
 
-3. **EMS depth** — positions and headcount, contracts, training records.
+3. **EMS depth** — ~~positions and headcount~~ (**done**), then contracts and training
+   records.
    Before QMS and ISMS, because QMS competency/training records and ISMS policy
    acknowledgement both hang off employee and position data. Building those first means
    modelling training twice.
+
+   Positions landed first within this step for the same reason: a contract is a contract
+   FOR a position and QMS competency is training required for A POSITION, so both would
+   otherwise match on `employees.job_title`, which is free text on the person. That column
+   is deliberately left in place — the Entra sync writes it and older screens read it.
 
 4. **ISMS** — risk register, controls / Statement of Applicability, incidents, asset
    classification, vendor risk.
@@ -132,3 +137,13 @@ step, which is the point.
 - **Tests** — unit specs for the domain rules, an API e2e spec for the flow **and** for
   authorization in both directions, and one Playwright journey through the surface
   (`apps/web/e2e/`). A per-page smoke check is not a journey.
+- **E2E reset** — add every new table to `FIXTURE_TABLES` in `db/reset.ts`. Nothing in the
+  suite tears down what it creates, so an unlisted table keeps its rows forever and the
+  failure arrives later, in someone else's spec, looking like a product bug. Positions found
+  this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
+  drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
+  once per database".
+- **Invariants the database cannot hold** — count-based rules (`at most N open rows`) need a
+  service check INSIDE the transaction, because a unique index cannot express them and a CHECK
+  cannot see other rows. Where a CHECK *does* hold the rule, still refuse the bad input in the
+  service: a raw constraint violation reaches the caller as a 500 with no error code.

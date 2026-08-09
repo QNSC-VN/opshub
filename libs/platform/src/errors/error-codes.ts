@@ -49,6 +49,10 @@ export const ErrorCodes = {
   LEAVE_REQUEST_NOT_FOUND: 'LEAVE_REQUEST_NOT_FOUND',
   LEAVE_REQUEST_NOT_PENDING: 'LEAVE_REQUEST_NOT_PENDING',
   LEAVE_OVERLAPPING: 'LEAVE_OVERLAPPING',
+  /** Assigning would exceed the position's approved headcount. */
+  POSITION_HEADCOUNT_EXCEEDED: 'POSITION_HEADCOUNT_EXCEEDED',
+  /** An assignment would end before it began — `ck_employee_position_window` in words. */
+  POSITION_INVALID_WINDOW: 'POSITION_INVALID_WINDOW',
   /** Requested working days exceed the employee's remaining entitlement (pending included). */
   LEAVE_INSUFFICIENT_BALANCE: 'LEAVE_INSUFFICIENT_BALANCE',
   /** The window contains no working days — every date is a weekend or a public holiday. */

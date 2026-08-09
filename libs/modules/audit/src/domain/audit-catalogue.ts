@@ -105,6 +105,12 @@ export const AUDIT_ACTION = {
   ONBOARDING_SUBMITTED: 'onboarding.submitted',
   OFFBOARDING_SUBMITTED: 'offboarding.submitted',
 
+  // ── Positions ──
+  POSITION_CREATED: 'position.created',
+  POSITION_UPDATED: 'position.updated',
+  POSITION_ASSIGNED: 'position.assigned',
+  POSITION_UNASSIGNED: 'position.unassigned',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -169,6 +175,8 @@ export const AUDIT_RESOURCE = {
   HOLIDAY: 'holiday',
   DOCUMENT: 'document',
   DOCUMENT_VERSION: 'document_version',
+  POSITION: 'position',
+  EMPLOYEE_POSITION: 'employee_position',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

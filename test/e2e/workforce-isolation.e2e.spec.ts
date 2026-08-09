@@ -102,15 +102,20 @@ describe('workforce record isolation', () => {
    * The narrowing has to survive a caller trying to shake it off. These probe the two
    * type-confusion shapes that only a real HTTP request produces, and they document where
    * the defence actually sits: `ListTimesheetsQuerySchema` declares
-   * `employeeId: z.string().uuid().optional()`, so the Zod pipe rejects both with a 400
+   * `employeeId: z.string().uuid().optional()`, so the Zod pipe rejects both with a 422
    * BEFORE `narrowToActor` is reached.
    *
-   * A 400 here is a stronger answer than the 403 these originally asserted, and worth
+   * A 422 here is a stronger answer than the 403 these originally asserted, and worth
    * pinning precisely because it is upstream of the authorization code: if the schema is
    * ever loosened to plain `z.string()`, a repeated param arrives as an ARRAY, `!==`
    * against a string is trivially true, and the request would then be DENIED rather than
    * silently widened — but an array reaching SQL is its own hazard. These tests fail the
    * moment that boundary moves, in either direction.
+   *
+   * THEY SAID 400 UNTIL THE HARNESS WAS FIXED. `GlobalExceptionFilter` maps a Zod failure to 422,
+   * but under vitest the app and the filter held two different `nestjs-zod` module instances, so
+   * its `instanceof` missed and Nest's default 400 came back instead. 422 is what production has
+   * always returned — see the `nestjs-zod` alias in `test/vitest.e2e.config.ts`.
    */
   describe('filter cannot be evaded', () => {
     it('rejects a repeated employeeId (array-valued query param) at validation', async () => {
@@ -119,7 +124,7 @@ describe('workforce record isolation', () => {
         url: `/v1/workforce/timesheets?employeeId=${FIXTURE.NO_PERMISSIONS.id}&employeeId=${FIXTURE.HR.id}`,
         headers: bearer(plain),
       });
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(422);
     });
 
     it('rejects an empty employeeId rather than treating it as "no filter"', async () => {
@@ -130,7 +135,7 @@ describe('workforce record isolation', () => {
         url: '/v1/workforce/timesheets?employeeId=',
         headers: bearer(plain),
       });
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(422);
     });
 
     it('ignores an employeeId supplied in the body of a GET', async () => {

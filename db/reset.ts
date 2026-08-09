@@ -53,6 +53,18 @@ export const FIXTURE_TABLES = [
   'workforce.overtime_entries',
   'workforce.shift_logs',
   'workforce.attendance_logs',
+  /**
+   * The leave CALENDAR and ALLOWANCES, not just the requests.
+   *
+   * `leave-balance.e2e.spec.ts` picks a year from a 40-year window to avoid colliding with another
+   * run, then declares holidays in it. Left untruncated those rows accumulate: 24 holidays across
+   * 12 distinct years had piled up in a local database, so roughly one run in three already drew an
+   * occupied year, `uq_holiday_date_region` or the extra rows changed the day count, and a spec
+   * asserting arithmetic failed for reasons nothing in it could explain. The odds got worse with
+   * every run — which is what a growing database does to a suite that samples for uniqueness.
+   */
+  'workforce.holidays',
+  'workforce.leave_entitlements',
   // requests — the approval engine's rows, written by every workflow spec
   'requests.request_approvals',
   'requests.request_comments',
@@ -78,6 +90,20 @@ export const FIXTURE_TABLES = [
   'messaging.webhook_subscriptions',
   'notifications.in_app_notifications',
   'notifications.notification_preferences',
+  // controlled documents — versions and acknowledgements follow the parent via CASCADE
+  'documents.document_acknowledgements',
+  'documents.document_versions',
+  'documents.documents',
+  /**
+   * positions — BOTH tables, and `employee_positions` matters most.
+   *
+   * Left out, an employee keeps the open assignment a previous run gave them, and the next run's
+   * first transfer is dated BEFORE it and refused as `POSITION_INVALID_WINDOW`. That is a suite
+   * which passes exactly once per database, and it fails ten tests in with a status that looks
+   * like a product bug rather than a stale row. Measured, not predicted.
+   */
+  'positions.employee_positions',
+  'positions.positions',
   // audit trail and uploaded file metadata
   'audit.audit_logs',
   'storage.stored_files',

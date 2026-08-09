@@ -21,6 +21,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { CacheService } from '@qnsc-vn/platform-cache';
+import { RATE_LIMIT_TIERS } from '@platform';
 import { AppModule } from '../../../apps/api/src/app.module';
 import { bootstrapApp } from '../../../apps/api/src/bootstrap/app.bootstrap';
 
@@ -45,6 +46,18 @@ export const FIXTURE = {
   ADMIN: {
     id: '00000000-0000-7000-8000-000000000001',
     email: 'admin@opshub.local',
+  },
+  /**
+   * Holds the READ half of several bundles without the MANAGE half — `position.read` but not
+   * `position.manage`, `workforce.read` but not `workforce.manage`.
+   *
+   * The tier that catches a route guarded by the wrong permission of a pair. `NO_PERMISSIONS`
+   * cannot: it is rejected by either code, so a 403 for it proves nothing about WHICH one was
+   * required.
+   */
+  MANAGER: {
+    id: '00000000-0000-7000-8000-000000000005',
+    email: 'manager@opshub.local',
   },
   /**
    * Holds `documents.manage`, `documents.approve` and `documents.publish` — the ISMS owner, and
@@ -73,23 +86,37 @@ export async function createTestApp(): Promise<NestFastifyApplication> {
 }
 
 /**
- * Clear the login rate-limit bucket for the calling IP.
+ * Clear EVERY rate-limit bucket this suite can fill — all tiers, all fixtures, and the IP.
  *
- * `AUTH_LOGIN` allows 5 attempts per 15 minutes per IP, and the counter lives in Valkey,
- * which OUTLIVES the test process. Every spec file logs in as two or three fixtures, so
- * the third run of the suite inside one window starts failing with a 429 — and the
- * failure surfaces as `dev-login failed`, which reads exactly like an unseeded database.
- * That cost real time to diagnose once; clearing the bucket removes the whole class.
+ * The counters live in Valkey, which OUTLIVES the test process, so they accumulate across
+ * runs. Two failure modes, both measured rather than predicted:
  *
- * Goes through the app's own `CacheService.del`, not a raw redis client, so the namespace
- * prefix and the `rl:` key shape stay in ONE place — `consumeRateLimit` builds the same
- * key, and a hard-coded string here would silently stop matching if either changed.
+ *   • `AUTH_LOGIN` allows 5 attempts per 15 minutes per IP. Every spec file logs in as two
+ *     or three fixtures, so the third run inside one window fails with a 429 — surfacing as
+ *     `dev-login failed`, which reads exactly like an unseeded database.
+ *   • `DEFAULT` allows 200 requests per minute per userId. One full suite pass is well over
+ *     100 requests as `hr` alone, so a SECOND pass started inside the same minute 429s partway
+ *     in, on whichever spec happens to be running. Clearing only the login tier left this half
+ *     of the problem in place, and it cost a debugging round today.
  *
- * `keyBy: 'ip'` and `app.inject()` has no socket, so Fastify reports `127.0.0.1`.
+ * Tiers come from `RATE_LIMIT_TIERS` rather than a list written out here, so a tier added
+ * later is covered without anyone remembering this file. Subjects are the IP plus every
+ * fixture id, because a tier keyed by `userId` buckets per caller — and `app.inject()` has no
+ * socket, so Fastify reports `127.0.0.1` for the ip-keyed ones.
+ *
+ * Goes through the app's own `CacheService.del`, not a raw client, so the namespace prefix
+ * and the `rl:` key shape stay in ONE place: `consumeRateLimit` builds the same key, and a
+ * hard-coded string here would silently stop matching if either changed.
  */
-async function clearLoginRateLimit(app: NestFastifyApplication): Promise<void> {
+async function clearRateLimits(app: NestFastifyApplication): Promise<void> {
+  const subjects = ['127.0.0.1', ...Object.values(FIXTURE).map((f) => f.id)];
   try {
-    await app.get(CacheService).del('rl:AUTH_LOGIN:127.0.0.1');
+    const cache = app.get(CacheService);
+    await Promise.all(
+      Object.keys(RATE_LIMIT_TIERS).flatMap((tier) =>
+        subjects.map((subject) => cache.del(`rl:${tier}:${subject}`)),
+      ),
+    );
   } catch {
     // Cache optional in some configurations; the limiter fails open there anyway.
   }
@@ -115,7 +142,7 @@ export async function login(
   app: NestFastifyApplication,
   fixture: { email: string },
 ): Promise<Session> {
-  await clearLoginRateLimit(app);
+  await clearRateLimits(app);
 
   const res = await app.inject({
     method: 'POST',
