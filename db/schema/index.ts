@@ -13,6 +13,7 @@ export * from './workforce';
 export * from './documents';
 export * from './positions';
 export * from './contracts';
+export * from './training';
 export * from './audit';
 export * from './messaging';
 export * from './notifications';

@@ -127,6 +127,13 @@
       "when": 1783432006000,
       "tag": "0017_employment_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783518406000,
+      "tag": "0018_training_and_attachments",
+      "breakpoints": true
     }
   ]
 }

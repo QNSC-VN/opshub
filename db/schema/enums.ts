@@ -216,3 +216,23 @@ export const contractStatusEnum = pgEnum('contract_status', [
 
 /** What the base salary figure is PER — a number without this is not an amount. */
 export const salaryPeriodEnum = pgEnum('salary_period', ['hourly', 'monthly', 'annual']);
+
+/**
+ * Whether a completed training still counts.
+ *
+ * `valid` and `expired` are the two real states; `expiring_soon` is NOT one of them — it is a
+ * question about today's date relative to `expires_on`, so it is computed on read rather than
+ * stored, and no sweep has to keep it true. Compare `contract_status`, where the sweep exists
+ * because an expiry there changes what may happen next.
+ */
+export const trainingRecordStatusEnum = pgEnum('training_record_status', [
+  'valid',
+  'expired',
+  'revoked',
+]);
+
+/** How a course requirement applies — the QMS competency distinction. */
+export const trainingRequirementKindEnum = pgEnum('training_requirement_kind', [
+  'mandatory',
+  'recommended',
+]);

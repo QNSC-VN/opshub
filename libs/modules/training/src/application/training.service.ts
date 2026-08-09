@@ -1,0 +1,556 @@
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  EntityAttachmentsService,
+  ErrorCodes,
+  InjectDrizzle,
+  NotFoundException,
+  PreconditionFailedException,
+  assertDateOrder,
+  type AttachmentRef,
+  type DbExecutor,
+  type DrizzleDB,
+  type EntityAttachment,
+} from '@platform';
+import { newId, type Actor } from '@shared-kernel';
+import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import { TRAINING_REPOSITORY, type ITrainingRepository } from '../domain/ports/training.repository';
+import type {
+  CompetencyGap,
+  CourseFilters,
+  CreateCourseInput,
+  RecordCompletionInput,
+  RecordFilters,
+  RequirementKind,
+  TrainingCourse,
+  TrainingRecord,
+  TrainingRequirement,
+  UpdateCourseInput,
+} from '../domain/training.types';
+
+/** The upload surface certificates land on — its policy carries the quota and the MIME set. */
+const CERTIFICATE_SURFACE = 'training-certificate' as const;
+
+/** The link table's entity type for a training record. */
+const RECORD_ENTITY = 'training_record';
+
+/** `YYYY-MM-DD` in UTC, matching every other date in this module. */
+export function today(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/**
+ * `completedOn` plus `months`, as `YYYY-MM-DD`, clamped to the end of the target month.
+ *
+ * MONTHS, NOT DAYS, because certifications are stated in months and 24 × 30 drifts. The clamp is
+ * the part worth stating: `2026-01-31` plus one month has no 31st to land on, and JavaScript's
+ * `setUTCMonth` silently rolls into March. A certificate earned on the 31st should lapse on the
+ * last day of the month it lapses in, not three days later.
+ */
+export function addMonths(from: string, months: number): string {
+  const start = new Date(`${from}T00:00:00Z`);
+  const year = start.getUTCFullYear();
+  const month = start.getUTCMonth() + months;
+  const day = start.getUTCDate();
+  const lastOfTarget = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(day, lastOfTarget))).toISOString().slice(0, 10);
+}
+
+/**
+ * Training courses, what each POSITION requires, and who has completed what.
+ *
+ * WHAT THIS SERVICE OWNS THAT THE DATABASE CANNOT
+ *
+ * 1. EXPIRY IS DERIVED ONCE. `expires_on` is computed from the course's `validity_months` at the
+ *    moment of completion and then FROZEN. A CHECK cannot compute it, and computing it on read
+ *    would restate every historical record the first time somebody corrected a course — the same
+ *    reason a leave request freezes its working-day count at submit.
+ *
+ * 2. RETRAINING IS ONE ACT. A new completion supersedes the live record for that (employee, course)
+ *    in a single transaction, superseding FIRST. That order is forced by
+ *    `uq_training_record_current`: inserting first hits the index, which is the intended behaviour
+ *    rather than an obstacle — it means "their current training" always has exactly one answer.
+ *
+ * 3. TRANSITIONS. Verify-once, revoke-with-a-reason, and "a retired course accepts no new
+ *    completions" are rules about a CHANGE, and a CHECK cannot see the previous value. Each is also
+ *    a guarded `WHERE` in the repository, so a race is decided by Postgres rather than by whoever
+ *    read first.
+ *
+ * NO EXPIRY SWEEP, deliberately — unlike a contract. A lapsed certificate changes nothing about
+ * what may happen next; it is a question about today's date, which `expiresOn <= asOf` answers in
+ * the report. A nightly job would add a way for the answer to be stale and buy nothing. `revoked`
+ * and `superseded` ARE stored, because those are decisions somebody made.
+ */
+@Injectable()
+export class TrainingService {
+  constructor(
+    @Inject(TRAINING_REPOSITORY) private readonly repo: ITrainingRepository,
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    private readonly audit: AuditService,
+    private readonly attachments: EntityAttachmentsService,
+  ) {}
+
+  // ── Courses ──────────────────────────────────────────────────────────────────
+
+  async createCourse(input: CreateCourseInput, actor: Actor): Promise<TrainingCourse> {
+    if (await this.repo.findCourseByCode(input.code)) {
+      throw new ConflictException(
+        ErrorCodes.CONFLICT,
+        `Course code '${input.code}' is already in use`,
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const course = await this.repo.createCourse(input, tx);
+      await this.record(
+        AUDIT_ACTION.TRAINING_COURSE_CREATED,
+        AUDIT_RESOURCE.TRAINING_COURSE,
+        course.id,
+        actor,
+        tx,
+        {
+          after: { code: course.code, title: course.title, validityMonths: course.validityMonths },
+        },
+      );
+      return course;
+    });
+  }
+
+  async getCourse(id: string): Promise<TrainingCourse> {
+    const course = await this.repo.findCourseById(id);
+    if (!course) throw new NotFoundException(ErrorCodes.NOT_FOUND, `Course ${id} not found`);
+    return course;
+  }
+
+  async listCourses(filters: CourseFilters, limit: number, offset: number) {
+    return this.repo.listCourses(filters, limit, offset);
+  }
+
+  /**
+   * Change a course.
+   *
+   * Editing `validityMonths` deliberately does NOT restate existing records: their `expires_on` was
+   * frozen at completion. The new value governs the next completion, which is what "we have changed
+   * the rule" means — and it keeps a correction from silently making people non-compliant for a
+   * period they were told they were covered.
+   */
+  async updateCourse(id: string, input: UpdateCourseInput, actor: Actor): Promise<TrainingCourse> {
+    const before = await this.getCourse(id);
+
+    return this.db.transaction(async (tx) => {
+      const after = await this.repo.updateCourse(id, input, tx);
+      await this.record(
+        AUDIT_ACTION.TRAINING_COURSE_UPDATED,
+        AUDIT_RESOURCE.TRAINING_COURSE,
+        id,
+        actor,
+        tx,
+        {
+          before: { title: before.title, validityMonths: before.validityMonths },
+          after: { title: after!.title, validityMonths: after!.validityMonths },
+        },
+      );
+      return after!;
+    });
+  }
+
+  /** Retire a course. Records already taken against it keep referencing it. */
+  async retireCourse(id: string, actor: Actor): Promise<TrainingCourse> {
+    await this.getCourse(id);
+
+    return this.db.transaction(async (tx) => {
+      const retired = await this.repo.retireCourse(id, tx);
+      if (!retired) {
+        throw new PreconditionFailedException(
+          ErrorCodes.PRECONDITION_FAILED,
+          'That course is already retired',
+        );
+      }
+      await this.record(
+        AUDIT_ACTION.TRAINING_COURSE_RETIRED,
+        AUDIT_RESOURCE.TRAINING_COURSE,
+        id,
+        actor,
+        tx,
+        {
+          after: { retiredAt: retired.retiredAt },
+        },
+      );
+      return retired;
+    });
+  }
+
+  // ── Requirements ─────────────────────────────────────────────────────────────
+
+  async addRequirement(
+    input: {
+      positionId: string;
+      courseId: string;
+      kind?: RequirementKind;
+      graceDays?: number | null;
+    },
+    actor: Actor,
+  ): Promise<TrainingRequirement> {
+    const course = await this.getCourse(input.courseId);
+    if (course.retiredAt) {
+      throw new PreconditionFailedException(
+        ErrorCodes.PRECONDITION_FAILED,
+        `Course ${course.code} is retired and cannot be required of a position`,
+      );
+    }
+    if (await this.repo.findRequirement(input.positionId, input.courseId)) {
+      throw new ConflictException(
+        ErrorCodes.CONFLICT,
+        `Course ${course.code} is already required for that position`,
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const requirement = await this.repo.addRequirement(
+        { ...input, kind: input.kind ?? 'mandatory' },
+        tx,
+      );
+      await this.record(
+        AUDIT_ACTION.TRAINING_REQUIREMENT_ADDED,
+        AUDIT_RESOURCE.TRAINING_REQUIREMENT,
+        requirement.id,
+        actor,
+        tx,
+        {
+          after: { positionId: input.positionId, courseCode: course.code, kind: requirement.kind },
+        },
+      );
+      return requirement;
+    });
+  }
+
+  async removeRequirement(id: string, actor: Actor): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const removed = await this.repo.removeRequirement(id, tx);
+      if (!removed) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND, `Requirement ${id} not found`);
+      }
+      await this.record(
+        AUDIT_ACTION.TRAINING_REQUIREMENT_REMOVED,
+        AUDIT_RESOURCE.TRAINING_REQUIREMENT,
+        id,
+        actor,
+        tx,
+        { before: { positionId: removed.positionId, courseId: removed.courseId } },
+      );
+    });
+  }
+
+  async listRequirementsForPosition(positionId: string) {
+    return this.repo.listRequirementsForPosition(positionId);
+  }
+
+  // ── Records ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Record a completion, superseding whatever the employee currently holds for that course.
+   *
+   * One transaction: supersede, then insert, then link the predecessor forward. The order is forced
+   * by `uq_training_record_current`, and the forward link is written last so it can only ever point
+   * at a record that actually exists.
+   */
+  async recordCompletion(input: RecordCompletionInput, actor: Actor): Promise<TrainingRecord> {
+    const course = await this.getCourse(input.courseId);
+    if (course.retiredAt) {
+      throw new PreconditionFailedException(
+        ErrorCodes.PRECONDITION_FAILED,
+        `Course ${course.code} is retired and accepts no new completions`,
+      );
+    }
+    if (input.completedOn > today()) {
+      throw new PreconditionFailedException(
+        ErrorCodes.TRAINING_INVALID_COMPLETION,
+        `A completion cannot be dated in the future (${input.completedOn})`,
+      );
+    }
+
+    const expiresOn =
+      course.validityMonths === null ? null : addMonths(input.completedOn, course.validityMonths);
+    if (expiresOn) {
+      // `ck_training_record_window` stated as a domain rule. Unreachable through this path, since
+      // `addMonths` with a positive validity always moves forward — but the guard is what keeps it
+      // unreachable if the arithmetic ever changes.
+      assertDateOrder(
+        input.completedOn,
+        expiresOn,
+        ErrorCodes.TRAINING_INVALID_COMPLETION,
+        'A certificate cannot expire before it was earned',
+      );
+    }
+
+    /**
+     * The successor's id is minted HERE, before the row exists.
+     *
+     * `uq_training_record_current` forbids two current rows for one (employee, course), so the
+     * predecessor has to stop matching that predicate BEFORE the insert — and it stops matching by
+     * having `superseded_by_id` set, which means pointing at a row that does not exist yet. Hence
+     * the id first, the link second, the insert third.
+     *
+     * `superseded_by_id` therefore carries no foreign key, deliberately: within the transaction it
+     * is briefly a dangling reference, and by commit it resolves. An FK would have to be
+     * DEFERRABLE INITIALLY DEFERRED to allow that, which is a sharper tool than this needs.
+     */
+    const successorId = newId();
+
+    return this.db.transaction(async (tx) => {
+      const current = await this.repo.findCurrentRecord(input.employeeId, input.courseId, tx);
+
+      if (current) {
+        if (current.completedOn > input.completedOn) {
+          // Backdating behind the live record would make the OLDER completion current, so the
+          // answer to "is this person trained?" would go backwards.
+          throw new PreconditionFailedException(
+            ErrorCodes.TRAINING_INVALID_COMPLETION,
+            `A newer completion already exists for ${course.code} (${current.completedOn})`,
+          );
+        }
+        // Guarded on the link still being null, so two concurrent retrainings cannot both claim to
+        // have replaced this record.
+        await this.repo.linkSuccessor(current.id, successorId, tx);
+      }
+
+      const created = await this.repo.createRecord({ ...input, expiresOn, id: successorId }, tx);
+
+      await this.record(
+        AUDIT_ACTION.TRAINING_RECORDED,
+        AUDIT_RESOURCE.TRAINING_RECORD,
+        created.id,
+        actor,
+        tx,
+        {
+          before: current ? { supersededRecordId: current.id } : null,
+          after: {
+            employeeId: created.employeeId,
+            courseCode: course.code,
+            completedOn: created.completedOn,
+            expiresOn: created.expiresOn,
+          },
+        },
+      );
+      return created;
+    });
+  }
+
+  async getRecord(id: string): Promise<TrainingRecord> {
+    const record = await this.repo.findRecordById(id);
+    if (!record) throw new NotFoundException(ErrorCodes.NOT_FOUND, `Record ${id} not found`);
+    return record;
+  }
+
+  async listRecords(filters: RecordFilters, limit: number, offset: number) {
+    return this.repo.listRecords(filters, limit, offset);
+  }
+
+  async listRecordsForEmployee(employeeId: string): Promise<TrainingRecord[]> {
+    return this.repo.listRecordsForEmployee(employeeId);
+  }
+
+  /**
+   * Attest that the evidence is genuine.
+   *
+   * Once only: overwriting who attested and when would erase the one fact an ISO competency audit
+   * actually reads. The repository's WHERE clause is what enforces that, not this check.
+   */
+  async verifyRecord(id: string, actor: Actor): Promise<TrainingRecord> {
+    const record = await this.getRecord(id);
+    if (record.status === 'revoked') {
+      throw new PreconditionFailedException(
+        ErrorCodes.TRAINING_RECORD_NOT_VERIFIABLE,
+        'A revoked record cannot be verified',
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const verified = await this.repo.markVerified(id, actor.sub, tx);
+      if (!verified) {
+        throw new ConflictException(
+          ErrorCodes.TRAINING_RECORD_NOT_VERIFIABLE,
+          'That record has already been verified',
+        );
+      }
+      await this.record(
+        AUDIT_ACTION.TRAINING_VERIFIED,
+        AUDIT_RESOURCE.TRAINING_RECORD,
+        id,
+        actor,
+        tx,
+        {
+          after: { verifiedBy: actor.sub },
+        },
+      );
+      return verified;
+    });
+  }
+
+  /** Revoke a record — evidence that turned out to be wrong. The reason is required. */
+  async revokeRecord(id: string, reason: string, actor: Actor): Promise<TrainingRecord> {
+    const record = await this.getRecord(id);
+    if (record.status === 'revoked') {
+      throw new PreconditionFailedException(
+        ErrorCodes.TRAINING_RECORD_NOT_VERIFIABLE,
+        'That record is already revoked',
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const revoked = await this.repo.transitionRecord(
+        id,
+        record.status,
+        'revoked',
+        { revokedReason: reason },
+        tx,
+      );
+      if (!revoked) {
+        throw new ConflictException(
+          ErrorCodes.TRAINING_RECORD_NOT_VERIFIABLE,
+          'That record changed while being revoked',
+        );
+      }
+      await this.record(
+        AUDIT_ACTION.TRAINING_REVOKED,
+        AUDIT_RESOURCE.TRAINING_RECORD,
+        id,
+        actor,
+        tx,
+        {
+          before: { status: record.status },
+          after: { status: 'revoked', revokedReason: reason },
+        },
+      );
+      return revoked;
+    });
+  }
+
+  // ── Certificates ─────────────────────────────────────────────────────────────
+  //
+  // Mechanics live in `EntityAttachmentsService`; what stays here is proving the record exists and
+  // naming the surface. That is the split rally settled on, and the reason a new upload surface is a
+  // policy descriptor rather than another copy of presign/confirm.
+
+  private ref(recordId: string): AttachmentRef {
+    return { entityType: RECORD_ENTITY, entityId: recordId };
+  }
+
+  async listCertificates(recordId: string): Promise<EntityAttachment[]> {
+    await this.getRecord(recordId);
+    return this.attachments.list(this.ref(recordId));
+  }
+
+  async presignCertificate(
+    recordId: string,
+    input: { fileName: string; mimeType: string; sizeBytes: number; checksumSha256?: string },
+    actor: Actor,
+  ): Promise<{ fileId: string; uploadUrl: string; requiredHeaders: Record<string, string> }> {
+    await this.getRecord(recordId);
+    return this.attachments.presign(this.ref(recordId), CERTIFICATE_SURFACE, input, actor.sub);
+  }
+
+  async confirmCertificate(
+    recordId: string,
+    fileId: string,
+    actor: Actor,
+  ): Promise<EntityAttachment> {
+    const record = await this.getRecord(recordId);
+    const attachment = await this.attachments.confirm(
+      this.ref(recordId),
+      CERTIFICATE_SURFACE,
+      fileId,
+      actor.sub,
+    );
+
+    await this.db.transaction(async (tx) => {
+      await this.record(
+        AUDIT_ACTION.TRAINING_CERTIFICATE_ATTACHED,
+        AUDIT_RESOURCE.TRAINING_RECORD,
+        record.id,
+        actor,
+        tx,
+        { after: { fileId, fileName: attachment.fileName } },
+      );
+    });
+    return attachment;
+  }
+
+  async certificateDownloadUrl(recordId: string, fileId: string): Promise<string> {
+    await this.getRecord(recordId);
+    return this.attachments.downloadUrl(this.ref(recordId), fileId);
+  }
+
+  /**
+   * Remove a certificate.
+   *
+   * `force` carries the owning module's own rule: the uploader may always remove their own file,
+   * and a `training.manage` holder may remove anyone's. `EntityAttachmentsService` deliberately
+   * does not know what a manager is.
+   */
+  async removeCertificate(
+    recordId: string,
+    fileId: string,
+    actor: Actor,
+    canManage: boolean,
+  ): Promise<void> {
+    const record = await this.getRecord(recordId);
+    await this.attachments.remove(this.ref(recordId), fileId, actor.sub, canManage);
+
+    await this.db.transaction(async (tx) => {
+      await this.record(
+        AUDIT_ACTION.TRAINING_CERTIFICATE_REMOVED,
+        AUDIT_RESOURCE.TRAINING_RECORD,
+        record.id,
+        actor,
+        tx,
+        { before: { fileId } },
+      );
+    });
+  }
+
+  // ── The report ───────────────────────────────────────────────────────────────
+
+  /**
+   * Who is missing training their CURRENT position requires.
+   *
+   * The whole reason requirements hang off the position: this answers "is the org competent?"
+   * rather than "what has Mai done?", and it stays correct through a transfer without a backfill.
+   */
+  async competencyGaps(input: {
+    employeeId?: string;
+    positionId?: string;
+    asOf?: string;
+    includeRecommended?: boolean;
+  }): Promise<CompetencyGap[]> {
+    return this.repo.competencyGaps({
+      employeeId: input.employeeId,
+      positionId: input.positionId,
+      asOf: input.asOf ?? today(),
+      includeRecommended: input.includeRecommended ?? false,
+    });
+  }
+
+  // ── Shared internals ─────────────────────────────────────────────────────────
+
+  private async record(
+    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
+    resourceType: (typeof AUDIT_RESOURCE)[keyof typeof AUDIT_RESOURCE],
+    resourceId: string,
+    actor: Actor,
+    tx: DbExecutor,
+    changes: { before?: object | null; after?: object | null },
+  ): Promise<void> {
+    await this.audit.record(
+      {
+        actorId: actor.sub,
+        actorEmail: actor.email,
+        action,
+        resourceType,
+        resourceId,
+        changes,
+      },
+      tx,
+    );
+  }
+}

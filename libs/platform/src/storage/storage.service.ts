@@ -29,6 +29,9 @@ import {
   ORPHAN_CUTOFF_HOURS,
 } from './storage.types';
 
+/** Base64 SHA-256 is always 44 chars ending in '='. */
+const BASE64_SHA256 = /^[A-Za-z0-9+/]{43}=$/;
+
 /**
  * Platform-level storage service — S3 presigned PUT/GET + DB lifecycle tracking.
  *
@@ -98,10 +101,18 @@ export class StorageService {
       );
     }
 
+    if (input.checksumSha256 && !BASE64_SHA256.test(input.checksumSha256)) {
+      throw new ValidationException(
+        ErrorCodes.FILE_TYPE_NOT_ALLOWED,
+        'checksumSha256 must be a base64-encoded SHA-256 digest',
+      );
+    }
+
     const ext = input.fileName.includes('.')
       ? `.${input.fileName.split('.').pop()!.toLowerCase()}`
       : '';
     const key = `${input.resourceType}/${uploaderId}/${newId()}${ext}`;
+    const disposition = contentDisposition(input.fileName, rules.inlineDisposition);
 
     const [file] = await this.db
       .insert(storedFiles)
@@ -112,6 +123,7 @@ export class StorageService {
         mimeType: input.mimeType,
         sizeBytes: input.sizeBytes,
         resourceType: input.resourceType,
+        checksumSha256: input.checksumSha256 ?? null,
         status: 'pending',
         uploaderId,
         linkedEntityType: input.linkedEntityType ?? null,
@@ -127,12 +139,46 @@ export class StorageService {
           Key: key,
           ContentType: input.mimeType,
           ContentLength: input.sizeBytes,
+          ContentDisposition: disposition,
         }),
-        { expiresIn: UPLOAD_URL_TTL_SECONDS },
+        {
+          expiresIn: UPLOAD_URL_TTL_SECONDS,
+          /**
+           * The disposition has to be SIGNED for the client to be able to send it, and it has to be
+           * sent for the object to carry it.
+           *
+           * A presigned PUT stores only what the request actually contains: a header named in the
+           * command but absent from `signableHeaders` is dropped by the presigner and the upload
+           * lands with no disposition at all — verified against LocalStack, where `head-object`
+           * reported `ContentType` and no `ContentDisposition` until this list grew.
+           *
+           * This is where opshub deviates from rally, deliberately. Rally applies the disposition as
+           * a RESPONSE OVERRIDE on its presigned GET, which works because it serves private objects
+           * through that GET. `resolveUrl` here prefers `CDN_FILES_BASE_URL` whenever one is
+           * configured, and a plain CDN read carries no response overrides — so the override alone
+           * would silently not apply on the path production uses. Stored metadata travels with the
+           * object however it is fetched.
+           *
+           * `x-amz-*` headers cannot be added this way: rally documented that the presigner ignores
+           * them, the client then sends a header the signature does not cover, and S3 answers 403
+           * with no CORS headers — which the browser surfaces as an opaque "Failed to fetch".
+           */
+          signableHeaders: new Set(['content-type', 'content-length', 'content-disposition']),
+        },
       ),
     );
 
-    return { fileId: file.id, uploadUrl, key };
+    // EXACTLY the headers the signature covers. The client must send all of them and nothing extra:
+    // fewer fails the signature, and so does more.
+    return {
+      fileId: file.id,
+      uploadUrl,
+      key,
+      requiredHeaders: {
+        'Content-Type': input.mimeType,
+        'Content-Disposition': disposition,
+      },
+    };
   }
 
   /**
@@ -153,7 +199,7 @@ export class StorageService {
 
     // Idempotent — already confirmed
     if (file.status === 'completed') {
-      return { fileId: file.id, key: file.key, url: this.resolveUrl(file.key) };
+      return { fileId: file.id, key: file.key, url: await this.resolveUrl(file.key) };
     }
 
     if (file.status === 'deleted') {
@@ -180,13 +226,31 @@ export class StorageService {
       );
     }
 
+    // Opportunistic: nothing enforces a checksum at PUT time and only some backends report a
+    // stored one, but when both sides have a value it is the only check that catches a
+    // same-length substitution — which the size comparison above cannot.
+    if (head.checksumSha256 && file.checksumSha256 && head.checksumSha256 !== file.checksumSha256) {
+      await this.db
+        .update(storedFiles)
+        .set({ status: 'deleted' })
+        .where(eq(storedFiles.id, fileId));
+      throw new ValidationException(
+        ErrorCodes.FILE_CHECKSUM_MISMATCH,
+        'Uploaded file does not match the declared checksum',
+      );
+    }
+
     const [updated] = await this.db
       .update(storedFiles)
-      .set({ status: 'completed', confirmedAt: new Date() })
+      .set({
+        status: 'completed',
+        confirmedAt: new Date(),
+        checksumSha256: file.checksumSha256 ?? head.checksumSha256 ?? null,
+      })
       .where(eq(storedFiles.id, fileId))
       .returning();
 
-    return { fileId: updated.id, key: updated.key, url: this.resolveUrl(updated.key) };
+    return { fileId: updated.id, key: updated.key, url: await this.resolveUrl(updated.key) };
   }
 
   /**
@@ -267,27 +331,43 @@ export class StorageService {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  private async headObject(key: string): Promise<{ contentLength: number } | null> {
+  private async headObject(
+    key: string,
+  ): Promise<{ contentLength: number; checksumSha256: string | null } | null> {
     try {
       const result = await this.resilience.execute('s3.headObject', this.resilience.external, () =>
         this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key })),
       );
-      return { contentLength: result.ContentLength ?? 0 };
+      return {
+        contentLength: result.ContentLength ?? 0,
+        // Present only when the object was PUT with a checksum; absent on R2 and MinIO.
+        checksumSha256: result.ChecksumSHA256 ?? null,
+      };
     } catch {
       return null;
     }
   }
 
-  private resolveUrl(key: string): string {
+  /**
+   * A URL the caller can fetch the object with.
+   *
+   * `async`, and that is a FIX rather than a refactor: this used to end in
+   * `getSignedUrl(...) as unknown as string`. `getSignedUrl` returns `Promise<string>`, so the
+   * assertion silenced the compiler and every caller serialised a pending Promise instead of a
+   * URL — on the exact path used when a bucket is configured and `CDN_FILES_BASE_URL` is not.
+   * Local development never saw it because an unset bucket takes the placeholder branch above.
+   */
+  private async resolveUrl(key: string): Promise<string> {
     if (this.cdnBaseUrl) {
       return `${this.cdnBaseUrl}/${key}`;
     }
-    // Presigned GET — generated lazily; in dev we return a placeholder path
-    // since S3_FILES_BUCKET may not be configured.
+    // In dev we return a placeholder path, since S3_FILES_BUCKET may not be configured.
     if (!this.bucket) return `/dev/files/${key}`;
-    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
-      expiresIn: DOWNLOAD_URL_TTL_SECONDS,
-    }) as unknown as string;
+    return this.resilience.execute('s3.presignGet', this.resilience.external, () =>
+      getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+        expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+      }),
+    );
   }
 
   /** Presigned GET URL for a known key — used by domain services that already hold the key. */
@@ -310,4 +390,23 @@ export class StorageService {
       .limit(1);
     return row ?? null;
   }
+}
+
+/**
+ * RFC 6266 `Content-Disposition`, defaulting to `attachment`.
+ *
+ * `attachment` makes a file inert in the browser whatever its bytes turn out to be, which matters
+ * because MIME is client-declared: a file announcing `image/png` can contain script. Only surfaces
+ * that must render — avatars, asset photos — opt into `inline`, and they pay for it by accepting
+ * raster MIME types only.
+ *
+ * The filename is quoted and stripped of quotes, backslashes and control characters: it is
+ * user-supplied text going into a response header, and a bare `"` would end the parameter early.
+ */
+function contentDisposition(filename: string, inline: boolean): string {
+  // Stripping control characters IS the point: this value goes into an HTTP header, where a raw CR
+  // or LF would split it into two.
+  // eslint-disable-next-line no-control-regex
+  const safe = filename.replace(/[\\"\r\n\u0000-\u001f]/g, '_').slice(0, 200);
+  return `${inline ? 'inline' : 'attachment'}; filename="${safe}"`;
 }

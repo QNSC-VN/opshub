@@ -103,6 +103,25 @@ jobs:
           --health-timeout 3s
           --health-retries 5
 
+      # S3, so the upload surfaces are actually exercised rather than mocked.
+      #
+      # `training.e2e.spec.ts` PUTs real bytes to a presigned URL and confirms them, which is the
+      # only way to prove the things that matter about that path: that the signed header set is the
+      # one the client must send, that `Content-Disposition` ends up as STORED object metadata, and
+      # that confirm rejects a size or checksum that does not match. Every one of those is invisible
+      # to a stubbed StorageService — the stub would agree with whatever the code did.
+      localstack:
+        image: localstack/localstack:3
+        env:
+          SERVICES: s3
+          DEBUG: '0'
+        ports: ['4566:4566']
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
@@ -204,9 +223,30 @@ jobs:
           # for a role with write access to every application table, even here.
           DATABASE_APP_PASSWORD: ci-opshub-app-least-privilege
 
+      # The bucket has to exist before the app presigns into it: a presigned PUT against a missing
+      # bucket succeeds at signing and fails at upload, which surfaces as a confirm-time
+      # FILE_NOT_UPLOADED and reads like a product bug.
+      - name: Create the S3 bucket in LocalStack
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4566/_localstack/health > /dev/null; then break; fi
+            sleep 2
+          done
+          aws --endpoint-url http://localhost:4566 s3 mb s3://opshub-files-test
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+
       - name: E2E tests
         run: pnpm test:e2e
         env:
+          S3_FILES_BUCKET: opshub-files-test
+          STORAGE_ENDPOINT: http://localhost:4566
+          STORAGE_FORCE_PATH_STYLE: 'true'
+          STORAGE_ACCESS_KEY_ID: test
+          STORAGE_SECRET_ACCESS_KEY: test
+          AWS_REGION: us-east-1
           NODE_ENV: test
           # The APP connects as the restricted role, the MIGRATOR as the owner — the same
           # split the stack module gets at cutover. The e2e globalSetup truncates and
