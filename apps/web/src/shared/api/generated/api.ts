@@ -1188,6 +1188,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/workforce/leave/balance': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Leave balances for a year
+     * @description granted + carriedOver − consumed, where consumed counts APPROVED and still-PENDING requests. A leave type with no entitlement row is untracked and absent from the result.
+     */
+    get: operations['WorkforceController_listLeaveBalances'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/workforce/leave/entitlement': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set an annual leave entitlement
+     * @description Upsert: an allowance is corrected more often than created (a mid-year joiner, a policy change), so a second call updates rather than conflicting.
+     */
+    put: operations['WorkforceController_setLeaveEntitlement'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/workforce/holidays': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Public holidays for a year */
+    get: operations['WorkforceController_listHolidays'];
+    put?: never;
+    /**
+     * Declare a public holiday
+     * @description Does NOT change what existing requests cost — working_days is frozen per request at submit, so leave already approved keeps the charge it was approved with.
+     */
+    post: operations['WorkforceController_addHoliday'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/workforce/holidays/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Remove a public holiday */
+    delete: operations['WorkforceController_removeHoliday'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/requests': {
     parameters: {
       query?: never;
@@ -2136,6 +2214,14 @@ export interface components {
       startDate: string;
       endDate: string;
       reason: string | null;
+      /**
+       * @description Working days this request costs, excluding weekends and public holidays, frozen at submit.
+       *
+       *     `null` only for rows predating the column. Surfaced because an approver deciding a request
+       *     needs to know what it takes out of the balance — the number is useless if only the server
+       *     can see it.
+       */
+      workingDays: number | null;
       status: string;
       reviewerId: string | null;
       reviewedAt: string | null;
@@ -2218,6 +2304,37 @@ export interface components {
     ConfirmLeaveDocumentDto: {
       /** Format: uuid */
       fileId: string;
+    };
+    LeaveBalanceResponseDto: {
+      leaveType: string;
+      year: number;
+      grantedDays: number;
+      carriedOverDays: number;
+      /** @description Working days already committed — approved AND still-pending requests. */
+      consumedDays: number;
+      remainingDays: number;
+    };
+    SetLeaveEntitlementDto: {
+      /** Format: uuid */
+      employeeId: string;
+      /** @enum {string} */
+      leaveType: 'annual' | 'sick' | 'unpaid' | 'parental' | 'other';
+      year: number;
+      grantedDays: number;
+      carriedOverDays?: number;
+      note?: string;
+    };
+    HolidayResponseDto: {
+      id: string;
+      date: string;
+      name: string;
+      region: string;
+    };
+    CreateHolidayDto: {
+      /** Format: date */
+      date: string;
+      name: string;
+      region?: string;
     };
     RequestApprovalResponseDto: {
       id: string;
@@ -5945,6 +6062,196 @@ export interface operations {
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_listLeaveBalances: {
+    parameters: {
+      query?: {
+        employeeId?: string;
+        year?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LeaveBalanceResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_setLeaveEntitlement: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetLeaveEntitlementDto'];
+      };
+    };
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_listHolidays: {
+    parameters: {
+      query?: {
+        year?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HolidayResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_addHoliday: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateHolidayDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HolidayResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_removeHoliday: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
         headers: {
           [name: string]: unknown;
         };
