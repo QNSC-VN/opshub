@@ -28,6 +28,7 @@ import { ReportsModule } from '@modules/reports';
 import { WebhooksModule } from '@modules/webhooks';
 import { LicenseModule } from '@modules/license';
 import { CatalogModule } from '@modules/catalog';
+import { DocumentsModule } from '@modules/documents';
 import { AiModule } from '@modules/ai';
 import { SecurityPostureModule } from '@modules/security-posture';
 
@@ -77,6 +78,7 @@ import { SecurityPostureModule } from '@modules/security-posture';
     WebhooksModule,
     LicenseModule,
     CatalogModule,
+    DocumentsModule,
     AiModule,
     SecurityPostureModule,
   ],

@@ -46,6 +46,16 @@ export const FIXTURE = {
     id: '00000000-0000-7000-8000-000000000001',
     email: 'admin@opshub.local',
   },
+  /**
+   * Holds `documents.manage`, `documents.approve` and `documents.publish` — the ISMS owner, and
+   * the AUTHOR in the controlled-document specs. Kept distinct from ADMIN on purpose: separation
+   * of duties can only be tested with two identities, since an author may not approve their own
+   * policy.
+   */
+  SECURITY: {
+    id: '00000000-0000-7000-8000-000000000003',
+    email: 'security@opshub.local',
+  },
 } as const;
 
 export async function createTestApp(): Promise<NestFastifyApplication> {
