@@ -111,3 +111,43 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_document_ack
   ON documents.document_acknowledgements (version_id, employee_id);
 CREATE INDEX IF NOT EXISTS ix_document_ack_employee
   ON documents.document_acknowledgements (employee_id);
+
+-- ============================================================================
+-- Grants for the least-privilege roles
+-- ============================================================================
+-- Migration 0012 created `opshub_app` / `opshub_worker` and granted them access to
+-- the schemas that existed THEN, by iterating a fixed array. A schema added later
+-- is invisible to it, so without this block the runtime role can see `documents`
+-- but not read or write anything in it.
+--
+-- This is not theoretical and it is not caught by local development: a developer
+-- connects as the owner, which is exempt, so everything works. CI runs its e2e
+-- suite as `opshub_app` deliberately for exactly this reason, and it failed here
+-- with a 500 on the first insert — which is the cheap version of the same failure
+-- happening after the production cutover, on a code path with no obvious
+-- connection to a migration.
+--
+-- ANY MIGRATION THAT ADDS A SCHEMA MUST REPEAT THIS. There is no way to make 0012
+-- retroactive, and `ALTER DEFAULT PRIVILEGES` only covers FUTURE objects in a
+-- schema that is already listed.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'opshub_app') THEN
+    GRANT USAGE ON SCHEMA documents TO opshub_app, opshub_worker, opshub_migrate;
+
+    GRANT SELECT, INSERT, UPDATE, DELETE
+      ON ALL TABLES IN SCHEMA documents TO opshub_app, opshub_worker;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA documents TO opshub_app, opshub_worker;
+
+    GRANT ALL ON SCHEMA documents TO opshub_migrate;
+    GRANT ALL ON ALL TABLES IN SCHEMA documents TO opshub_migrate;
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA documents TO opshub_migrate;
+
+    -- Future tables in this schema, so the next migration that adds one here does not
+    -- reintroduce the same failure. Per GRANTOR, and the grantor is whoever runs migrations.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA documents
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO opshub_app, opshub_worker;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA documents
+      GRANT USAGE, SELECT ON SEQUENCES TO opshub_app, opshub_worker;
+  END IF;
+END $$;

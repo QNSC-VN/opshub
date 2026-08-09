@@ -108,8 +108,15 @@ step, which is the point.
 - **Structure** — `libs/modules/<name>/src/{domain,application,infrastructure,interface}`,
   with a repository port in `domain/ports` and a Drizzle implementation in
   `infrastructure/persistence`. Fifteen modules already follow this; copy the nearest one.
-- **Schema** — a `pgSchema('<name>')` in `db/schema/`, plus a hand-written migration.
-  `drizzle-kit generate` needs a TTY and cannot run unattended here.
+- **Schema** — a `pgSchema('<name>')` in `db/schema/`, plus a hand-written migration, plus an
+  entry in `db/migrations/meta/_journal.json`. An unregistered SQL file is skipped SILENTLY:
+  `pnpm db:migrate` prints "Migrations applied" and creates nothing.
+- **Grants, if the migration adds a SCHEMA** — repeat the grant block from
+  `0015_controlled_documents.sql`. Migration 0012 granted the least-privilege roles access by
+  iterating the schemas that existed then, so a later schema is invisible to it and the runtime
+  role can see it but read nothing in it. Local development cannot catch this — a developer
+  connects as the owner, which is exempt — but CI runs its e2e suite as `opshub_app` on purpose
+  and fails with a 500 on the first insert.
 - **Authorization** — every route declares one of `@RequirePermission`, `@Public`,
   `@SelfScoped`, `@SharedRead`, `@AuthorizedInService` or `@AuthzGap`. The app **refuses to
   boot** on an undeclared route (`assertEveryRouteDeclaresAuthz`), so this is not optional.
