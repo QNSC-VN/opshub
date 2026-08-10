@@ -307,3 +307,44 @@ export const controlImplementationStatusEnum = pgEnum('control_implementation_st
   'partially_implemented',
   'implemented',
 ]);
+
+/**
+ * Where a security incident is in its handling.
+ *
+ * The order is the ISO 27035 sequence and it is one-way: `reported` → `triaged` → `contained` →
+ * `resolved` → `closed`. A separate `false_positive` terminal state exists because "it turned out
+ * not to be an incident" is a real outcome, and forcing it through `contained`/`resolved` would put
+ * containment timestamps on something that never needed containing.
+ */
+export const incidentStatusEnum = pgEnum('incident_status', [
+  'reported',
+  'triaged',
+  'contained',
+  'resolved',
+  'closed',
+  'false_positive',
+]);
+
+/**
+ * How bad it is. Named bands rather than 1..5 because an incident severity drives a RESPONSE
+ * (who is woken up, what the deadline is), and a number invites arithmetic that means nothing.
+ */
+export const incidentSeverityEnum = pgEnum('incident_severity', [
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
+
+/**
+ * What kind of entry a timeline row is.
+ *
+ * The timeline is append-only, so the type is how a reader distinguishes an automatic state change
+ * from something a responder wrote.
+ */
+export const incidentEventTypeEnum = pgEnum('incident_event_type', [
+  'status_change',
+  'note',
+  'evidence',
+  'notification',
+]);

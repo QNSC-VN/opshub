@@ -14,7 +14,7 @@ says something is absent, that was checked.
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
-| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register**: generated scoring, treatment plans, acceptance through the request engine. **Controls + Statement of Applicability**: catalogue, per-control decision, risk↔control coverage, gap reports | Asset classification, incidents, vendor risk                                                                          |
+| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop | Asset classification, vendor risk                                                                                    |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
@@ -107,8 +107,8 @@ action. It does not add a `*_history` table.
    Training was also the first upload surface that ACCUMULATES, which is why it brought
    `storage.attachments` and the policy descriptors with it — see the upload section below.
 
-4. **ISMS** — ~~risk register~~ (**done**), ~~controls / Statement of Applicability~~
-   (**done**), then incidents, asset classification, vendor risk.
+4. **ISMS** — ~~risk register~~, ~~controls / Statement of Applicability~~, ~~incidents~~
+   (all **done**), then asset classification and vendor risk.
    Reuses compliance findings, the asset inventory, the access-control model and the
    document module, so most of its foundation is already here.
 
@@ -137,6 +137,24 @@ action. It does not add a `*_history` table.
      rationale still argues for inclusion.
    - `ck_soa_applicability` pairs `applicable = false` with `not_applicable`, so "excluded but
      implemented" is unrepresentable rather than merely discouraged.
+
+   Incidents closed the loop the register opened: `incidents.risk_id` is the risk that
+   materialised, and "open incidents with no linked risk" is the gap in the assessment nobody
+   had foreseen. Three decisions there are worth carrying:
+
+   - **This is the one module that does NOT use the request engine, deliberately.** The engine
+     models an APPROVAL — somebody decides yes or no, with separation of duties and an SLA on
+     the decision. Incident handling is work under time pressure whose states are what has been
+     ACHIEVED (contained, resolved), not what has been permitted; routing it through the engine
+     would need an approver for "we have contained it". The state machine is a declared map
+     (`ALLOWED_TRANSITIONS`) plus a guarded `WHERE status = <from>`, not an `if` chain.
+   - **The timeline is append-only, and written BY the transition.** Every status change appends
+     its entry in the same transaction, so a timeline can never be missing the step the status
+     column claims happened — and there is no edit or delete route, because a timeline somebody
+     can revise afterwards is not evidence.
+   - **The 72-hour GDPR clock is derived in ONE query, not stored.** It was first written as a
+     generated column and Postgres refused it: `timestamptz + interval` is only STABLE, and a
+     generated column must be IMMUTABLE. See the checklist entry below.
 
 5. **QMS** — CAPA, non-conformance, internal audit, management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
@@ -230,6 +248,11 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **Generated columns must be IMMUTABLE.** `timestamptz + interval` is only STABLE — it depends on
+  the session time zone and therefore on DST — so Postgres rejects it with
+  `ERROR 42P17: generation expression is not immutable`. `likelihood * impact` on integers is fine;
+  anything touching a timestamp and an interval is not. Derive it in the one query that needs it and
+  index the column it is derived FROM.
 - **Read every CHECK you write back to yourself.** Migration 0020's first draft carried
   `CHECK (a IS NOT NULL OR b IS NOT NULL OR TRUE)` — a tautology that can never fail, which would
   have sat in the schema looking like a guarantee while enforcing nothing. Same family as a ratchet

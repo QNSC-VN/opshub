@@ -73,8 +73,10 @@ export default defineConfig({
       // green. `pnpm check:coverage-floors` now fails when any floor falls more than 3 points
       // behind actual, so raising these is no longer a thing to remember.
       //
-      // Measured 2026-08-09: lines 28.65 / statements 28.60 / branches 24.13 / functions 19.40.
-      // Raised from 25/17/21/26 when positions, contracts and the POST-status ratchet landed;
+      // Measured 2026-08-10: lines 31.82 / statements 31.58 / branches 26.13 / functions 22.03.
+      // Raised from 28/19/24/28 as the ISMS modules landed (risk register, controls and the SoA,
+      // incidents); before that from 25/17/21/26 when positions, contracts and the POST-status
+      // ratchet landed;
       // before that, raised from 23/16/19/23 when the leave-entitlement work landed. In both cases
       // `check:coverage-floors` refused the change until they moved, which is the mechanism
       // working: a floor 3 points behind reality protects nothing.
@@ -89,10 +91,10 @@ export default defineConfig({
       // until the floors moved up, then refused the delete until they moved down — which is
       // why the number can be trusted to track reality rather than intent.
       thresholds: {
-        lines: 28,
-        functions: 19,
-        branches: 24,
-        statements: 28,
+        lines: 31,
+        functions: 22,
+        branches: 26,
+        statements: 31,
       },
     },
   },
