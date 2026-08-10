@@ -112,6 +112,10 @@ export const FIXTURE_TABLES = [
   'training.records',
   'training.position_requirements',
   'training.courses',
+  // ISMS — `uq_risk_reference` is global, and a risk left `accepted` by a previous run makes the
+  // next run's acceptance a 412 nobody wrote. Treatments cascade from risks, listed for intent.
+  'isms.risk_treatments',
+  'isms.risks',
   // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this
   // table, but listing it explicitly keeps the intent visible rather than incidental.
   'storage.attachments',

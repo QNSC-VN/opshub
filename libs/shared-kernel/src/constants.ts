@@ -16,6 +16,14 @@ export const REQUEST_TYPE = {
   OVERTIME: 'overtime',
   CATALOG_REQUEST: 'catalog_request',
   DOCUMENT_APPROVAL: 'document_approval',
+  /**
+   * Sign-off for ACCEPTING a residual risk rather than treating it.
+   *
+   * Accepting risk is the one ISMS decision that creates exposure by choice, so ISO 27001 asks for
+   * a named accountable approver. That is an approval, so it is the engine's — not a second status
+   * column with its own approver check.
+   */
+  RISK_ACCEPTANCE: 'risk_acceptance',
 } as const;
 
 export type RequestType = (typeof REQUEST_TYPE)[keyof typeof REQUEST_TYPE];

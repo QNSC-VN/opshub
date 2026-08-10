@@ -14,7 +14,7 @@ says something is absent, that was checked.
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
-| **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory, controlled policies with acknowledgement | **Risk register**, asset classification, controls / Statement of Applicability, incidents, vendor risk              |
+| **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory, controlled policies with acknowledgement. **Risk register**: generated scoring, treatment plans, acceptance through the request engine | Asset classification, controls / Statement of Applicability, incidents, vendor risk                                  |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
@@ -29,9 +29,9 @@ genuinely absent.
 
 `RequestEngine` (`libs/platform/src/requests/`) plus the `RequestTypeDef` registry already
 provides multi-step approval chains, separation of duties, delegation, SLA deadlines,
-expiry, audit entries, notifications and webhook fan-out. Six types are registered today:
+expiry, audit entries, notifications and webhook fan-out. Eight types are registered today:
 `access_request`, `onboarding`, `offboarding`, `leave_request`, `overtime`,
-`catalog_request`.
+`catalog_request`, `document_approval`, `risk_acceptance`.
 
 Almost every process in these systems is that same shape — a QMS document approval, a
 CAPA, an ISMS risk treatment plan, an EMS contract sign-off. Each is a new
@@ -41,6 +41,12 @@ supplying `onApprove`.
 **The smell to watch for:** a module growing its own `status` column with hand-written
 transitions and its own approver check. That is a second workflow engine, and it will not
 have the SoD rule, the delegation union, the SLA cron or the audit entry.
+
+Cashed in twice so far: `document_approval`, and `risk_acceptance` — accepting a residual
+risk is the one ISMS decision that creates exposure by choice, so ISO 27001 wants a named
+approver who is not the assessor. That is separation of duties, which the engine already
+has. The risk module keeps only what the engine cannot know: the score being signed off,
+frozen into the payload so re-scoring mid-approval cannot change what was approved.
 
 ### 2. Build "controlled document" ONCE
 
@@ -101,10 +107,21 @@ action. It does not add a `*_history` table.
    Training was also the first upload surface that ACCUMULATES, which is why it brought
    `storage.attachments` and the policy descriptors with it — see the upload section below.
 
-4. **ISMS** — risk register, controls / Statement of Applicability, incidents, asset
-   classification, vendor risk.
+4. **ISMS** — ~~risk register~~ (**done**), then controls / Statement of Applicability,
+   incidents, asset classification, vendor risk.
    Reuses compliance findings, the asset inventory, the access-control model and the
    document module, so most of its foundation is already here.
+
+   The register came first because everything else in ISMS references it: a control exists to
+   treat a risk, the SoA is the list of controls with the risks that justify them, and an
+   incident is a risk that materialised. Built the other way round, each of those would need
+   its own notion of "how bad is this".
+
+   Two things worth carrying forward from it. `compliance.compliance_findings` was NOT
+   extended into a risk table — `software_name` is NOT NULL there and every row is
+   scan-detected, so findings are INPUTS to risks rather than risks. And scoring is a
+   GENERATED column (`likelihood * impact`), which is why no API accepts a score: a register
+   cannot hold a row that disagrees with its own factors.
 
 5. **QMS** — CAPA, non-conformance, internal audit, management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
