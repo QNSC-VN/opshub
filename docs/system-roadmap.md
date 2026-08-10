@@ -248,6 +248,11 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **`pnpm typecheck` is the gate, not `tsc -b`.** They read different tsconfigs: `tsc -b` follows the
+  project references and can report a clean build while `tsc --noEmit -p tsconfig.json` — which is
+  what `pnpm typecheck` and CI run — rejects a spec file it never looked at. An invalid cast in a
+  `.spec.ts` passed `tsc -b` locally and failed CI's typecheck. Run both before pushing; `tsc -b` is
+  the fast loop, `pnpm typecheck` is the answer.
 - **Generated columns must be IMMUTABLE.** `timestamptz + interval` is only STABLE — it depends on
   the session time zone and therefore on DST — so Postgres rejects it with
   `ERROR 42P17: generation expression is not immutable`. `likelihood * impact` on integers is fine;
