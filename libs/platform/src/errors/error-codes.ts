@@ -143,6 +143,23 @@ export const ErrorCodes = {
   INCIDENT_EVIDENCE_MISSING: 'INCIDENT_EVIDENCE_MISSING',
   /** Only a personal-data breach has a regulator to notify. */
   INCIDENT_NOT_A_BREACH: 'INCIDENT_NOT_A_BREACH',
+
+  // ── ISMS information assets ────────────────────────────────────────────────
+  /** A CIA rating outside 1..5, or a retention period of zero months. */
+  INFORMATION_ASSET_INVALID_RATING: 'INFORMATION_ASSET_INVALID_RATING',
+  /**
+   * The classification label and the confidentiality rating contradict each other —
+   * `ck_information_asset_classification_confidentiality` in words.
+   */
+  INFORMATION_ASSET_CLASSIFICATION_MISMATCH: 'INFORMATION_ASSET_CLASSIFICATION_MISMATCH',
+  /** Personal data cannot sit at `public` or `internal`. */
+  INFORMATION_ASSET_PERSONAL_DATA_EXPOSED: 'INFORMATION_ASSET_PERSONAL_DATA_EXPOSED',
+  /** The asset was not at the level the reclassification started from, or is already at the target. */
+  INFORMATION_ASSET_NOT_RECLASSIFIED: 'INFORMATION_ASSET_NOT_RECLASSIFIED',
+  /** Lowering a classification is the declassification route, which needs its own permission. */
+  INFORMATION_ASSET_DECLASSIFY_REQUIRED: 'INFORMATION_ASSET_DECLASSIFY_REQUIRED',
+  /** The asset is retired, so it accepts no new classification, rating or device link. */
+  INFORMATION_ASSET_RETIRED: 'INFORMATION_ASSET_RETIRED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

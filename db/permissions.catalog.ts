@@ -105,6 +105,29 @@ export const PERMISSION = {
    */
   INCIDENT_MANAGE: 'incident.manage',
 
+  // ── ISMS information assets ────────────────────────────────────────────────
+  /** View the information asset register, its classification history and the device holdings. */
+  INFORMATION_ASSET_READ: 'information_asset.read',
+  /**
+   * Register assets, re-rate them, RAISE a classification, link the devices that hold them.
+   *
+   * Deliberately not `asset.write`, which is the DEVICE inventory held by IT and the service desk.
+   * Deciding that a system holds restricted personal data is an ISMS judgement about information,
+   * not a hardware record, and the two should not travel together.
+   */
+  INFORMATION_ASSET_MANAGE: 'information_asset.manage',
+  /**
+   * LOWER a classification.
+   *
+   * Separate from `information_asset.manage` for the same reason `risk.accept` is separate from
+   * `risk.manage`: this is the one change to the register that makes information easier to reach, and
+   * the person who wants it declassified should not be the only person who agrees. Raising protection
+   * is ordinary maintenance and stays with `manage`; reducing it needs this.
+   *
+   * Like `risk.accept`, it is in NO default role bundle — it is granted deliberately or not at all.
+   */
+  INFORMATION_ASSET_DECLASSIFY: 'information_asset.declassify',
+
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
   ASSET_WRITE: 'asset.write',
@@ -216,6 +239,10 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.CONTROL_MANAGE]: 'Maintain controls and the Statement of Applicability',
   [PERMISSION.INCIDENT_READ]: 'View security incidents and their timelines',
   [PERMISSION.INCIDENT_MANAGE]: 'Triage, contain, resolve and close security incidents',
+  [PERMISSION.INFORMATION_ASSET_READ]: 'View the information asset register and its history',
+  [PERMISSION.INFORMATION_ASSET_MANAGE]:
+    'Register information assets, rate them and raise their classification',
+  [PERMISSION.INFORMATION_ASSET_DECLASSIFY]: 'Lower the classification of an information asset',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -367,6 +394,11 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.CONTROL_MANAGE,
     PERMISSION.INCIDENT_READ,
     PERMISSION.INCIDENT_MANAGE,
+    PERMISSION.INFORMATION_ASSET_READ,
+    PERMISSION.INFORMATION_ASSET_MANAGE,
+    // Deliberately WITHOUT `INFORMATION_ASSET_DECLASSIFY`, on the same reasoning that keeps
+    // `RISK_ACCEPT` out of every bundle: the role that classifies information should not be able to
+    // reduce that protection unilaterally.
     PERMISSION.ACCESS_REQUEST_READ,
     PERMISSION.ACCESS_REQUEST_APPROVE,
     PERMISSION.ACCESS_REQUEST_SECURITY_APPROVE,
@@ -444,6 +476,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.RISK_READ,
     PERMISSION.CONTROL_READ,
     PERMISSION.INCIDENT_READ,
+    PERMISSION.INFORMATION_ASSET_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

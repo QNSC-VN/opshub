@@ -348,3 +348,40 @@ export const incidentEventTypeEnum = pgEnum('incident_event_type', [
   'evidence',
   'notification',
 ]);
+
+// ── ISMS information assets ──────────────────────────────────────────────────
+/**
+ * The classification labels, in order of increasing protection.
+ *
+ * The ORDER OF THESE VALUES IS NOT THE RANKING. Postgres orders an enum by declaration order, so it
+ * happens to agree today, but nothing keeps them in step: inserting a new label in the middle needs
+ * `ALTER TYPE ... BEFORE`, and anybody appending one at the end would silently make it the highest.
+ * The authoritative ranking is the `rank` column on `isms.classification_levels`, which is also
+ * where the handling rules live — see that table.
+ */
+export const informationClassificationEnum = pgEnum('information_classification', [
+  'public',
+  'internal',
+  'confidential',
+  'restricted',
+]);
+
+/**
+ * What kind of thing the information asset IS.
+ *
+ * Deliberately not the same list as `asset_type`, which enumerates devices (laptop, monitor, phone).
+ * An information asset is the information and the thing that holds it — a payroll system, a customer
+ * database, a room of signed contracts — and a device is a CONTAINER for one, linked through
+ * `isms.information_asset_devices` rather than conflated with it.
+ */
+export const informationAssetTypeEnum = pgEnum('information_asset_type', [
+  'system',
+  'application',
+  'database',
+  'dataset',
+  'repository',
+  'document_set',
+  'physical_record',
+  'service',
+  'other',
+]);
