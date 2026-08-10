@@ -56,6 +56,9 @@ const ROOT = join(__dirname, '..');
  *                          already total — `code` is appended anyway so the total order rests
  *                          on the primary key rather than on a constraint a reader has to
  *                          go and find.
+ *   - `vendorCriticalityLevels.code` PRIMARY KEY (db/schema/isms-vendors.ts and migration 0023:
+ *                          `code vendor_criticality PRIMARY KEY`). Same shape as the classification
+ *                          levels above, and `rank` is UNIQUE there too.
  *
  * Extending this list is a claim about the SCHEMA. Verify the constraint exists before
  * adding one, because a wrong entry here silently exempts a broken query.
@@ -73,6 +76,7 @@ const UNIQUE_NON_ID_COLUMNS = [
   'roles.key',
   'attachments.fileId',
   'classificationLevels.code',
+  'vendorCriticalityLevels.code',
 ] as const;
 
 interface Ordering {

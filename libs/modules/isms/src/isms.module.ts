@@ -5,19 +5,23 @@ import { RiskService } from './application/risk.service';
 import { ControlService } from './application/control.service';
 import { IncidentService } from './application/incident.service';
 import { InformationAssetService } from './application/information-asset.service';
+import { VendorService } from './application/vendor.service';
 import { RiskAcceptanceTypeDef } from './application/risk-acceptance.type-def';
 import { RiskController } from './interface/http/risk.controller';
 import { ControlController, RiskControlController } from './interface/http/control.controller';
 import { IncidentController } from './interface/http/incident.controller';
 import { InformationAssetController } from './interface/http/information-asset.controller';
+import { VendorController } from './interface/http/vendor.controller';
 import { RiskDrizzleRepository } from './infrastructure/persistence/risk.drizzle-repository';
 import { ControlDrizzleRepository } from './infrastructure/persistence/control.drizzle-repository';
 import { IncidentDrizzleRepository } from './infrastructure/persistence/incident.drizzle-repository';
 import { InformationAssetDrizzleRepository } from './infrastructure/persistence/information-asset.drizzle-repository';
+import { VendorDrizzleRepository } from './infrastructure/persistence/vendor.drizzle-repository';
 import { RISK_REPOSITORY } from './domain/ports/risk.repository';
 import { CONTROL_REPOSITORY } from './domain/ports/control.repository';
 import { INCIDENT_REPOSITORY } from './domain/ports/incident.repository';
 import { INFORMATION_ASSET_REPOSITORY } from './domain/ports/information-asset.repository';
+import { VENDOR_REPOSITORY } from './domain/ports/vendor.repository';
 
 @Module({
   // IdentityModule for EmployeeService: the controller checks an owner exists before writing, since
@@ -30,12 +34,14 @@ import { INFORMATION_ASSET_REPOSITORY } from './domain/ports/information-asset.r
     RiskControlController,
     IncidentController,
     InformationAssetController,
+    VendorController,
   ],
   providers: [
     RiskService,
     ControlService,
     IncidentService,
     InformationAssetService,
+    VendorService,
     // The service submits the acceptance request and this definition calls back to apply the
     // outcome, so the pair is circular by construction. The `forwardRef` that resolves it lives on
     // the type-def's constructor, where the cycle actually is; the alternative — a second copy of
@@ -45,7 +51,8 @@ import { INFORMATION_ASSET_REPOSITORY } from './domain/ports/information-asset.r
     { provide: CONTROL_REPOSITORY, useClass: ControlDrizzleRepository },
     { provide: INCIDENT_REPOSITORY, useClass: IncidentDrizzleRepository },
     { provide: INFORMATION_ASSET_REPOSITORY, useClass: InformationAssetDrizzleRepository },
+    { provide: VENDOR_REPOSITORY, useClass: VendorDrizzleRepository },
   ],
-  exports: [RiskService, ControlService, IncidentService, InformationAssetService],
+  exports: [RiskService, ControlService, IncidentService, InformationAssetService, VendorService],
 })
 export class IsmsModule {}

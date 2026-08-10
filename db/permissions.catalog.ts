@@ -128,6 +128,24 @@ export const PERMISSION = {
    */
   INFORMATION_ASSET_DECLASSIFY: 'information_asset.declassify',
 
+  // ── ISMS vendor risk ───────────────────────────────────────────────────────
+  /** View the supplier register, its assessments and the vendor-risk reports. */
+  VENDOR_READ: 'vendor.read',
+  /** Register suppliers, record due-diligence assessments, suspend, terminate, link risks. */
+  VENDOR_MANAGE: 'vendor.manage',
+  /**
+   * APPROVE a supplier for live use.
+   *
+   * The third permission in this codebase for an act that creates exposure by choice, after
+   * `risk.accept` and `information_asset.declassify`, and separated for the same reason: the person
+   * who ran the due diligence should not be the only person who decides the organisation may now
+   * depend on it. Suspending and terminating stay with `manage` — stopping is never the risky
+   * direction.
+   *
+   * In NO default role bundle.
+   */
+  VENDOR_APPROVE: 'vendor.approve',
+
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
   ASSET_WRITE: 'asset.write',
@@ -243,6 +261,9 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.INFORMATION_ASSET_MANAGE]:
     'Register information assets, rate them and raise their classification',
   [PERMISSION.INFORMATION_ASSET_DECLASSIFY]: 'Lower the classification of an information asset',
+  [PERMISSION.VENDOR_READ]: 'View the supplier register and its assessments',
+  [PERMISSION.VENDOR_MANAGE]: 'Register suppliers, assess them, suspend and terminate',
+  [PERMISSION.VENDOR_APPROVE]: 'Approve a supplier for live use',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -396,6 +417,10 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.INCIDENT_MANAGE,
     PERMISSION.INFORMATION_ASSET_READ,
     PERMISSION.INFORMATION_ASSET_MANAGE,
+    PERMISSION.VENDOR_READ,
+    PERMISSION.VENDOR_MANAGE,
+    // Deliberately WITHOUT `VENDOR_APPROVE`, on the same reasoning that keeps `RISK_ACCEPT` and
+    // `INFORMATION_ASSET_DECLASSIFY` out of every bundle.
     // Deliberately WITHOUT `INFORMATION_ASSET_DECLASSIFY`, on the same reasoning that keeps
     // `RISK_ACCEPT` out of every bundle: the role that classifies information should not be able to
     // reduce that protection unilaterally.
@@ -477,6 +502,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.CONTROL_READ,
     PERMISSION.INCIDENT_READ,
     PERMISSION.INFORMATION_ASSET_READ,
+    PERMISSION.VENDOR_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

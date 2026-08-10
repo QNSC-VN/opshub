@@ -160,6 +160,24 @@ export const ErrorCodes = {
   INFORMATION_ASSET_DECLASSIFY_REQUIRED: 'INFORMATION_ASSET_DECLASSIFY_REQUIRED',
   /** The asset is retired, so it accepts no new classification, rating or device link. */
   INFORMATION_ASSET_RETIRED: 'INFORMATION_ASSET_RETIRED',
+
+  // ── ISMS vendor risk ───────────────────────────────────────────────────────
+  /** The transition is not legal from the vendor's current status. */
+  VENDOR_NOT_IN_STATE: 'VENDOR_NOT_IN_STATE',
+  /**
+   * A vendor cannot go live without a current passing assessment.
+   *
+   * Not expressible as a CHECK: it is a statement about the LATEST row of another table.
+   */
+  VENDOR_ASSESSMENT_REQUIRED: 'VENDOR_ASSESSMENT_REQUIRED',
+  /** An active data processor needs a recorded agreement — GDPR Article 28(3). */
+  VENDOR_AGREEMENT_REQUIRED: 'VENDOR_AGREEMENT_REQUIRED',
+  /** The contract window runs backwards — `ck_vendor_contract_window` in words. */
+  VENDOR_INVALID_CONTRACT_WINDOW: 'VENDOR_INVALID_CONTRACT_WINDOW',
+  /** Conditions missing on a conditional pass, or findings missing on a failure. */
+  VENDOR_ASSESSMENT_INCOMPLETE: 'VENDOR_ASSESSMENT_INCOMPLETE',
+  /** The relationship has ended, so the record accepts nothing further. */
+  VENDOR_TERMINATED: 'VENDOR_TERMINATED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
