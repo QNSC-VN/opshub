@@ -528,3 +528,41 @@ export const internalAuditStatusEnum = pgEnum('internal_audit_status', [
  * who actually audited.
  */
 export const auditRoleEnum = pgEnum('audit_role', ['lead', 'auditor', 'observer']);
+
+// ── QMS management review ────────────────────────────────────────────────────
+/**
+ * Where a management review stands.
+ *
+ * `held` and `closed` are separate for the same reason an audit's `reported` and `closed` are:
+ * §9.3.3 requires the review to produce documented outputs, so a meeting that happened and whose
+ * minutes were never issued is not a completed review. Collapsing the two would make that
+ * unrepresentable.
+ */
+export const managementReviewStatusEnum = pgEnum('management_review_status', [
+  'scheduled',
+  'held',
+  'closed',
+  'cancelled',
+]);
+
+/**
+ * The three outputs ISO 9001 §9.3.3 names, and nothing else.
+ *
+ * The clause is a closed list — "decisions and actions related to opportunities for improvement, any
+ * need for changes to the quality management system, resource needs" — so this enum IS the clause.
+ * An `other` value would let every action be filed as unclassifiable, which is exactly what the list
+ * exists to prevent.
+ */
+export const managementReviewActionCategoryEnum = pgEnum('management_review_action_category', [
+  'improvement',
+  'qms_change',
+  'resource_need',
+]);
+
+/** Where one review action stands. */
+export const managementReviewActionStatusEnum = pgEnum('management_review_action_status', [
+  'open',
+  'in_progress',
+  'completed',
+  'cancelled',
+]);

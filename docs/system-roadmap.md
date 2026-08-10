@@ -15,7 +15,7 @@ says something is absent, that was checked.
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
 | **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings. **Vendor risk**: criticality tiers with review cadence, due-diligence assessments, a go-live gate, GDPR Article 28 agreements, vendor↔risk links, unassessed-spend report | **Complete**                                                                                    |
-| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training. **Non-conformance register**: severity grades with policy, containment windows, a closure gate. **CAPA**: root-cause analysis, an effectiveness review that can fail and loops back, separation of duties on sign-off, recurrence detection. **Internal audit**: the programme, auditor rosters, a reporting gate before closure, findings that ARE non-conformances, and auditor impartiality on effectiveness reviews | Management review                                                            |
+| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training. **Non-conformance register**: severity grades with policy, containment windows, a closure gate. **CAPA**: root-cause analysis, an effectiveness review that can fail and loops back, separation of duties on sign-off, recurrence detection. **Internal audit**: the programme, auditor rosters, a reporting gate before closure, findings that ARE non-conformances, and auditor impartiality on effectiveness reviews. **Management review**: the §9.3.2 agenda composed from every other register, frozen as a snapshot when the review is held, and §9.3.3 actions carried into the next one | **Complete**                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
 `vendor` returns hits that are **not** domain tables — `risk_accepted` is a
@@ -223,7 +223,7 @@ action. It does not add a `*_history` table.
      the service passes the inputs and Postgres does the arithmetic once, and every reader compares
      against the stored column. See the checklist entry below.
 
-5. **QMS** — ~~non-conformance + CAPA~~, ~~internal audit~~ (**done**), then management review.
+5. **QMS** — ~~non-conformance + CAPA~~, ~~internal audit~~, ~~management review~~ — **the system is complete**.
    Last of the four not because it matters least, but because it is the heaviest consumer
    of everything above: documents, training records, the request engine and the audit
    trail. Built last, it is mostly composition.
@@ -285,7 +285,33 @@ action. It does not add a `*_history` table.
      verification, because a rule enforced anywhere else is one the verification can be reached
      without — and it applies in BOTH review directions, since a review the auditor may fail but not
      pass is still the auditor deciding. An `observer` is deliberately not an auditor for this: sitting
-     in to learn does not compromise a later review. This is the second, independent separation on the
+     in to learn does not compromise a later review.
+
+   Management review closed the system, and it is the module the whole roadmap's "mostly composition"
+   claim was about. Three decisions:
+
+   - **§9.3.2 IS A JOIN, not a table.** Every input the clause lists is something another register
+     already answers: nonconformities and corrective actions (c)(4) is the recurrence and
+     containment-overdue reports, audit results (c)(6) is the unlinked-findings report, the performance
+     of external providers (c)(7) is the vendor review gaps and unassessed spend, and the effectiveness
+     of actions on risks (e) is the untreated-risk report. `ManagementReviewService` asks those four
+     services and stores no copy — a second copy of "how many findings are overdue" disagrees with the
+     register within a day. `QmsModule` imports `IsmsModule` for exactly this and nothing else.
+   - **Holding a review FREEZES that join.** `management_reviews.inputs` is the composed bundle as it
+     stood on the day, because minutes have to show the numbers a decision was taken against. A live
+     re-read would turn "eleven findings overdue" into "three" once the backlog cleared and leave the
+     decision beside it unexplainable. This is the same frozen-versus-live split the reporting module
+     draws between a burndown and a velocity query. `jsonb` rather than columns because the bundle's
+     members change whenever a register adds a report — three did in three migrations — and a column
+     per metric would mean a migration each time with every historical row backfilled to a value
+     nobody measured. No API accepts `inputs`.
+   - **§9.3.2(a) is satisfied by construction.** "The status of actions from previous management
+     reviews" is the open actions of every OTHER review, and holding a review freezes that list into
+     its own inputs. Reviews are therefore held in scheduled order — a review cannot be held while an
+     earlier one is still outstanding, because "previous" has to be settled for the input to mean
+     anything. A review is never offered its own freshly-raised actions as history: that exclusion
+     survived four of five mutations and needed its own assertion to pin, which is recorded in the
+     spec. This is the second, independent separation on the
      same route, alongside "the verifier may not own the CAPA".
 
 **Not on this list, and blocking all of it for real users:** `infra/` has never been
@@ -413,6 +439,11 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **A route whose literal segment shares its shape with `:id` must be declared FIRST.** Nest matches
+  in declaration order, so `PATCH /management-reviews/actions/<uuid>` reaches `PATCH :id` with
+  `id = 'actions'` and `ParseUUIDPipe` turns it into a puzzling 400. Two-segment literals like
+  `severities` or `criticality-levels` have the same trap. An e2e test that actually calls the nested
+  route is the only thing that catches it — a unit test never sees the router.
 - **A correlated subquery in a `sql` template needs EXPLICIT qualification.** Drizzle qualifies a
   column inside `sql` only when the OUTER query has a join. Without one,
   `${child.parentId} = ${parent.id}` renders `WHERE "parent_id" = "id"` and BOTH bare names bind to the

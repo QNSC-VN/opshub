@@ -217,6 +217,21 @@ export const ErrorCodes = {
   INTERNAL_AUDIT_INVALID_WINDOW: 'INTERNAL_AUDIT_INVALID_WINDOW',
   /** The lead auditor is on the roster by construction and cannot be removed from it. */
   INTERNAL_AUDIT_LEAD_REQUIRED: 'INTERNAL_AUDIT_LEAD_REQUIRED',
+
+  // ── QMS management review ──────────────────────────────────────────────────
+  /** The transition is not legal from the review's current status. */
+  MANAGEMENT_REVIEW_NOT_IN_STATE: 'MANAGEMENT_REVIEW_NOT_IN_STATE',
+  /**
+   * An earlier review is still outstanding.
+   *
+   * §9.3.2(a) — the status of actions from PREVIOUS reviews — only means something if "previous" is
+   * settled, so reviews are held in the order they were scheduled.
+   */
+  MANAGEMENT_REVIEW_OUT_OF_ORDER: 'MANAGEMENT_REVIEW_OUT_OF_ORDER',
+  /** The review is closed or cancelled, so it accepts nothing further. */
+  MANAGEMENT_REVIEW_SETTLED: 'MANAGEMENT_REVIEW_SETTLED',
+  /** The transition is not legal from the action's current status. */
+  REVIEW_ACTION_NOT_IN_STATE: 'REVIEW_ACTION_NOT_IN_STATE',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

@@ -71,12 +71,16 @@ import {
   smallint,
   timestamp,
   index,
+  jsonb,
   uniqueIndex,
   primaryKey,
   pgSchema,
 } from 'drizzle-orm/pg-core';
 import {
   auditRoleEnum,
+  managementReviewActionCategoryEnum,
+  managementReviewActionStatusEnum,
+  managementReviewStatusEnum,
   capaRootCauseMethodEnum,
   capaStatusEnum,
   internalAuditStatusEnum,
@@ -357,5 +361,140 @@ export const internalAuditAuditors = qmsSchema.table(
     pk: primaryKey({ columns: [t.internalAuditId, t.auditorId] }),
     /** "What has this person audited?" — the direction the impartiality rule reads from. */
     auditorIdx: index('ix_internal_audit_auditor_person').on(t.auditorId),
+  }),
+);
+
+/**
+ * A management review — ISO 9001 §9.3.
+ *
+ * WHY THIS MODULE IS MOSTLY A JOIN
+ * --------------------------------
+ * §9.3.2 lists what a review must CONSIDER, and every item is something another register already
+ * answers: non-conformities and corrective actions (§9.3.2(c)(4)) is the recurrence and
+ * containment-overdue reports, audit results (c)(6) is the audit programme and its unlinked findings,
+ * the performance of external providers (c)(7) is the vendor review gaps and unassessed spend, and the
+ * effectiveness of actions taken on risks (e) is the untreated-risk report. So this module composes
+ * them rather than storing its own copies — a second copy of "how many findings are overdue" would
+ * disagree with the register within a day.
+ *
+ * WHAT IT DOES STORE IS THE SNAPSHOT
+ * ----------------------------------
+ * `inputs` is those composed reports FROZEN at the moment the review was held. That is the one thing
+ * the join cannot give you: minutes have to show what the numbers WERE on the day, and a live query
+ * re-reads them as they are now — so a review that recorded "eleven findings overdue" would silently
+ * become "three" once the backlog was cleared, and the decision recorded next to it would stop making
+ * sense. This is the same frozen-versus-live split the reporting module draws between a burndown and a
+ * velocity query, and for the same reason.
+ *
+ * NO ATTENDANCE REGISTER, DELIBERATELY. §9.3 requires top management to review, evidenced here by
+ * `chair_id` and the minutes document. A full attendee roster is good practice rather than a clause
+ * requirement, and the audit module already carries the one roster that IS load-bearing (its
+ * impartiality rule reads it). Adding a second link table nothing enforces against would be shape
+ * without a rule.
+ *
+ * INVARIANTS
+ * ----------
+ * 1. HOLDING A REVIEW FREEZES ITS INPUTS — `ck_mr_held_pair`. A review recorded as held with no
+ *    snapshot is a meeting nobody can reconstruct, and §9.3.2 is a list of things that must have been
+ *    considered.
+ *
+ * 2. CLOSING NEEDS THE MINUTES AND A CONCLUSION — `ck_mr_closed_pair`. §9.3.3 asks for documented
+ *    outputs; a review with none has produced nothing.
+ *
+ * 3. A CANCELLED REVIEW WAS NEVER HELD — `ck_mr_cancelled_clean`, and it says why.
+ */
+export const managementReviews = qmsSchema.table(
+  'management_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Quoted in the minutes and in every action it raises, e.g. `MR-2026-H1`. */
+    reference: varchar('reference', { length: 40 }).notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    /**
+     * The period under review, as free text — "H1 2026", "the 2026 calendar year".
+     *
+     * Free text rather than a date range because §9.3.1 says "at planned intervals" and leaves the
+     * interval to the organisation; a range would invite arithmetic the clause does not ask for.
+     */
+    period: varchar('period', { length: 120 }).notNull(),
+
+    status: managementReviewStatusEnum('status').notNull().default('scheduled'),
+
+    /**
+     * Who chaired it. NOT NULL — §9.3 is a TOP MANAGEMENT obligation, and a review with nobody
+     * accountable for having held it is the box-ticking the clause exists to prevent.
+     */
+    chairId: uuid('chair_id').notNull(),
+
+    scheduledFor: date('scheduled_for'),
+    heldOn: date('held_on'),
+
+    /**
+     * The §9.3.2 inputs, frozen at the moment the review was held.
+     *
+     * Written by the service from the live reports, never supplied by a caller — the same rule that
+     * keeps risk scores generated and vendor review dates computed. See the module docblock for why it
+     * is frozen rather than re-read.
+     */
+    inputs: jsonb('inputs').$type<Record<string, unknown>>(),
+
+    /** What the review concluded. Required to close. */
+    conclusion: text('conclusion'),
+    /** The minutes as a controlled document. Required to close — §9.3.3 wants documented outputs. */
+    minutesDocumentId: uuid('minutes_document_id'),
+
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    /** Why it did not happen. Required to cancel. */
+    cancelReason: text('cancel_reason'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    referenceIdx: uniqueIndex('uq_management_review_reference').on(t.reference),
+    statusIdx: index('ix_management_review_status').on(t.status),
+    /** The programme view, and the ordering rule: reviews are held in the order they were scheduled. */
+    scheduledIdx: index('ix_management_review_scheduled').on(t.scheduledFor),
+    chairIdx: index('ix_management_review_chair').on(t.chairId),
+  }),
+);
+
+/**
+ * A decision or action out of a management review — §9.3.3.
+ *
+ * `category` is the clause's own closed list, so an action cannot be filed as unclassifiable. These
+ * rows are also what §9.3.2(a) — "the status of actions from previous management reviews" — reads: the
+ * next review's frozen inputs include every action of an earlier review that is still open, which is
+ * how the clause is satisfied by construction rather than by somebody remembering to look.
+ */
+export const managementReviewActions = qmsSchema.table(
+  'management_review_actions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    managementReviewId: uuid('management_review_id')
+      .notNull()
+      .references(() => managementReviews.id, { onDelete: 'cascade' }),
+
+    category: managementReviewActionCategoryEnum('category').notNull(),
+    description: text('description').notNull(),
+
+    /** Accountable for delivering it. NOT NULL — an unowned action is a wish. */
+    ownerId: uuid('owner_id').notNull(),
+    dueOn: date('due_on'),
+
+    status: managementReviewActionStatusEnum('status').notNull().default('open'),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    /** What was done, or why it was abandoned. Required for both terminal states. */
+    outcomeNote: text('outcome_note'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    /** "What came out of this review?" and the closure gate's own query. */
+    reviewIdx: index('ix_mr_action_review').on(t.managementReviewId, t.status),
+    ownerIdx: index('ix_mr_action_owner').on(t.ownerId),
+    /** The overdue report, and the carried-forward input for the next review. */
+    dueIdx: index('ix_mr_action_due').on(t.status, t.dueOn),
   }),
 );

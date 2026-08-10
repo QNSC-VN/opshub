@@ -4312,6 +4312,285 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/management-reviews/agenda': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The §9.3.2 inputs, assembled live from the registers that own them
+     * @description Every item the clause lists is something another register already answers: non-conformities and corrective actions (c)(4), audit results (c)(6), the performance of external providers (c)(7), the effectiveness of actions on risks (e), and the status of actions from previous reviews (a). This composes them rather than storing copies. COUNTS AND REFERENCES ONLY — the clause asks for trends and aggregate performance, and returning the registers' rows here would make this a way around their own permissions.
+     */
+    get: operations['ManagementReviewController_agenda'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/actions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Actions out of management reviews
+     * @description Soonest due first, undated last. Each row carries the review it came out of. `dueOnOrBefore` with today's date is the overdue follow-up list.
+     */
+    get: operations['ManagementReviewController_listActions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/actions/carried-forward': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Open actions from earlier reviews — the §9.3.2(a) input
+     * @description Most overdue first. The next review freezes this list into its own inputs when it is held, which is how "the status of actions from previous management reviews" is satisfied by construction rather than by somebody remembering to look.
+     */
+    get: operations['ManagementReviewController_carriedForward'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The management review programme
+     * @description Soonest scheduled first, undated last. Each row carries its action counts.
+     */
+    get: operations['ManagementReviewController_list'];
+    put?: never;
+    /**
+     * Schedule a review
+     * @description The chair is required: §9.3 is a TOP MANAGEMENT obligation, and a review with nobody accountable for having held it is the box-ticking the clause exists to prevent.
+     */
+    post: operations['ManagementReviewController_schedule'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/actions/{actionId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Correct an open action */
+    patch: operations['ManagementReviewController_updateAction'];
+    trace?: never;
+  };
+  '/v1/management-reviews/actions/{actionId}/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Begin work on an action */
+    post: operations['ManagementReviewController_startAction'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/actions/{actionId}/complete': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record an action as done
+     * @description The outcome note is required. Until an action is completed or cancelled it stays on the carried-forward list and lands in the NEXT review's frozen inputs, which is §9.3.2(a).
+     */
+    post: operations['ManagementReviewController_completeAction'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/actions/{actionId}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Abandon an action, with a reason */
+    post: operations['ManagementReviewController_cancelAction'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * One review, with its frozen inputs once held
+     * @description `inputs` is the §9.3.2 bundle as it stood on the day. A live re-read would silently turn "eleven findings overdue" into "three" once the backlog cleared, and the decision recorded beside it would stop making sense.
+     */
+    get: operations['ManagementReviewController_getOne'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Correct a scheduled review
+     * @description Only while `scheduled`: after it is held, the title and period label a snapshot that was frozen under them. `inputs` is not settable at any point — it is composed by the service.
+     */
+    patch: operations['ManagementReviewController_update'];
+    trace?: never;
+  };
+  '/v1/management-reviews/{id}/agenda': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The agenda for THIS review, excluding its own actions
+     * @description The same composition as `GET /management-reviews/agenda`, minus the actions this review itself raised — at the moment it is held those are outputs it has just produced, not history it is reviewing. This is exactly what `hold` freezes.
+     */
+    get: operations['ManagementReviewController_agendaFor'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/{id}/hold': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Hold the review, FREEZING its §9.3.2 inputs
+     * @description The snapshot is assembled by the server and written in the same transaction as the transition, so a held review always has one. Refused while a review scheduled EARLIER is still outstanding: §9.3.2(a) asks this review for the status of actions from previous ones, which only means something if "previous" is settled.
+     */
+    post: operations['ManagementReviewController_hold'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/{id}/close': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Issue the minutes (§9.3.3)
+     * @description Its own state, not a timestamp on holding: a meeting that happened and whose minutes were never issued is not a completed review. Both the conclusion and the minutes document are required, and the review raises no further actions afterwards — one added then would be an output those minutes do not contain.
+     */
+    post: operations['ManagementReviewController_close'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record a review that did not happen
+     * @description Only from `scheduled`. Once a review has been held its inputs are frozen and its actions raised, and none of that is cancellable.
+     */
+    post: operations['ManagementReviewController_cancel'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/management-reviews/{id}/actions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Raise a decision or action out of the review
+     * @description `category` is §9.3.3's own closed list — improvement, a change to the QMS, or a resource need. There is deliberately no `other`: that value would let every action be filed as unclassifiable, which is what the list exists to prevent. Refused once the review is closed.
+     */
+    post: operations['ManagementReviewController_raiseAction'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/ai/chat': {
     parameters: {
       query?: never;
@@ -6413,6 +6692,152 @@ export interface components {
       status: string;
       ownerId: string;
       detectedAt: string;
+    };
+    CarriedForwardActionResponseDto: {
+      id: string;
+      reviewReference: string;
+      category: string;
+      description: string;
+      ownerId: string;
+      status: string;
+      dueOn: string | null;
+      /** @description Days past its due date, or null when it has none. */
+      daysOverdue: number | null;
+    };
+    ReviewAgendaResponseDto: {
+      previousActions: components['schemas']['CarriedForwardActionResponseDto'][];
+      nonconformities: {
+        containmentOverdue: number;
+        overdueReferences: string[];
+        recurringProcessAreas: string[];
+      };
+      audits: {
+        findingsNotLinkedToAnAudit: number;
+        unlinkedReferences: string[];
+      };
+      externalProviders: {
+        reviewGaps: number;
+        gapReferences: string[];
+        criticalWithoutRisk: number;
+        unassessedSpendLines: number;
+      };
+      risks: {
+        untreated: number;
+        untreatedReferences: string[];
+      };
+      assembledAt: string;
+    };
+    ReviewActionRowResponseDto: {
+      reviewReference: string;
+      reviewPeriod: string;
+      id: string;
+      managementReviewId: string;
+      category: string;
+      description: string;
+      ownerId: string;
+      dueOn: string | null;
+      status: string;
+      completedAt: string | null;
+      outcomeNote: string | null;
+      createdAt: string;
+    };
+    ManagementReviewRowResponseDto: {
+      actionCount: number;
+      openActionCount: number;
+      id: string;
+      reference: string;
+      title: string;
+      period: string;
+      status: string;
+      chairId: string;
+      scheduledFor: string | null;
+      heldOn: string | null;
+      /** @description The §9.3.2 inputs, frozen when the review was held. Null until then. Never settable. */
+      inputs: {
+        [key: string]: unknown;
+      } | null;
+      conclusion: string | null;
+      minutesDocumentId: string | null;
+      closedAt: string | null;
+      cancelReason: string | null;
+      createdAt: string;
+    };
+    ScheduleReviewDto: {
+      reference: string;
+      title: string;
+      period: string;
+      /** Format: uuid */
+      chairId: string;
+      scheduledFor?: string | null;
+    };
+    ManagementReviewResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      period: string;
+      status: string;
+      chairId: string;
+      scheduledFor: string | null;
+      heldOn: string | null;
+      /** @description The §9.3.2 inputs, frozen when the review was held. Null until then. Never settable. */
+      inputs: {
+        [key: string]: unknown;
+      } | null;
+      conclusion: string | null;
+      minutesDocumentId: string | null;
+      closedAt: string | null;
+      cancelReason: string | null;
+      createdAt: string;
+    };
+    UpdateReviewActionDto: {
+      /** @enum {string} */
+      category?: 'improvement' | 'qms_change' | 'resource_need';
+      description?: string;
+      /** Format: uuid */
+      ownerId?: string;
+      dueOn?: string | null;
+    };
+    ReviewActionResponseDto: {
+      id: string;
+      managementReviewId: string;
+      category: string;
+      description: string;
+      ownerId: string;
+      dueOn: string | null;
+      status: string;
+      completedAt: string | null;
+      outcomeNote: string | null;
+      createdAt: string;
+    };
+    ReviewActionOutcomeDto: {
+      outcomeNote: string;
+    };
+    UpdateReviewDto: {
+      title?: string;
+      period?: string;
+      /** Format: uuid */
+      chairId?: string;
+      scheduledFor?: string | null;
+    };
+    HoldReviewDto: {
+      /** Format: date */
+      heldOn?: string;
+    };
+    CloseReviewDto: {
+      conclusion: string;
+      /** Format: uuid */
+      minutesDocumentId: string;
+    };
+    CancelReviewDto: {
+      reason: string;
+    };
+    RaiseReviewActionDto: {
+      /** @enum {string} */
+      category: 'improvement' | 'qms_change' | 'resource_need';
+      description: string;
+      /** Format: uuid */
+      ownerId: string;
+      dueOn?: string | null;
     };
     ChatRequestDto: {
       messages: {
@@ -19613,6 +20038,893 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_agenda: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewAgendaResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_listActions: {
+    parameters: {
+      query?: {
+        status?: 'open' | 'in_progress' | 'completed' | 'cancelled';
+        category?: 'improvement' | 'qms_change' | 'resource_need';
+        ownerId?: string;
+        managementReviewId?: string;
+        openOnly?: boolean;
+        dueOnOrBefore?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['ReviewActionRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_carriedForward: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CarriedForwardActionResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_list: {
+    parameters: {
+      query?: {
+        status?: 'scheduled' | 'held' | 'closed' | 'cancelled';
+        chairId?: string;
+        openOnly?: boolean;
+        scheduledOnOrBefore?: string;
+        search?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['ManagementReviewRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_schedule: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ScheduleReviewDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagementReviewResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_updateAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        actionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateReviewActionDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewActionResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_startAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        actionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewActionResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_completeAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        actionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviewActionOutcomeDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewActionResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_cancelAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        actionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviewActionOutcomeDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewActionResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_getOne: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagementReviewResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateReviewDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagementReviewResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_agendaFor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewAgendaResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_hold: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['HoldReviewDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagementReviewResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_close: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CloseReviewDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagementReviewResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_cancel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CancelReviewDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagementReviewResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ManagementReviewController_raiseAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RaiseReviewActionDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewActionResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
         headers: {
           [name: string]: unknown;
         };

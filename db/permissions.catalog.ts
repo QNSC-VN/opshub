@@ -192,6 +192,19 @@ export const PERMISSION = {
    */
   INTERNAL_AUDIT_MANAGE: 'internal_audit.manage',
 
+  // ── QMS management review ──────────────────────────────────────────────────
+  /**
+   * View the review programme, its minutes, its actions and the assembled §9.3.2 agenda.
+   *
+   * The agenda COMPOSES the other registers, so this code reveals how much is outstanding across the
+   * ISMS and QMS and which items by reference — but not their owners, their suppliers' commercial
+   * detail or any classification. §9.3.2 asks for trends and aggregate performance, and the narrowing
+   * is what stops this becoming a way around the registers' own permissions.
+   */
+  MANAGEMENT_REVIEW_READ: 'management_review.read',
+  /** Schedule, hold, close and cancel reviews, and raise and track the actions out of them. */
+  MANAGEMENT_REVIEW_MANAGE: 'management_review.manage',
+
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
   ASSET_WRITE: 'asset.write',
@@ -316,6 +329,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.CAPA_VERIFY]: 'Sign off that a corrective action was effective',
   [PERMISSION.INTERNAL_AUDIT_READ]: 'View the internal audit programme and its findings',
   [PERMISSION.INTERNAL_AUDIT_MANAGE]: 'Plan, roster, run, report and close internal audits',
+  [PERMISSION.MANAGEMENT_REVIEW_READ]: 'View management reviews, their agenda and their actions',
+  [PERMISSION.MANAGEMENT_REVIEW_MANAGE]: 'Schedule, hold and close management reviews',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -476,6 +491,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.CAPA_MANAGE,
     PERMISSION.INTERNAL_AUDIT_READ,
     PERMISSION.INTERNAL_AUDIT_MANAGE,
+    PERMISSION.MANAGEMENT_REVIEW_READ,
+    PERMISSION.MANAGEMENT_REVIEW_MANAGE,
     // Deliberately WITHOUT `CAPA_VERIFY`, on the same reasoning that keeps `RISK_ACCEPT`,
     // `INFORMATION_ASSET_DECLASSIFY` and `VENDOR_APPROVE` out of every bundle.
     // Deliberately WITHOUT `VENDOR_APPROVE`, on the same reasoning that keeps `RISK_ACCEPT` and
@@ -564,6 +581,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.VENDOR_READ,
     PERMISSION.NONCONFORMANCE_READ,
     PERMISSION.INTERNAL_AUDIT_READ,
+    PERMISSION.MANAGEMENT_REVIEW_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

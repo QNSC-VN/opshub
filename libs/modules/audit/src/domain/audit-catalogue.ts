@@ -227,6 +227,19 @@ export const AUDIT_ACTION = {
   INTERNAL_AUDIT_AUDITOR_ASSIGNED: 'internal_audit.auditor_assigned',
   INTERNAL_AUDIT_AUDITOR_REMOVED: 'internal_audit.auditor_removed',
 
+  // ── QMS management review ──
+  MANAGEMENT_REVIEW_SCHEDULED: 'management_review.scheduled',
+  MANAGEMENT_REVIEW_UPDATED: 'management_review.updated',
+  /** Held, and its §9.3.2 inputs frozen. The snapshot is the evidence, so this is its own action. */
+  MANAGEMENT_REVIEW_HELD: 'management_review.held',
+  MANAGEMENT_REVIEW_CLOSED: 'management_review.closed',
+  MANAGEMENT_REVIEW_CANCELLED: 'management_review.cancelled',
+  REVIEW_ACTION_RAISED: 'review_action.raised',
+  REVIEW_ACTION_UPDATED: 'review_action.updated',
+  REVIEW_ACTION_STARTED: 'review_action.started',
+  REVIEW_ACTION_COMPLETED: 'review_action.completed',
+  REVIEW_ACTION_CANCELLED: 'review_action.cancelled',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -307,6 +320,8 @@ export const AUDIT_RESOURCE = {
   NONCONFORMANCE: 'nonconformance',
   CAPA: 'capa',
   INTERNAL_AUDIT: 'internal_audit',
+  MANAGEMENT_REVIEW: 'management_review',
+  REVIEW_ACTION: 'review_action',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',
