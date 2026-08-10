@@ -126,6 +126,17 @@ export const FIXTURE_TABLES = [
   'isms.soa_entries',
   'isms.controls',
   'isms.risks',
+  // The information asset register. `uq_information_asset_reference` is global, so a leftover makes
+  // the next run's first registration a 409 nobody wrote. History and device links cascade from the
+  // register; listed for intent.
+  //
+  // `isms.classification_levels` is NOT here and must not be: it is reference data seeded by
+  // migration 0022, and `information_assets.classification` is an FK to it. Truncating it would
+  // leave the register unusable until the next migration run, with the failure surfacing as a
+  // foreign-key violation on an unrelated spec's first insert.
+  'isms.asset_classification_history',
+  'isms.information_asset_devices',
+  'isms.information_assets',
   // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this
   // table, but listing it explicitly keeps the intent visible rather than incidental.
   'storage.attachments',

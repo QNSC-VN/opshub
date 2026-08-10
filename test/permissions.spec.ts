@@ -143,6 +143,19 @@ describe('permissionGrants', () => {
     expect(permissionGrants(['access_request.*'], PERMISSION.ASSET_READ)).toBe(false);
   });
 
+  it('keeps the device inventory and the information asset register apart', () => {
+    // These two modules genuinely end in the same word, and the device inventory
+    // wildcard is held by IT and the service desk. If matching were a prefix or a
+    // substring test rather than an exact module comparison, `asset.*` would hand
+    // them the classification register — including who owns which personal-data
+    // system — and nothing else in the suite would notice.
+    expect(permissionGrants(['asset.*'], PERMISSION.INFORMATION_ASSET_READ)).toBe(false);
+    expect(permissionGrants(['asset.*'], PERMISSION.INFORMATION_ASSET_DECLASSIFY)).toBe(false);
+    // And the reverse: holding the register must not confer the hardware inventory.
+    expect(permissionGrants(['information_asset.*'], PERMISSION.ASSET_WRITE)).toBe(false);
+    expect(permissionGrants(['information_asset.*'], PERMISSION.INFORMATION_ASSET_READ)).toBe(true);
+  });
+
   it('treats a sub-namespaced code as belonging to its module', () => {
     expect(permissionGrants(['workforce.*'], PERMISSION.WORKFORCE_LEAVE_REVIEW)).toBe(true);
   });

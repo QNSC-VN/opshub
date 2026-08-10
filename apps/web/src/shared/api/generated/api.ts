@@ -3184,6 +3184,246 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/information-assets/classification-levels': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The classification labels, their ranking and the handling each demands
+     * @description The RANK here is authoritative. Nothing should infer the ordering from the order the labels happen to appear in, in this response or anywhere else.
+     */
+    get: operations['InformationAssetController_levels'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/reports/classification-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The register by classification
+     * @description One line per level, including levels holding nothing — "we hold nothing restricted" is an answer worth printing. Retired assets are excluded: this is the current inventory.
+     */
+    get: operations['InformationAssetController_summary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/reports/device-holdings/{deviceAssetId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * What one device holds, worst classification first
+     * @description The question asked the moment a laptop is reported lost or stolen. Takes a DEVICE id from the hardware inventory. An empty list means nothing registered was held on it — which is deliberately distinguishable from a 404 the caller would have to interpret.
+     */
+    get: operations['InformationAssetController_deviceHoldings'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The information asset register
+     * @description Most protected first. `ownerId` matches the owner OR the custodian. Retired assets are excluded unless `includeRetired` is set, because the register means the current inventory.
+     */
+    get: operations['InformationAssetController_list'];
+    put?: never;
+    /**
+     * Register an information asset and classify it
+     * @description The classification and the reason for it are both required: the reason becomes the first row of the classification history, which is what lets the current label be accounted for.
+     */
+    post: operations['InformationAssetController_register'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One information asset */
+    get: operations['InformationAssetController_getOne'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Correct an asset and its CIA rating
+     * @description The classification is NOT settable here — see `reclassify` and `declassify`, which write history and, downwards, need a separate permission.
+     */
+    patch: operations['InformationAssetController_update'];
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/reclassify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Raise the classification
+     * @description Refuses a REDUCTION with `INFORMATION_ASSET_DECLASSIFY_REQUIRED`. Lowering protection goes through `declassify`, which needs `information_asset.declassify` — the split exists so that holding `manage` does not silently include the power to make information easier to reach.
+     */
+    post: operations['InformationAssetController_reclassify'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/declassify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Lower the classification
+     * @description The only route that will reduce protection. Held by nobody by default — like `risk.accept`, `information_asset.declassify` is in no role bundle and is granted deliberately. The reason is recorded in the history and the change is audited as its own action.
+     */
+    post: operations['InformationAssetController_declassify'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/classification-history': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Every classification this asset has carried, and why
+     * @description Oldest first. The first row has a null `fromLevel` — that is the asset being classified when it was registered. Append-only: the application holds no privilege to update or delete these rows.
+     */
+    get: operations['InformationAssetController_history'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/reviewed': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Record that the entry has been reviewed */
+    post: operations['InformationAssetController_markReviewed'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/retire': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retire an asset
+     * @description The row stays, with its history and device links: a risk assessment and an incident from last year reference it. Retired assets accept no further changes.
+     */
+    post: operations['InformationAssetController_retire'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/devices': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The devices recorded as holding this information asset */
+    get: operations['InformationAssetController_devices'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/information-assets/{id}/devices/{deviceAssetId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Record that a device holds this information asset
+     * @description Idempotent — the pair is the natural key, so linking twice is still one link. The device cannot then be deleted from the inventory while the link stands, which is deliberate: "we disposed of the laptop" is the moment somebody should be asked what was on it.
+     */
+    put: operations['InformationAssetController_linkDevice'];
+    post?: never;
+    /** Record that a device no longer holds it */
+    delete: operations['InformationAssetController_unlinkDevice'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/ai/chat': {
     parameters: {
       query?: never;
@@ -4675,6 +4915,153 @@ export interface components {
     NotifyRegulatorDto: {
       /** Format: date-time */
       notifiedAt?: string;
+    };
+    ClassificationLevelResponseDto: {
+      code: string;
+      /** @description Higher is more protected. THE ordering — the enum's declaration order is not authoritative. */
+      rank: number;
+      label: string;
+      handlingRules: string;
+      encryptionRequired: boolean;
+    };
+    ClassificationSummaryResponseDto: {
+      classification: string;
+      rank: number;
+      assets: number;
+      personalDataAssets: number;
+      onDevices: number;
+    };
+    DeviceHoldingResponseDto: {
+      informationAssetId: string;
+      reference: string;
+      name: string;
+      classification: string;
+      classificationRank: number;
+      personalData: boolean;
+      ownerId: string;
+    };
+    InformationAssetRowResponseDto: {
+      /** @description Resolved from `isms.classification_levels` in the same query as the row. */
+      classificationRank: number;
+      encryptionRequired: boolean;
+      deviceCount: number;
+      id: string;
+      reference: string;
+      name: string;
+      description: string | null;
+      type: string;
+      classification: string;
+      ownerId: string;
+      custodianId: string | null;
+      confidentiality: number;
+      integrity: number;
+      availability: number;
+      personalData: boolean;
+      location: string | null;
+      retentionMonths: number | null;
+      lastReviewedAt: string | null;
+      reviewDueOn: string | null;
+      retiredAt: string | null;
+      createdAt: string;
+    };
+    RegisterInformationAssetDto: {
+      reference: string;
+      name: string;
+      description?: string | null;
+      /** @enum {string} */
+      type:
+        | 'system'
+        | 'application'
+        | 'database'
+        | 'dataset'
+        | 'repository'
+        | 'document_set'
+        | 'physical_record'
+        | 'service'
+        | 'other';
+      /** @enum {string} */
+      classification: 'public' | 'internal' | 'confidential' | 'restricted';
+      classificationReason: string;
+      /** Format: uuid */
+      ownerId: string;
+      custodianId?: string | null;
+      confidentiality: number;
+      integrity: number;
+      availability: number;
+      personalData?: boolean;
+      location?: string | null;
+      retentionMonths?: number | null;
+      reviewDueOn?: string | null;
+    };
+    InformationAssetResponseDto: {
+      id: string;
+      reference: string;
+      name: string;
+      description: string | null;
+      type: string;
+      classification: string;
+      ownerId: string;
+      custodianId: string | null;
+      confidentiality: number;
+      integrity: number;
+      availability: number;
+      personalData: boolean;
+      location: string | null;
+      retentionMonths: number | null;
+      lastReviewedAt: string | null;
+      reviewDueOn: string | null;
+      retiredAt: string | null;
+      createdAt: string;
+    };
+    UpdateInformationAssetDto: {
+      name?: string;
+      description?: string | null;
+      /** @enum {string} */
+      type?:
+        | 'system'
+        | 'application'
+        | 'database'
+        | 'dataset'
+        | 'repository'
+        | 'document_set'
+        | 'physical_record'
+        | 'service'
+        | 'other';
+      /** Format: uuid */
+      ownerId?: string;
+      custodianId?: string | null;
+      confidentiality?: number;
+      integrity?: number;
+      availability?: number;
+      personalData?: boolean;
+      location?: string | null;
+      retentionMonths?: number | null;
+      reviewDueOn?: string | null;
+    };
+    ReclassifyDto: {
+      /** @enum {string} */
+      classification: 'public' | 'internal' | 'confidential' | 'restricted';
+      reason: string;
+    };
+    ClassificationChangeResponseDto: {
+      id: string;
+      informationAssetId: string;
+      /** @description Null on the first row: the asset was classified when it was registered. */
+      fromLevel: string | null;
+      toLevel: string;
+      reason: string;
+      changedBy: string;
+      changedAt: string;
+    };
+    MarkAssetReviewedDto: {
+      reviewDueOn?: string | null;
+    };
+    InformationAssetDeviceResponseDto: {
+      deviceAssetId: string;
+      assetTag: string;
+      type: string;
+      status: string;
+      assignedTo: string | null;
     };
     ChatRequestDto: {
       messages: {
@@ -14383,6 +14770,744 @@ export interface operations {
       };
       /** @description Unprocessable — business rule violation */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_levels: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClassificationLevelResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_summary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClassificationSummaryResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_deviceHoldings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        deviceAssetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeviceHoldingResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_list: {
+    parameters: {
+      query?: {
+        type?:
+          | 'system'
+          | 'application'
+          | 'database'
+          | 'dataset'
+          | 'repository'
+          | 'document_set'
+          | 'physical_record'
+          | 'service'
+          | 'other';
+        classification?: 'public' | 'internal' | 'confidential' | 'restricted';
+        ownerId?: string;
+        personalDataOnly?: boolean;
+        reviewDueOnOrBefore?: string;
+        includeRetired?: boolean;
+        search?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['InformationAssetRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_register: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RegisterInformationAssetDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_getOne: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateInformationAssetDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_reclassify: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReclassifyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_declassify: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReclassifyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_history: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClassificationChangeResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_markReviewed: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MarkAssetReviewedDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_retire: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_devices: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InformationAssetDeviceResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_linkDevice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        deviceAssetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InformationAssetController_unlinkDevice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        deviceAssetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

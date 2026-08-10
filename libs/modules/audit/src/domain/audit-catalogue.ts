@@ -162,6 +162,22 @@ export const AUDIT_ACTION = {
   INCIDENT_EVENT_RECORDED: 'incident_event.recorded',
   INCIDENT_REGULATOR_NOTIFIED: 'incident.regulator_notified',
 
+  // ── ISMS information assets ──
+  INFORMATION_ASSET_REGISTERED: 'information_asset.registered',
+  INFORMATION_ASSET_UPDATED: 'information_asset.updated',
+  /** Protection RAISED. Separate from the reduction below: they are read for opposite reasons. */
+  INFORMATION_ASSET_RECLASSIFIED: 'information_asset.reclassified',
+  /**
+   * Protection REDUCED — its own action, because this is the one change to the register that makes
+   * information easier to reach, and "show me every declassification this quarter" has to be a query
+   * over the audit trail rather than a filter somebody remembers to apply.
+   */
+  INFORMATION_ASSET_DECLASSIFIED: 'information_asset.declassified',
+  INFORMATION_ASSET_REVIEWED: 'information_asset.reviewed',
+  INFORMATION_ASSET_RETIRED: 'information_asset.retired',
+  INFORMATION_ASSET_DEVICE_LINKED: 'information_asset.device_linked',
+  INFORMATION_ASSET_DEVICE_UNLINKED: 'information_asset.device_unlinked',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -237,6 +253,7 @@ export const AUDIT_RESOURCE = {
   CONTROL: 'control',
   SOA_ENTRY: 'soa_entry',
   INCIDENT: 'incident',
+  INFORMATION_ASSET: 'information_asset',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

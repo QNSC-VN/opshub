@@ -14,7 +14,7 @@ says something is absent, that was checked.
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
-| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop | Asset classification, vendor risk                                                                                    |
+| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings | Vendor risk                                                                                    |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
@@ -107,8 +107,8 @@ action. It does not add a `*_history` table.
    Training was also the first upload surface that ACCUMULATES, which is why it brought
    `storage.attachments` and the policy descriptors with it — see the upload section below.
 
-4. **ISMS** — ~~risk register~~, ~~controls / Statement of Applicability~~, ~~incidents~~
-   (all **done**), then asset classification and vendor risk.
+4. **ISMS** — ~~risk register~~, ~~controls / Statement of Applicability~~, ~~incidents~~,
+   ~~asset classification~~ (all **done**), then vendor risk.
    Reuses compliance findings, the asset inventory, the access-control model and the
    document module, so most of its foundation is already here.
 
@@ -155,6 +155,47 @@ action. It does not add a `*_history` table.
    - **The 72-hour GDPR clock is derived in ONE query, not stored.** It was first written as a
      generated column and Postgres refused it: `timestamptz + interval` is only STABLE, and a
      generated column must be IMMUTABLE. See the checklist entry below.
+
+   Asset classification came next, and the first decision was the one worth recording: it is a
+   NEW table, not columns on `assets.assets`.
+
+   - **`assets.assets` is the DEVICE inventory, not the asset register.** Asset tag, manufacturer,
+     serial number, MDM device id, warranty expiry, a photo of the physical thing, and a status
+     that runs `in_stock` → `assigned` → `in_repair` → `retired` → `lost`. An information asset is
+     a payroll system, a customer database, a room of signed contracts. Widening the device table
+     would have meant a fabricated `asset_tag` for "Customer CRM", `serial_number` and
+     `warranty_expiry` permanently null, and a status enum that lies — a database is never
+     `in_stock`. The tempting part was that `isms.risks.asset_id` and `isms.incidents.asset_id`
+     ALREADY point at `assets.assets`, which looks like a reason to extend it; both still mean a
+     device, and a lost-laptop incident reaches classification through
+     `isms.information_asset_devices` rather than through a second nullable pointer.
+   - **The link to hardware is a table, and it earns its place.** One laptop holds several
+     information assets and one system lives on many laptops — but the real payoff is the question
+     security asks the moment a device goes missing: WHAT WAS ON IT.
+     `GET /information-assets/reports/device-holdings/:deviceAssetId` answers it worst-first.
+   - **The RANK lives in a column, never in the enum's declaration order.** `isms.classification_levels`
+     is keyed BY the enum, so a level and a label are one thing, and it is also where the handling
+     rules live so they are stated once instead of copied per asset. Postgres does sort an enum by
+     declaration order, which is exactly what makes relying on it dangerous: it appears to work
+     until somebody appends a label and silently makes it the highest. The unit spec's stub returns
+     the levels out of order with non-contiguous ranks, so a hard-coded ordering cannot pass.
+   - **Direction is a permission, not a flag.** Raising a classification is `information_asset.manage`;
+     LOWERING it is `information_asset.declassify`, which — like `risk.accept` — is in no default
+     role bundle. Both routes call one private implementation, so there is a single set of rules,
+     and the manage route ALSO refuses a reduction with a code: without that, holding `manage`
+     would silently include the power to make information easier to reach. Coherence still
+     outranks permission — even the wildcard holder cannot declassify personal data to `internal`.
+   - **Only the extremes of the label-versus-rating relationship are constrained.** `public` with a
+     confidentiality rating above the floor is a contradiction; `restricted` rated 1 or 2 means the
+     label was applied without the assessment agreeing. The middle of the scale is left free
+     deliberately — a CHECK forcing an exact mapping would make the rating a restatement of the
+     label rather than an independent judgement.
+   - **`GRANT` could not narrow the append-only table; `REVOKE` had to.** Migration 0019 set
+     `ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT, UPDATE, DELETE` for the whole `isms`
+     schema, so every table created there arrives holding all four. A narrower GRANT in migration
+     0022 would have READ like a restriction and changed nothing. The same revoke was applied to
+     `isms.incident_events` from 0021, which had been append-only in its port's comments and fully
+     writable in the database since the day it shipped. See the checklist entry below.
 
 5. **QMS** — CAPA, non-conformance, internal audit, management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
@@ -248,6 +289,13 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **A narrower `GRANT` does not narrow anything.** Both `isms` and any schema covered by
+  migration 0012 carry `ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT, UPDATE, DELETE ON
+  TABLES`, so privileges are attached at `CREATE TABLE`, before any grant block in the migration
+  runs. To make a table read-only or append-only you must `REVOKE`. Check the result rather than
+  the intent: `SELECT has_table_privilege('opshub_app', 'schema.table', 'UPDATE')`. An append-only
+  table that the application can still UPDATE is a comment, not a guarantee — `isms.incident_events`
+  was exactly that for three migrations.
 - **`pnpm typecheck` is the gate, not `tsc -b`.** They read different tsconfigs: `tsc -b` follows the
   project references and can report a clean build while `tsc --noEmit -p tsconfig.json` — which is
   what `pnpm typecheck` and CI run — rejects a spec file it never looked at. An invalid cast in a
