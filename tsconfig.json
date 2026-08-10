@@ -54,6 +54,8 @@
       "@modules/contracts/*": ["./libs/modules/contracts/src/*"],
       "@modules/training": ["./libs/modules/training/src/index"],
       "@modules/training/*": ["./libs/modules/training/src/*"],
+      "@modules/isms": ["./libs/modules/isms/src/index"],
+      "@modules/isms/*": ["./libs/modules/isms/src/*"],
       "@modules/documents": ["./libs/modules/documents/src/index"],
       "@modules/documents/*": ["./libs/modules/documents/src/*"],
       "@modules/catalog": ["./libs/modules/catalog/src/index"],

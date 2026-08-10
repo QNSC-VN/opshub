@@ -131,6 +131,17 @@ export const AUDIT_ACTION = {
   TRAINING_CERTIFICATE_ATTACHED: 'training_record.certificate_attached',
   TRAINING_CERTIFICATE_REMOVED: 'training_record.certificate_removed',
 
+  // ── ISMS risk ──
+  RISK_IDENTIFIED: 'risk.identified',
+  RISK_ASSESSED: 'risk.assessed',
+  RISK_UPDATED: 'risk.updated',
+  RISK_TREATED: 'risk.treated',
+  RISK_ACCEPTED: 'risk.accepted',
+  RISK_ACCEPTANCE_REQUESTED: 'risk.acceptance_requested',
+  RISK_CLOSED: 'risk.closed',
+  RISK_TREATMENT_ADDED: 'risk_treatment.added',
+  RISK_TREATMENT_UPDATED: 'risk_treatment.updated',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -201,6 +212,8 @@ export const AUDIT_RESOURCE = {
   TRAINING_COURSE: 'training_course',
   TRAINING_REQUIREMENT: 'training_requirement',
   TRAINING_RECORD: 'training_record',
+  RISK: 'risk',
+  RISK_TREATMENT: 'risk_treatment',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

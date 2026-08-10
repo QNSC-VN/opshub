@@ -236,3 +236,38 @@ export const trainingRequirementKindEnum = pgEnum('training_requirement_kind', [
   'mandatory',
   'recommended',
 ]);
+
+/**
+ * Where a risk is in its lifecycle.
+ *
+ * `assessed` means scored but untreated; `treated` means the treatment plan is complete and a
+ * residual score has been recorded; `accepted` means somebody with authority chose to carry it.
+ * `closed` is terminal — the risk no longer applies (the asset was retired, the process changed).
+ *
+ * There is deliberately no `expiring` state: "due for review" is a question about `review_due_on`
+ * against today, so it is computed rather than stored. Compare `contract_status`, where the sweep
+ * exists because an expiry there changes what may happen next.
+ */
+export const riskStatusEnum = pgEnum('risk_status', [
+  'identified',
+  'assessed',
+  'treated',
+  'accepted',
+  'closed',
+]);
+
+/** The four ISO 27005 treatment options. Naming them exactly keeps an audit conversation short. */
+export const riskTreatmentDecisionEnum = pgEnum('risk_treatment_decision', [
+  'mitigate',
+  'accept',
+  'transfer',
+  'avoid',
+]);
+
+/** Lifecycle of one action within a treatment plan. */
+export const riskTreatmentStatusEnum = pgEnum('risk_treatment_status', [
+  'planned',
+  'in_progress',
+  'done',
+  'cancelled',
+]);

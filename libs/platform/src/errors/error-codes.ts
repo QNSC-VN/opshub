@@ -123,6 +123,14 @@ export const ErrorCodes = {
   TRAINING_INVALID_COMPLETION: 'TRAINING_INVALID_COMPLETION',
   /** Already verified, already revoked, or otherwise not in a state that transition allows. */
   TRAINING_RECORD_NOT_VERIFIABLE: 'TRAINING_RECORD_NOT_VERIFIABLE',
+
+  // ── ISMS risk ──────────────────────────────────────────────────────────────
+  /** Residual above inherent, or a factor outside 1..5 — the score CHECKs in words. */
+  RISK_INVALID_SCORE: 'RISK_INVALID_SCORE',
+  /** The transition needs the risk in a state it is not in. */
+  RISK_NOT_IN_STATE: 'RISK_NOT_IN_STATE',
+  /** Treatment actions are still open, so the risk cannot be declared treated. */
+  RISK_TREATMENT_OUTSTANDING: 'RISK_TREATMENT_OUTSTANDING',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

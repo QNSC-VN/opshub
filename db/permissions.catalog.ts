@@ -73,6 +73,20 @@ export const PERMISSION = {
    */
   TRAINING_MANAGE: 'training.manage',
 
+  // ── ISMS risk ──────────────────────────────────────────────────────────────
+  /** View the risk register, treatment plans and the review-due report. */
+  RISK_READ: 'risk.read',
+  /** Identify, score, treat and close risks. */
+  RISK_MANAGE: 'risk.manage',
+  /**
+   * Approve ACCEPTING a residual risk rather than treating it.
+   *
+   * Deliberately separate from `risk.manage`: accepting risk is the one ISMS decision that creates
+   * exposure by choice, and the person who assessed it should not be the person who signs it off.
+   * The request engine enforces that separation; this code decides who may be in the chain at all.
+   */
+  RISK_ACCEPT: 'risk.accept',
+
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
   ASSET_WRITE: 'asset.write',
@@ -177,6 +191,9 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.CONTRACT_COMPENSATION_READ]: 'See the pay figures on an employment contract',
   [PERMISSION.TRAINING_READ]: 'View training courses, requirements and records',
   [PERMISSION.TRAINING_MANAGE]: 'Manage courses and requirements; verify or revoke records',
+  [PERMISSION.RISK_READ]: 'View the risk register and treatment plans',
+  [PERMISSION.RISK_MANAGE]: 'Identify, score, treat and close risks',
+  [PERMISSION.RISK_ACCEPT]: 'Approve accepting a residual risk',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -306,6 +323,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.COMPLIANCE_READ,
     PERMISSION.SECURITY_VIEW,
     PERMISSION.SECURITY_MANAGE,
+    PERMISSION.RISK_READ,
+    PERMISSION.RISK_MANAGE,
     PERMISSION.AUDIT_READ,
     PERMISSION.REPORTS_READ,
     PERMISSION.RBAC_READ,
@@ -396,6 +415,7 @@ export const ROLE_PERMISSIONS: Record<
     // a signed contract, which does not require knowing what any of them pays.
     PERMISSION.CONTRACT_READ,
     PERMISSION.TRAINING_READ,
+    PERMISSION.RISK_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,
