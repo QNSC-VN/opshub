@@ -16,8 +16,10 @@ import {
 } from '@modules/audit';
 import {
   CAPA_REPOSITORY,
+  INTERNAL_AUDIT_REPOSITORY,
   NONCONFORMANCE_REPOSITORY,
   type ICapaRepository,
+  type IInternalAuditRepository,
   type INonconformanceRepository,
 } from '../domain/ports/qms.repository';
 import { isSettledCapa } from '../infrastructure/persistence/capa.drizzle-repository';
@@ -57,10 +59,18 @@ const ALLOWED_TRANSITIONS: Record<CapaStatus, readonly CapaStatus[]> = {
  *
  * WHAT THIS SERVICE OWNS THAT THE DATABASE CANNOT
  *
- * 1. SEPARATION OF DUTIES ON THE REVIEW. The verifier may not be the CAPA's owner. A CHECK could
- *    compare the two columns, but the rule is about the ACTOR performing the transition and the owner
- *    can change between plan and review — so it is enforced here, against the token, and the route
- *    carries `capa.verify` on top.
+ * 1. SEPARATION OF DUTIES ON THE REVIEW, in TWO independent forms.
+ *
+ *    The verifier may not be the CAPA's OWNER. A CHECK could compare the two columns, but the rule is
+ *    about the ACTOR performing the transition and the owner can change between plan and review — so
+ *    it is enforced here, against the token, and the route carries `capa.verify` on top.
+ *
+ *    The verifier may also not be somebody who AUDITED the finding — ISO 9001 §9.2.2(c), objectivity
+ *    and impartiality. That is a statement spanning three tables (the CAPA, its finding, and the
+ *    audit's roster), so it can only live here. It is a different rule from the first: an auditor who
+ *    owns nothing still found the problem, and somebody certifying that their own finding was
+ *    adequately fixed is exactly the conflict §9.2.2(c) names. An `observer` on the roster is NOT an
+ *    auditor for this purpose — sitting in to learn does not compromise a later review.
  *
  * 2. THE ANALYSIS GATE. A CAPA cannot be planned without a root cause, the method that established
  *    it, and a plan. The CHECKs enforce the columns; this restates them as codes and refuses before
@@ -79,6 +89,7 @@ export class CapaService {
   constructor(
     @Inject(CAPA_REPOSITORY) private readonly repo: ICapaRepository,
     @Inject(NONCONFORMANCE_REPOSITORY) private readonly findings: INonconformanceRepository,
+    @Inject(INTERNAL_AUDIT_REPOSITORY) private readonly audits: IInternalAuditRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     audit: AuditService,
   ) {
@@ -225,6 +236,7 @@ export class CapaService {
           'the review exists so that somebody other than the author agrees it worked',
       );
     }
+    await this.assertNotTheAuditor(capa.nonconformanceId, actor);
 
     const at = new Date();
     if (capa.implementedAt && at.getTime() < capa.implementedAt.getTime()) {
@@ -265,6 +277,7 @@ export class CapaService {
         `${capa.reference} is owned by you, so you cannot rule on its own effectiveness review`,
       );
     }
+    await this.assertNotTheAuditor(capa.nonconformanceId, actor);
 
     return this.move(
       capa,
@@ -350,6 +363,30 @@ export class CapaService {
         ErrorCodes.CAPA_ANALYSIS_INCOMPLETE,
         `${capa.reference} cannot be planned without ${missing.join(', ')} — a plan built on no ` +
           'stated cause is a guess',
+      );
+    }
+  }
+
+  /**
+   * ISO 9001 §9.2.2(c): somebody who audited a finding may not rule on whether its fix worked.
+   *
+   * Reads the finding's `internalAuditId` and asks the roster. Three shapes pass straight through:
+   * a finding from another source (no audit to be impartial about), a finding whose audit was never
+   * linked (the traceability gap the unlinked-findings report exists for — an unrecorded link cannot
+   * be enforced on), and an actor who was only an `observer`.
+   *
+   * Applied in BOTH review directions. A review that the auditor may fail but not pass is still the
+   * auditor deciding.
+   */
+  private async assertNotTheAuditor(nonconformanceId: string, actor: Actor): Promise<void> {
+    const finding = await this.findings.findById(nonconformanceId);
+    if (!finding?.internalAuditId) return;
+
+    if (await this.audits.didAudit(finding.internalAuditId, actor.sub)) {
+      throw new PreconditionFailedException(
+        ErrorCodes.CAPA_AUDITOR_IMPARTIALITY,
+        `You audited ${finding.reference}, so you cannot rule on whether the corrective action for ` +
+          'it was effective — ISO 9001 §9.2.2(c) asks for an impartial review',
       );
     }
   }

@@ -198,6 +198,25 @@ export const ErrorCodes = {
   CAPA_SELF_VERIFICATION: 'CAPA_SELF_VERIFICATION',
   /** The CAPA is verified or cancelled, so it accepts nothing further. */
   CAPA_SETTLED: 'CAPA_SETTLED',
+  /**
+   * The effectiveness review cannot be signed by somebody who audited the finding.
+   *
+   * ISO 9001 §9.2.2(c) — objectivity and impartiality. Distinct from
+   * `CAPA_SELF_VERIFICATION`, which is about owning the action rather than having found the problem.
+   */
+  CAPA_AUDITOR_IMPARTIALITY: 'CAPA_AUDITOR_IMPARTIALITY',
+
+  // ── QMS internal audit ─────────────────────────────────────────────────────
+  /** The transition is not legal from the audit's current status. */
+  INTERNAL_AUDIT_NOT_IN_STATE: 'INTERNAL_AUDIT_NOT_IN_STATE',
+  /** Fieldwork cannot start with nobody rostered to do it. */
+  INTERNAL_AUDIT_NO_AUDITORS: 'INTERNAL_AUDIT_NO_AUDITORS',
+  /** The audit is closed or cancelled, so it accepts nothing further. */
+  INTERNAL_AUDIT_SETTLED: 'INTERNAL_AUDIT_SETTLED',
+  /** The planned window runs backwards — `ck_audit_planned_window` in words. */
+  INTERNAL_AUDIT_INVALID_WINDOW: 'INTERNAL_AUDIT_INVALID_WINDOW',
+  /** The lead auditor is on the roster by construction and cannot be removed from it. */
+  INTERNAL_AUDIT_LEAD_REQUIRED: 'INTERNAL_AUDIT_LEAD_REQUIRED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

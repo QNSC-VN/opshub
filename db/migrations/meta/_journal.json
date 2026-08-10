@@ -176,6 +176,13 @@
       "when": 1784036806000,
       "tag": "0024_qms_nonconformance_and_capa",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784123206000,
+      "tag": "0025_qms_internal_audit",
+      "breakpoints": true
     }
   ]
 }

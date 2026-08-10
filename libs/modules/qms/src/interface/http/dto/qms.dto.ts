@@ -2,8 +2,10 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
 import {
+  auditRoleEnum,
   capaRootCauseMethodEnum,
   capaStatusEnum,
+  internalAuditStatusEnum,
   nonconformanceSeverityEnum,
   nonconformanceSourceEnum,
   nonconformanceStatusEnum,
@@ -43,6 +45,15 @@ export const RaiseNonconformanceSchema = z.object({
   detectedAt: z.string().datetime().optional(),
   /** The security incident this finding also describes, when there is one. */
   incidentId: z.string().uuid().nullable().optional(),
+  /**
+   * The internal audit that raised it — §9.2.
+   *
+   * Optional even when `source` is `internal_audit`: a finding written up during fieldwork before the
+   * engagement row exists is the normal order of events. Linking it is what puts it on the audit's
+   * finding list, off the unlinked-findings report, AND under the impartiality rule — an auditor
+   * cannot sign off the effectiveness of a fix for a finding the roster shows they found.
+   */
+  internalAuditId: z.string().uuid().nullable().optional(),
   evidenceDocumentId: z.string().uuid().nullable().optional(),
 });
 export class RaiseNonconformanceDto extends createZodDto(RaiseNonconformanceSchema) {}
@@ -240,4 +251,132 @@ export class RecurrenceSignalResponseDto {
   latestDetectedAt!: string;
   /** When the CAPA that should have prevented it was signed off. */
   earlierCapaVerifiedAt!: string;
+}
+
+// ── Internal audits ───────────────────────────────────────────────────────────
+
+const auditStatus = z.enum(internalAuditStatusEnum.enumValues);
+const auditRole = z.enum(auditRoleEnum.enumValues);
+
+export const PlanAuditSchema = z.object({
+  reference: reference('IA-2026-03'),
+  title: z.string().min(5).max(200),
+  /** What the audit sets out to establish. */
+  objective: substantial,
+  /** Which processes, sites and periods it covers — §9.2.2(b). */
+  scope: substantial,
+  /** The requirements audited AGAINST. A different question from scope. */
+  criteria: z.string().min(5).max(2000),
+  leadAuditorId: z.string().uuid(),
+  plannedStartOn: z.string().date().nullable().optional(),
+  plannedEndOn: z.string().date().nullable().optional(),
+});
+export class PlanAuditDto extends createZodDto(PlanAuditSchema) {}
+
+/**
+ * `status` and every state timestamp are absent DELIBERATELY — they belong to the lifecycle routes,
+ * which check preconditions a patch would bypass. Reporting through a PATCH would skip the conclusion
+ * and report-document requirement entirely.
+ */
+export const UpdateAuditSchema = PlanAuditSchema.omit({ reference: true })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Supply at least one field to update');
+export class UpdateAuditDto extends createZodDto(UpdateAuditSchema) {}
+
+export const StartAuditSchema = z.object({
+  /** When fieldwork began. Defaults to now; supplied when writing up after the fact. */
+  startedAt: z.string().datetime().optional(),
+});
+export class StartAuditDto extends createZodDto(StartAuditSchema) {}
+
+export const ReportAuditSchema = z.object({
+  /** What the audit concluded. Required by `ck_audit_reported_pair`. */
+  conclusion: substantial,
+  /** The audit report as a controlled document. Required — a report with no document is a chat. */
+  reportDocumentId: z.string().uuid(),
+});
+export class ReportAuditDto extends createZodDto(ReportAuditSchema) {}
+
+export const CancelAuditSchema = z.object({
+  /** Why the audit did not happen. Required by `ck_audit_cancelled_pair`. */
+  reason: substantial,
+});
+export class CancelAuditDto extends createZodDto(CancelAuditSchema) {}
+
+export const AssignAuditorSchema = z.object({
+  /**
+   * `observer` is NOT an auditor for the impartiality rule — see `CapaService`. Assigning `lead`
+   * makes this person the lead and moves the previous one to `auditor`.
+   */
+  role: auditRole.default('auditor'),
+});
+export class AssignAuditorDto extends createZodDto(AssignAuditorSchema) {}
+
+export const ListAuditsQuerySchema = z
+  .object({
+    status: auditStatus.optional(),
+    leadAuditorId: z.string().uuid().optional(),
+    /** Anybody on the roster, in any role — "which audits was I on". */
+    auditorId: z.string().uuid().optional(),
+    /** Everything not closed or cancelled — the programme's live work. */
+    openOnly: z.coerce.boolean().optional(),
+    plannedStartOnOrBefore: z.string().date().optional(),
+    search: z.string().max(200).optional(),
+  })
+  .merge(PaginationQuerySchema);
+export class ListAuditsQueryDto extends createZodDto(ListAuditsQuerySchema) {}
+
+export class InternalAuditResponseDto {
+  id!: string;
+  reference!: string;
+  title!: string;
+  objective!: string;
+  scope!: string;
+  criteria!: string;
+  status!: string;
+  leadAuditorId!: string;
+  plannedStartOn!: string | null;
+  plannedEndOn!: string | null;
+  startedAt!: string | null;
+  reportedAt!: string | null;
+  conclusion!: string | null;
+  reportDocumentId!: string | null;
+  closedAt!: string | null;
+  cancelReason!: string | null;
+  createdAt!: string;
+}
+
+export class InternalAuditRowResponseDto extends InternalAuditResponseDto {
+  /** People in `lead` or `auditor` roles. Observers are excluded — they did not audit. */
+  auditorCount!: number;
+  findingCount!: number;
+  openFindingCount!: number;
+}
+
+export class AuditAuditorResponseDto {
+  auditorId!: string;
+  role!: string;
+  addedBy!: string;
+  createdAt!: string;
+}
+
+export class AuditFindingResponseDto {
+  id!: string;
+  reference!: string;
+  title!: string;
+  severity!: string;
+  severityRank!: number;
+  status!: string;
+  ownerId!: string;
+  detectedAt!: string;
+}
+
+export class UnlinkedFindingResponseDto {
+  id!: string;
+  reference!: string;
+  title!: string;
+  severity!: string;
+  processArea!: string;
+  detectedAt!: string;
+  raisedBy!: string;
 }

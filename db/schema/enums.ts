@@ -503,3 +503,28 @@ export const capaRootCauseMethodEnum = pgEnum('capa_root_cause_method', [
   'pareto',
   'other',
 ]);
+
+// ── QMS internal audit ───────────────────────────────────────────────────────
+/**
+ * Where an audit engagement stands.
+ *
+ * `reported` is a state and not a timestamp on `closed` because ISO 9001 §9.2.2(d) makes reporting
+ * to management its own obligation: an audit whose fieldwork finished and whose results were never
+ * reported has not been done, and collapsing the two would make that unrepresentable.
+ */
+export const internalAuditStatusEnum = pgEnum('internal_audit_status', [
+  'planned',
+  'in_progress',
+  'reported',
+  'closed',
+  'cancelled',
+]);
+
+/**
+ * What a person does on an audit.
+ *
+ * `observer` exists so that somebody being trained, or an auditee's representative sitting in, is
+ * recorded without counting as an auditor — which matters, because the impartiality rule keys off
+ * who actually audited.
+ */
+export const auditRoleEnum = pgEnum('audit_role', ['lead', 'auditor', 'observer']);

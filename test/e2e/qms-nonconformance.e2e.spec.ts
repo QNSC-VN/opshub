@@ -122,7 +122,13 @@ interface RecurrenceRow {
   earlierCapaVerifiedAt: string;
 }
 
-/** Raise a finding. OVERRIDES FIRST, session second — see the information-asset spec for why. */
+/**
+ * Raise a finding. OVERRIDES FIRST, session second — see the information-asset spec for why.
+ *
+ * Note the register reads below match on the EXACT reference rather than taking `[0]` off a search:
+ * `search` is a substring match and these references are sequential, so `E2E-NC-X-1` also matches
+ * `E2E-NC-X-10`. That bit the internal-audit spec for real once a run passed ten findings.
+ */
 async function raise(
   over: Record<string, unknown> = {},
   session: Session = security,
@@ -637,8 +643,15 @@ describe('reports', () => {
   it('shows the containment deadline on the register row, and clears it once met', async () => {
     const finding = await raise({ severity: 'major', detectedAt: daysAgo(1) });
     const before = unwrap<NcListRow[]>(
-      (await apiRequest(app, security, 'GET', `/nonconformances?search=${finding.reference}`)).body,
-    )[0];
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/nonconformances?search=${finding.reference}&limit=100`,
+        )
+      ).body,
+    ).find((r) => r.reference === finding.reference)!;
     expect(before.containmentDueDays).toBe(7);
     expect(before.containmentDueOn).not.toBeNull();
 
@@ -646,8 +659,15 @@ describe('reports', () => {
       containmentAction: CONTAINMENT,
     });
     const after = unwrap<NcListRow[]>(
-      (await apiRequest(app, security, 'GET', `/nonconformances?search=${finding.reference}`)).body,
-    )[0];
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/nonconformances?search=${finding.reference}&limit=100`,
+        )
+      ).body,
+    ).find((r) => r.reference === finding.reference)!;
     // A met deadline is not a deadline — leaving it populated is how a screen shows a red date next
     // to a finished job.
     expect(after.containmentDueOn).toBeNull();
@@ -697,8 +717,15 @@ describe('listing and permissions', () => {
     await verifiedCapa(finding.id);
     await openCapa(finding.id);
     const row = unwrap<NcListRow[]>(
-      (await apiRequest(app, security, 'GET', `/nonconformances?search=${finding.reference}`)).body,
-    )[0];
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/nonconformances?search=${finding.reference}&limit=100`,
+        )
+      ).body,
+    ).find((r) => r.reference === finding.reference)!;
     expect(row.capaCount).toBe(2);
     expect(row.verifiedCapaCount).toBe(1);
   });

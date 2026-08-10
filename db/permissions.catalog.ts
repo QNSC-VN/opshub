@@ -178,6 +178,20 @@ export const PERMISSION = {
    */
   CAPA_VERIFY: 'capa.verify',
 
+  // ── QMS internal audit ─────────────────────────────────────────────────────
+  /** View the audit programme, each engagement's roster, its findings and the reports. */
+  INTERNAL_AUDIT_READ: 'internal_audit.read',
+  /**
+   * Plan audits, roster auditors, start, report, close and cancel them.
+   *
+   * There is deliberately no separate code for reporting. §9.2.2(d) makes reporting an obligation
+   * rather than a privilege — the audit team reports what it found, and gating that behind a scarcer
+   * permission is how results wait for somebody who is on holiday. What IS gated separately is the
+   * effectiveness review of any corrective action arising (`capa.verify`), and the impartiality rule
+   * in `CapaService` keeps the auditors themselves out of that.
+   */
+  INTERNAL_AUDIT_MANAGE: 'internal_audit.manage',
+
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
   ASSET_WRITE: 'asset.write',
@@ -300,6 +314,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.NONCONFORMANCE_MANAGE]: 'Grade, contain, close and void non-conformances',
   [PERMISSION.CAPA_MANAGE]: 'Open, analyse, plan and implement corrective actions',
   [PERMISSION.CAPA_VERIFY]: 'Sign off that a corrective action was effective',
+  [PERMISSION.INTERNAL_AUDIT_READ]: 'View the internal audit programme and its findings',
+  [PERMISSION.INTERNAL_AUDIT_MANAGE]: 'Plan, roster, run, report and close internal audits',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -458,6 +474,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.NONCONFORMANCE_READ,
     PERMISSION.NONCONFORMANCE_MANAGE,
     PERMISSION.CAPA_MANAGE,
+    PERMISSION.INTERNAL_AUDIT_READ,
+    PERMISSION.INTERNAL_AUDIT_MANAGE,
     // Deliberately WITHOUT `CAPA_VERIFY`, on the same reasoning that keeps `RISK_ACCEPT`,
     // `INFORMATION_ASSET_DECLASSIFY` and `VENDOR_APPROVE` out of every bundle.
     // Deliberately WITHOUT `VENDOR_APPROVE`, on the same reasoning that keeps `RISK_ACCEPT` and
@@ -545,6 +563,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.INFORMATION_ASSET_READ,
     PERMISSION.VENDOR_READ,
     PERMISSION.NONCONFORMANCE_READ,
+    PERMISSION.INTERNAL_AUDIT_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,
