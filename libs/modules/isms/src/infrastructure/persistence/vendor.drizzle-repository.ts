@@ -48,7 +48,7 @@ function latestAssessment(column: 'assessed_at' | 'outcome') {
 
 /** How many register risks are linked, as a correlated subquery. */
 const RISK_COUNT = sql<number>`(
-  SELECT count(*)::int FROM ${vendorRisks} WHERE ${vendorRisks.vendorId} = ${vendors.id}
+  SELECT count(*)::int FROM isms.vendor_risks vr WHERE vr.vendor_id = isms.vendors.id
 )`;
 
 @Injectable()

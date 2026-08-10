@@ -14,6 +14,17 @@ import type {
   RecurrenceSignal,
   UpdateNonconformanceInput,
 } from '../qms.types';
+import type {
+  AuditFinding,
+  AuditRole,
+  InternalAudit,
+  InternalAuditAuditor,
+  InternalAuditFilters,
+  InternalAuditRow,
+  PlanAuditInput,
+  UnlinkedFinding,
+  UpdateAuditInput,
+} from '../internal-audit.types';
 
 export const NONCONFORMANCE_REPOSITORY = Symbol('NONCONFORMANCE_REPOSITORY');
 export const CAPA_REPOSITORY = Symbol('CAPA_REPOSITORY');
@@ -106,4 +117,58 @@ export interface ICapaRepository {
    * one bit and the register list needs the counts, so neither reads the other's rows.
    */
   hasVerifiedCapa(nonconformanceId: string, tx?: DbExecutor): Promise<boolean>;
+}
+
+export const INTERNAL_AUDIT_REPOSITORY = Symbol('INTERNAL_AUDIT_REPOSITORY');
+
+export interface IInternalAuditRepository {
+  create(input: PlanAuditInput, tx?: DbExecutor): Promise<InternalAudit>;
+  findById(id: string, tx?: DbExecutor): Promise<InternalAudit | null>;
+  findByReference(reference: string): Promise<InternalAudit | null>;
+  list(
+    filters: InternalAuditFilters,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: InternalAuditRow[]; total: number }>;
+  update(id: string, input: UpdateAuditInput, tx?: DbExecutor): Promise<InternalAudit | null>;
+
+  /** Move the audit's status, guarding the FROM state — same reasoning as the other registers. */
+  transition(
+    id: string,
+    from: InternalAudit['status'],
+    to: InternalAudit['status'],
+    extra: Partial<
+      Pick<
+        InternalAudit,
+        'startedAt' | 'reportedAt' | 'conclusion' | 'reportDocumentId' | 'closedAt' | 'cancelReason'
+      >
+    >,
+    tx?: DbExecutor,
+  ): Promise<InternalAudit | null>;
+
+  // ── The roster ─────────────────────────────────────────────────────────────
+  /** Add or re-role somebody. Idempotent on the pair, so re-adding changes the role. */
+  upsertAuditor(
+    internalAuditId: string,
+    auditorId: string,
+    role: AuditRole,
+    addedBy: string,
+    tx?: DbExecutor,
+  ): Promise<void>;
+  removeAuditor(internalAuditId: string, auditorId: string, tx?: DbExecutor): Promise<boolean>;
+  listAuditors(internalAuditId: string): Promise<InternalAuditAuditor[]>;
+  /**
+   * Whether this person AUDITED on this audit — `lead` or `auditor`, never `observer`.
+   *
+   * The impartiality question, asked as a boolean. `CapaService` reads it to refuse an effectiveness
+   * review signed by somebody who audited the finding being corrected (§9.2.2(c)). An observer is
+   * deliberately not an auditor here: sitting in on fieldwork does not compromise a later review.
+   */
+  didAudit(internalAuditId: string, personId: string, tx?: DbExecutor): Promise<boolean>;
+
+  // ── Findings ───────────────────────────────────────────────────────────────
+  /** Findings raised against this audit, worst grade first. */
+  listFindings(internalAuditId: string): Promise<AuditFinding[]>;
+  /** `internal_audit` findings that name no audit — the traceability gap. */
+  unlinkedFindings(limit: number): Promise<UnlinkedFinding[]>;
 }

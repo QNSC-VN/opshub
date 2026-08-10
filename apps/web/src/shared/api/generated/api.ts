@@ -4106,6 +4106,212 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/internal-audits/reports/unlinked-findings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Findings that claim an internal-audit source but name no audit
+     * @description The traceability gap `nonconformances.internal_audit_id` leaves open deliberately: a finding written up during fieldwork before the engagement row exists is ordinary, so the link is not forced. One still unlinked weeks later is a hole in the programme — and it also means the impartiality rule cannot see it, because there is no roster to check against. Oldest first.
+     */
+    get: operations['InternalAuditController_unlinkedFindings'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The audit programme
+     * @description Soonest planned start first, undated last. Each row carries its roster size (auditors only — observers are excluded) and its finding counts, resolved in the same query.
+     */
+    get: operations['InternalAuditController_list'];
+    put?: never;
+    /**
+     * Plan an audit
+     * @description Scope and criteria are both required and both substantial — §9.2.2(b). They answer different questions: scope is where you looked, criteria is what you judged against, and an audit missing either cannot be repeated or defended. The lead auditor joins the roster as `lead` in the same transaction.
+     */
+    post: operations['InternalAuditController_plan'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One audit */
+    get: operations['InternalAuditController_getOne'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Correct a planned or running audit
+     * @description The status is NOT settable here — reporting through a patch would skip the conclusion and the report document. Changing the lead moves the roster with it: the new lead becomes `lead` and the previous one stays on as `auditor`, because they may well have done fieldwork and dropping them would erase that from the impartiality rule.
+     */
+    patch: operations['InternalAuditController_update'];
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Begin fieldwork
+     * @description Refused when nobody is rostered as lead or auditor — an audit needs somebody to do it.
+     */
+    post: operations['InternalAuditController_start'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/report': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Report the results to management (§9.2.2(d))
+     * @description Its own state, not a timestamp on closure: an audit whose fieldwork finished and whose results never reached anybody has not been done. Both the conclusion and the report document are required, and `closed` is only reachable from here — there is no way to close an unreported audit. Deliberately NOT gated behind a scarcer permission: the audit team reports what it found, and what is separated instead is the effectiveness review of any action arising.
+     */
+    post: operations['InternalAuditController_report'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/close': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Close the engagement
+     * @description Does NOT require the findings to be closed. §9.2.2(e) asks for action without undue delay and the CAPA machinery tracks that per finding with its own gate; an audit held open until every corrective action is verified would stay open for months and stop meaning anything. The open-finding count on the programme row is how a reader sees what is outstanding.
+     */
+    post: operations['InternalAuditController_close'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record an audit that did not happen
+     * @description Reachable from `planned` and `in_progress` but NOT from `reported`: once results have been reported the audit happened, and the record of it is not cancellable.
+     */
+    post: operations['InternalAuditController_cancel'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/auditors': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Who audited, and in what capacity — lead first */
+    get: operations['InternalAuditController_auditors'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/auditors/{auditorId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Put somebody on the audit, or change their role
+     * @description Idempotent on the pair, so re-adding CHANGES the role — swapping an observer onto the audit team is one action to the person doing it. Assigning `lead` makes them the lead and moves the previous lead to `auditor`. An `observer` does not count as having audited, which is what the impartiality rule on `POST /capas/:id/verify` reads.
+     */
+    put: operations['InternalAuditController_assignAuditor'];
+    post?: never;
+    /**
+     * Take somebody off the audit
+     * @description The LEAD cannot be removed, only replaced: `lead_auditor_id` is NOT NULL, so removing that roster row would leave the column naming somebody who is not on the audit.
+     */
+    delete: operations['InternalAuditController_removeAuditor'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/internal-audits/{id}/findings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Findings raised against this audit, worst grade first
+     * @description These are non-conformances — an audit finding IS one, so it carries the same grade, the same containment and the same closure gate rather than a parallel copy. Raise them through `POST /nonconformances/report` with `internalAuditId` set.
+     */
+    get: operations['InternalAuditController_findings'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/ai/chat': {
     parameters: {
       query?: never;
@@ -5979,6 +6185,7 @@ export interface components {
       /** Format: date-time */
       detectedAt?: string;
       incidentId?: string | null;
+      internalAuditId?: string | null;
       evidenceDocumentId?: string | null;
     };
     NonconformanceResponseDto: {
@@ -6026,6 +6233,7 @@ export interface components {
       /** Format: date-time */
       detectedAt?: string;
       incidentId?: string | null;
+      internalAuditId?: string | null;
       evidenceDocumentId?: string | null;
     };
     ContainNonconformanceDto: {
@@ -6098,6 +6306,113 @@ export interface components {
     };
     CapaOutcomeDto: {
       reason: string;
+    };
+    UnlinkedFindingResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      severity: string;
+      processArea: string;
+      detectedAt: string;
+      raisedBy: string;
+    };
+    InternalAuditRowResponseDto: {
+      /** @description People in `lead` or `auditor` roles. Observers are excluded — they did not audit. */
+      auditorCount: number;
+      findingCount: number;
+      openFindingCount: number;
+      id: string;
+      reference: string;
+      title: string;
+      objective: string;
+      scope: string;
+      criteria: string;
+      status: string;
+      leadAuditorId: string;
+      plannedStartOn: string | null;
+      plannedEndOn: string | null;
+      startedAt: string | null;
+      reportedAt: string | null;
+      conclusion: string | null;
+      reportDocumentId: string | null;
+      closedAt: string | null;
+      cancelReason: string | null;
+      createdAt: string;
+    };
+    PlanAuditDto: {
+      reference: string;
+      title: string;
+      objective: string;
+      scope: string;
+      criteria: string;
+      /** Format: uuid */
+      leadAuditorId: string;
+      plannedStartOn?: string | null;
+      plannedEndOn?: string | null;
+    };
+    InternalAuditResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      objective: string;
+      scope: string;
+      criteria: string;
+      status: string;
+      leadAuditorId: string;
+      plannedStartOn: string | null;
+      plannedEndOn: string | null;
+      startedAt: string | null;
+      reportedAt: string | null;
+      conclusion: string | null;
+      reportDocumentId: string | null;
+      closedAt: string | null;
+      cancelReason: string | null;
+      createdAt: string;
+    };
+    UpdateAuditDto: {
+      title?: string;
+      objective?: string;
+      scope?: string;
+      criteria?: string;
+      /** Format: uuid */
+      leadAuditorId?: string;
+      plannedStartOn?: string | null;
+      plannedEndOn?: string | null;
+    };
+    StartAuditDto: {
+      /** Format: date-time */
+      startedAt?: string;
+    };
+    ReportAuditDto: {
+      conclusion: string;
+      /** Format: uuid */
+      reportDocumentId: string;
+    };
+    CancelAuditDto: {
+      reason: string;
+    };
+    AuditAuditorResponseDto: {
+      auditorId: string;
+      role: string;
+      addedBy: string;
+      createdAt: string;
+    };
+    AssignAuditorDto: {
+      /**
+       * @default auditor
+       * @enum {string}
+       */
+      role: 'lead' | 'auditor' | 'observer';
+    };
+    AuditFindingResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      severity: string;
+      severityRank: number;
+      status: string;
+      ownerId: string;
+      detectedAt: string;
     };
     ChatRequestDto: {
       messages: {
@@ -18599,6 +18914,705 @@ export interface operations {
       };
       /** @description Precondition Failed */
       412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_unlinkedFindings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnlinkedFindingResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_list: {
+    parameters: {
+      query?: {
+        status?: 'planned' | 'in_progress' | 'reported' | 'closed' | 'cancelled';
+        leadAuditorId?: string;
+        auditorId?: string;
+        openOnly?: boolean;
+        plannedStartOnOrBefore?: string;
+        search?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['InternalAuditRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_plan: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlanAuditDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_getOne: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateAuditDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_start: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StartAuditDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_report: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReportAuditDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_close: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_cancel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CancelAuditDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InternalAuditResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_auditors: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuditAuditorResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_assignAuditor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        auditorId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AssignAuditorDto'];
+      };
+    };
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_removeAuditor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        auditorId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InternalAuditController_findings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuditFindingResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

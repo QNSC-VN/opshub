@@ -160,6 +160,11 @@ export const FIXTURE_TABLES = [
   // `qms.nonconformance_severities` is NOT here and must not be, for the same reason
   // `isms.classification_levels` and `isms.vendor_criticality_levels` are not: reference data seeded
   // by migration 0024, and `nonconformances.severity` is an FK to it.
+  // Internal audits. `uq_internal_audit_reference` is global, so a leftover makes the next run's
+  // first plan a 409. The roster cascades from the audit; the findings reference it with SET NULL and
+  // are truncated in the same statement anyway.
+  'qms.internal_audit_auditors',
+  'qms.internal_audits',
   'qms.capas',
   'qms.nonconformances',
   // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this

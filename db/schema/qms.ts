@@ -72,11 +72,14 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  primaryKey,
   pgSchema,
 } from 'drizzle-orm/pg-core';
 import {
+  auditRoleEnum,
   capaRootCauseMethodEnum,
   capaStatusEnum,
+  internalAuditStatusEnum,
   nonconformanceSeverityEnum,
   nonconformanceSourceEnum,
   nonconformanceStatusEnum,
@@ -154,6 +157,20 @@ export const nonconformances = qmsSchema.table(
     /** Supporting evidence as a controlled document. No FK — cross-schema, checked by the service. */
     evidenceDocumentId: uuid('evidence_document_id'),
 
+    /**
+     * The internal audit that raised this finding, when one did.
+     *
+     * Nullable, and NOT required even when `source = 'internal_audit'`: a finding recorded during
+     * fieldwork before the engagement row exists is the normal order of events for a small team, and
+     * a blanket requirement would push that record-keeping out of the system. The gap is a REPORT
+     * instead — `GET /internal-audits/reports/unlinked-findings` — on the same reasoning as the
+     * risk register's unlinked incidents and the vendor register's unassessed spend.
+     *
+     * `SET NULL`: an audit is never deleted, but if one ever were, the finding and its CAPA are the
+     * evidence and must outlive it.
+     */
+    internalAuditId: uuid('internal_audit_id'),
+
     /** The immediate fix. Paired with `contained_at` by `ck_nc_contained_pair`. */
     containmentAction: text('containment_action'),
     containedAt: timestamp('contained_at', { withTimezone: true }),
@@ -178,6 +195,8 @@ export const nonconformances = qmsSchema.table(
     areaIdx: index('ix_nc_process_area').on(t.processArea),
     detectedIdx: index('ix_nc_detected').on(t.detectedAt),
     incidentIdx: index('ix_nc_incident').on(t.incidentId),
+    /** The audit's own finding list, and the unlinked-findings report's anti-join. */
+    auditIdx: index('ix_nc_internal_audit').on(t.internalAuditId),
   }),
 );
 
@@ -234,5 +253,109 @@ export const capas = qmsSchema.table(
     ownerIdx: index('ix_capa_owner').on(t.ownerId),
     /** The overdue report's query. */
     dueIdx: index('ix_capa_due').on(t.status, t.dueOn),
+  }),
+);
+
+/**
+ * An internal audit engagement — ISO 9001 §9.2.
+ *
+ * WHY THE FINDINGS ARE NOT A TABLE HERE
+ * -------------------------------------
+ * An audit finding IS a non-conformance. `nonconformances.source` already carries `internal_audit`,
+ * and §9.2.2(e) requires appropriate action without undue delay — which is the CAPA machinery the
+ * register already owns. A separate `audit_findings` table would duplicate the grade, the containment,
+ * the closure gate and the CAPA link, and the two copies would immediately disagree about what
+ * "closed" means. So the audit gains a pointer FROM the register (`nonconformances.internal_audit_id`)
+ * and nothing else.
+ *
+ * WHAT §9.2 ASKS FOR, AND WHERE EACH PART LIVES
+ * ---------------------------------------------
+ *   (b) define the audit CRITERIA and SCOPE for each audit — both NOT NULL with substance CHECKs,
+ *       because an audit with no stated criteria cannot be repeated or defended.
+ *   (c) select auditors to ensure OBJECTIVITY and IMPARTIALITY — `internal_audit_auditors`, plus the
+ *       rule enforced in `CapaService`: somebody who audited may not sign off the effectiveness of a
+ *       corrective action arising from their own finding. See that service for why it lives there.
+ *   (d) REPORT the results to relevant management — the `reported` state, with a conclusion and the
+ *       report document required to reach it.
+ *   (f) RETAIN documented evidence — the row is never deleted; `cancelled` records an audit that did
+ *       not happen and says why.
+ */
+export const internalAudits = qmsSchema.table(
+  'internal_audits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Quoted in the audit programme and in every finding it raises, e.g. `IA-2026-03`. */
+    reference: varchar('reference', { length: 40 }).notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    /** What the audit set out to establish. */
+    objective: text('objective').notNull(),
+    /** Which processes, sites and periods it covers — §9.2.2(b). */
+    scope: text('scope').notNull(),
+    /**
+     * The requirements audited AGAINST — clauses, procedures, customer specifications.
+     *
+     * Separate from `scope` because they answer different questions: scope is where you looked,
+     * criteria is what you judged against. An audit missing either cannot be repeated.
+     */
+    criteria: text('criteria').notNull(),
+
+    status: internalAuditStatusEnum('status').notNull().default('planned'),
+
+    /**
+     * The lead auditor. NOT NULL, and also present in `internal_audit_auditors` as `lead` — the
+     * column is what the register is read by, the roster row is what the impartiality rule reads.
+     * `AuditService` writes both in one transaction, so they cannot disagree.
+     */
+    leadAuditorId: uuid('lead_auditor_id').notNull(),
+
+    plannedStartOn: date('planned_start_on'),
+    plannedEndOn: date('planned_end_on'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+
+    /** When management were told, and what they were told. Both required to reach `reported`. */
+    reportedAt: timestamp('reported_at', { withTimezone: true }),
+    conclusion: text('conclusion'),
+    /** The audit report as a controlled document. No FK — cross-schema, checked by the service. */
+    reportDocumentId: uuid('report_document_id'),
+
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    /** Why it was cancelled. Required to cancel — an audit that did not happen still needs a record. */
+    cancelReason: text('cancel_reason'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    referenceIdx: uniqueIndex('uq_internal_audit_reference').on(t.reference),
+    statusIdx: index('ix_internal_audit_status').on(t.status),
+    leadIdx: index('ix_internal_audit_lead').on(t.leadAuditorId),
+    /** The programme view: what is planned when. */
+    plannedIdx: index('ix_internal_audit_planned').on(t.plannedStartOn),
+  }),
+);
+
+/**
+ * Who audited, and in what capacity — §9.2.2(c).
+ *
+ * A table rather than a column because an audit is a team activity and because the IMPARTIALITY rule
+ * needs the full set: it asks "did this person audit here", which a single `lead_auditor_id` cannot
+ * answer for the auditor who did the fieldwork.
+ */
+export const internalAuditAuditors = qmsSchema.table(
+  'internal_audit_auditors',
+  {
+    internalAuditId: uuid('internal_audit_id')
+      .notNull()
+      .references(() => internalAudits.id, { onDelete: 'cascade' }),
+    auditorId: uuid('auditor_id').notNull(),
+    role: auditRoleEnum('role').notNull().default('auditor'),
+    addedBy: uuid('added_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    /** Natural key: one person holds one role on one audit. */
+    pk: primaryKey({ columns: [t.internalAuditId, t.auditorId] }),
+    /** "What has this person audited?" — the direction the impartiality rule reads from. */
+    auditorIdx: index('ix_internal_audit_auditor_person').on(t.auditorId),
   }),
 );

@@ -60,6 +60,13 @@ const ROOT = join(__dirname, '..');
  *                          `code vendor_criticality PRIMARY KEY`). Same shape as the classification
  *                          levels above, and `rank` is UNIQUE there too.
  *   - `nonconformanceSeverities.code` PRIMARY KEY (db/schema/qms.ts and migration 0024).
+ *   - `internalAuditAuditors.auditorId` part of PRIMARY KEY (internal_audit_id, auditor_id)
+ *                          (db/schema/qms.ts, migration 0025). CONDITIONAL in the same way
+ *                          `attachments.fileId` is, and for the same reason: unique only WITHIN one
+ *                          audit, and listed here because the only query ordering by it filters on
+ *                          `internal_audit_id` first. A future query ordering by `auditor_id` across
+ *                          audits would be exempted by this entry and should not be — order such a
+ *                          query by the audit column too, or it is genuinely partial.
  *
  * The last three are the same pattern: a REFERENCE TABLE keyed by its enum, carrying a `rank` column
  * and the policy that rank implies. They are enumerated individually rather than matched by a naming
@@ -84,6 +91,7 @@ const UNIQUE_NON_ID_COLUMNS = [
   'classificationLevels.code',
   'vendorCriticalityLevels.code',
   'nonconformanceSeverities.code',
+  'internalAuditAuditors.auditorId',
 ] as const;
 
 interface Ordering {

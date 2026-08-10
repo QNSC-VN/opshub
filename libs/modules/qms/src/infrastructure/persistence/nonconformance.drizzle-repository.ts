@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, notInArray, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
-import { capas, nonconformanceSeverities, nonconformances } from '../../../../../../db/schema';
+import { nonconformanceSeverities, nonconformances } from '../../../../../../db/schema';
 import type { INonconformanceRepository } from '../../domain/ports/qms.repository';
 import type {
   ContainmentOverdue,
@@ -65,6 +65,7 @@ export class NonconformanceDrizzleRepository implements INonconformanceRepositor
         raisedBy: input.raisedBy,
         detectedAt: input.detectedAt ? new Date(input.detectedAt) : new Date(),
         incidentId: input.incidentId ?? null,
+        internalAuditId: input.internalAuditId ?? null,
         evidenceDocumentId: input.evidenceDocumentId ?? null,
       })
       .returning();
@@ -115,13 +116,16 @@ export class NonconformanceDrizzleRepository implements INonconformanceRepositor
         severityRank: nonconformanceSeverities.rank,
         requiresCapa: nonconformanceSeverities.requiresCapa,
         containmentDueDays: nonconformanceSeverities.containmentDueDays,
+        // Explicit qualification, not Drizzle interpolation — see the note in
+        // `internal-audit.drizzle-repository.ts`. Correct today only because this query joins the
+        // severities table; spelled out so removing that join cannot silently zero these counts.
         capaCount: sql<number>`(
-          SELECT count(*)::int FROM ${capas}
-          WHERE ${capas.nonconformanceId} = ${nonconformances.id}
+          SELECT count(*)::int FROM qms.capas c
+          WHERE c.nonconformance_id = qms.nonconformances.id
         )`,
         verifiedCapaCount: sql<number>`(
-          SELECT count(*)::int FROM ${capas}
-          WHERE ${capas.nonconformanceId} = ${nonconformances.id} AND ${capas.status} = 'verified'
+          SELECT count(*)::int FROM qms.capas c
+          WHERE c.nonconformance_id = qms.nonconformances.id AND c.status = 'verified'
         )`,
         // Null once contained: a deadline that has been met is not a deadline any more, and leaving
         // it populated is how a screen shows a red date next to a finished job.
@@ -313,6 +317,7 @@ function nonconformanceColumns() {
     raisedBy: nonconformances.raisedBy,
     incidentId: nonconformances.incidentId,
     evidenceDocumentId: nonconformances.evidenceDocumentId,
+    internalAuditId: nonconformances.internalAuditId,
     containmentAction: nonconformances.containmentAction,
     containedAt: nonconformances.containedAt,
     closedAt: nonconformances.closedAt,

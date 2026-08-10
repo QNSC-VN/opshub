@@ -25,6 +25,14 @@ export interface RaiseNonconformanceInput {
   detectedAt?: string;
   /** The security incident this finding also describes, when there is one. */
   incidentId?: string | null;
+  /**
+   * The internal audit that raised it, when one did.
+   *
+   * Settable at raise time and by patch, because the engagement row often does not exist yet when a
+   * finding is written up during fieldwork. Findings that claim an internal-audit source and never
+   * get linked surface on `GET /internal-audits/reports/unlinked-findings`.
+   */
+  internalAuditId?: string | null;
   evidenceDocumentId?: string | null;
 }
 
@@ -46,6 +54,7 @@ export type UpdateNonconformanceInput = Partial<{
   ownerId: string;
   detectedAt: string;
   incidentId: string | null;
+  internalAuditId: string | null;
   evidenceDocumentId: string | null;
 }>;
 

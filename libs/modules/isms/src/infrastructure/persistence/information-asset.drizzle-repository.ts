@@ -31,8 +31,8 @@ import type {
  * silently dropped from the result.
  */
 const DEVICE_COUNT = sql<number>`(
-  SELECT count(*)::int FROM ${informationAssetDevices}
-  WHERE ${informationAssetDevices.informationAssetId} = ${informationAssets.id}
+  SELECT count(*)::int FROM isms.information_asset_devices iad
+  WHERE iad.information_asset_id = isms.information_assets.id
 )`;
 
 @Injectable()

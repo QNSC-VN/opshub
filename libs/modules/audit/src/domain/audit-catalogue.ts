@@ -216,6 +216,17 @@ export const AUDIT_ACTION = {
   CAPA_INEFFECTIVE: 'capa.ineffective',
   CAPA_CANCELLED: 'capa.cancelled',
 
+  // ── QMS internal audit ──
+  INTERNAL_AUDIT_PLANNED: 'internal_audit.planned',
+  INTERNAL_AUDIT_UPDATED: 'internal_audit.updated',
+  INTERNAL_AUDIT_STARTED: 'internal_audit.started',
+  /** Results reached management — §9.2.2(d), which is its own obligation and its own action. */
+  INTERNAL_AUDIT_REPORTED: 'internal_audit.reported',
+  INTERNAL_AUDIT_CLOSED: 'internal_audit.closed',
+  INTERNAL_AUDIT_CANCELLED: 'internal_audit.cancelled',
+  INTERNAL_AUDIT_AUDITOR_ASSIGNED: 'internal_audit.auditor_assigned',
+  INTERNAL_AUDIT_AUDITOR_REMOVED: 'internal_audit.auditor_removed',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -295,6 +306,7 @@ export const AUDIT_RESOURCE = {
   VENDOR: 'vendor',
   NONCONFORMANCE: 'nonconformance',
   CAPA: 'capa',
+  INTERNAL_AUDIT: 'internal_audit',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

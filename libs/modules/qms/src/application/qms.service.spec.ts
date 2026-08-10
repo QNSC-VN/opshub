@@ -62,6 +62,7 @@ function finding(over: Partial<Nonconformance> = {}): Nonconformance {
     raisedBy: 'reporter-1',
     incidentId: null,
     evidenceDocumentId: null,
+    internalAuditId: null,
     containmentAction: null,
     containedAt: null,
     closedAt: null,
@@ -112,7 +113,13 @@ function capa(over: Partial<Capa> = {}): Capa {
   };
 }
 
-function makeServices(over: { nc?: Record<string, unknown>; capa?: Record<string, unknown> } = {}) {
+function makeServices(
+  over: {
+    nc?: Record<string, unknown>;
+    capa?: Record<string, unknown>;
+    audits?: Record<string, unknown>;
+  } = {},
+) {
   const ncRepo = {
     listSeverities: vi.fn().mockResolvedValue(severities()),
     create: vi.fn().mockResolvedValue(finding()),
@@ -153,6 +160,28 @@ function makeServices(over: { nc?: Record<string, unknown>; capa?: Record<string
     hasVerifiedCapa: vi.fn().mockResolvedValue(false),
     ...over.capa,
   };
+  /**
+   * The audit roster, stubbed so the impartiality rule has something to ask.
+   *
+   * `didAudit` defaults to FALSE and `findById` returns a finding with no audit linked, so the rule is
+   * inert unless a test opts in. That keeps the twenty-odd tests that predate §9.2 saying what they
+   * always said, and makes the impartiality tests state their own setup.
+   */
+  const auditRepo = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByReference: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+    update: vi.fn(),
+    transition: vi.fn(),
+    upsertAuditor: vi.fn().mockResolvedValue(undefined),
+    removeAuditor: vi.fn().mockResolvedValue(true),
+    listAuditors: vi.fn().mockResolvedValue([]),
+    didAudit: vi.fn().mockResolvedValue(false),
+    listFindings: vi.fn().mockResolvedValue([]),
+    unlinkedFindings: vi.fn().mockResolvedValue([]),
+    ...over.audits,
+  };
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
@@ -160,9 +189,10 @@ function makeServices(over: { nc?: Record<string, unknown>; capa?: Record<string
 
   return {
     nc: new NonconformanceService(ncRepo, capaRepo, db, audit as never),
-    capa: new CapaService(capaRepo, ncRepo, db, audit as never),
+    capa: new CapaService(capaRepo, ncRepo, auditRepo, db, audit as never),
     ncRepo,
     capaRepo,
+    auditRepo,
     audit,
     TX,
   };
@@ -512,6 +542,64 @@ describe('the effectiveness review', () => {
     await expect(service.verify('capa-1', NOTE, OTHER)).rejects.toMatchObject({
       code: 'CAPA_NOT_IN_STATE',
     });
+  });
+
+  it('refuses somebody who AUDITED the finding, even holding the permission', async () => {
+    // ISO 9001 §9.2.2(c). A different rule from self-verification: this reviewer owns nothing, they
+    // simply found the problem, and certifying that your own finding was adequately fixed is exactly
+    // the conflict the clause names.
+    const {
+      capa: service,
+      capaRepo,
+      auditRepo,
+    } = makeServices({
+      capa: { findById: vi.fn().mockResolvedValue(implemented()) },
+      nc: { findById: vi.fn().mockResolvedValue(finding({ internalAuditId: 'ia-1' })) },
+      audits: { didAudit: vi.fn().mockResolvedValue(true) },
+    });
+    await expect(service.verify('capa-1', NOTE, OTHER)).rejects.toMatchObject({
+      code: 'CAPA_AUDITOR_IMPARTIALITY',
+    });
+    expect(auditRepo.didAudit).toHaveBeenCalledWith('ia-1', OTHER.sub);
+    expect(capaRepo.transition).not.toHaveBeenCalled();
+  });
+
+  it('refuses the auditor in the FAILING direction too', async () => {
+    // A review the auditor may fail but not pass is still the auditor deciding.
+    const { capa: service } = makeServices({
+      capa: { findById: vi.fn().mockResolvedValue(implemented()) },
+      nc: { findById: vi.fn().mockResolvedValue(finding({ internalAuditId: 'ia-1' })) },
+      audits: { didAudit: vi.fn().mockResolvedValue(true) },
+    });
+    await expect(service.markIneffective('capa-1', NOTE, OTHER)).rejects.toMatchObject({
+      code: 'CAPA_AUDITOR_IMPARTIALITY',
+    });
+  });
+
+  it('allows an observer on the audit to verify', async () => {
+    // `didAudit` excludes observers, so sitting in to learn does not disqualify a later review. The
+    // repository decides that; this pins that the service asks and believes the answer.
+    const { capa: service } = makeServices({
+      capa: { findById: vi.fn().mockResolvedValue(implemented()) },
+      nc: { findById: vi.fn().mockResolvedValue(finding({ internalAuditId: 'ia-1' })) },
+      audits: { didAudit: vi.fn().mockResolvedValue(false) },
+    });
+    await expect(service.verify('capa-1', NOTE, OTHER)).resolves.toMatchObject({
+      status: 'verified',
+    });
+  });
+
+  it('does not consult the roster for a finding with no audit linked', async () => {
+    // The traceability gap the unlinked-findings report exists for: an unrecorded link cannot be
+    // enforced on, and refusing every review because a link is missing would punish the wrong person.
+    const { capa: service, auditRepo } = makeServices({
+      capa: { findById: vi.fn().mockResolvedValue(implemented()) },
+      nc: { findById: vi.fn().mockResolvedValue(finding({ internalAuditId: null })) },
+    });
+    await expect(service.verify('capa-1', NOTE, OTHER)).resolves.toMatchObject({
+      status: 'verified',
+    });
+    expect(auditRepo.didAudit).not.toHaveBeenCalled();
   });
 
   it('lets a failed CAPA return to analysis', async () => {

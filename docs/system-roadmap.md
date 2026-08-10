@@ -15,7 +15,7 @@ says something is absent, that was checked.
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
 | **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings. **Vendor risk**: criticality tiers with review cadence, due-diligence assessments, a go-live gate, GDPR Article 28 agreements, vendor↔risk links, unassessed-spend report | **Complete**                                                                                    |
-| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training. **Non-conformance register**: severity grades with policy, containment windows, a closure gate. **CAPA**: root-cause analysis, an effectiveness review that can fail and loops back, separation of duties on sign-off, recurrence detection | Internal audit, management review                                                            |
+| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training. **Non-conformance register**: severity grades with policy, containment windows, a closure gate. **CAPA**: root-cause analysis, an effectiveness review that can fail and loops back, separation of duties on sign-off, recurrence detection. **Internal audit**: the programme, auditor rosters, a reporting gate before closure, findings that ARE non-conformances, and auditor impartiality on effectiveness reviews | Management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
 `vendor` returns hits that are **not** domain tables — `risk_accepted` is a
@@ -223,7 +223,7 @@ action. It does not add a `*_history` table.
      the service passes the inputs and Postgres does the arithmetic once, and every reader compares
      against the stored column. See the checklist entry below.
 
-5. **QMS** — ~~non-conformance + CAPA~~ (**done**), then internal audit and management review.
+5. **QMS** — ~~non-conformance + CAPA~~, ~~internal audit~~ (**done**), then management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
    of everything above: documents, training records, the request engine and the audit
    trail. Built last, it is mostly composition.
@@ -261,6 +261,32 @@ action. It does not add a `*_history` table.
    effective AND a finding raised after that verification. Two findings in one area is ordinary; a
    finding that arrives after somebody signed off a fix is evidence the review was wrong. It needs
    both dates, so it is one query rather than a number on a dashboard.
+
+   Internal audit followed, and it added almost no new concepts — which was the point. Four decisions:
+
+   - **AN AUDIT FINDING IS A NON-CONFORMANCE.** `nonconformances.source` already carried
+     `internal_audit` and §9.2.2(e) is the CAPA machinery §10.2 built, so the audit gains a pointer
+     FROM the register (`internal_audit_id`) and nothing else. A separate `audit_findings` table would
+     have duplicated the grade, the containment, the closure gate and the CAPA link, and the two
+     copies would have disagreed about what "closed" means within a week.
+   - **The pointer is NULLABLE and the gap is a report.** A finding written up during fieldwork before
+     the engagement row exists is the normal order of events for a small team, so requiring the link
+     would push that record-keeping out of the system. `reports/unlinked-findings` is the third report
+     of this shape, after the risk register's unlinked incidents and the vendor register's unassessed
+     spend.
+   - **Reporting is a STATE, not a timestamp on closure.** §9.2.2(d) makes reporting to management its
+     own obligation, so `closed` is only reachable from `reported`, and reaching `reported` needs both
+     a conclusion and the report document. An audit whose fieldwork finished and whose results never
+     reached anybody has not been done. Closing does NOT require the findings to be closed — that is
+     the CAPA gate's job per finding, and an audit held open until every action is verified would stay
+     open for months.
+   - **The roster exists for the IMPARTIALITY rule.** §9.2.2(c): somebody who audited a finding may
+     not sign off that the corrective action for it worked. That is enforced in `CapaService`, at the
+     verification, because a rule enforced anywhere else is one the verification can be reached
+     without — and it applies in BOTH review directions, since a review the auditor may fail but not
+     pass is still the auditor deciding. An `observer` is deliberately not an auditor for this: sitting
+     in to learn does not compromise a later review. This is the second, independent separation on the
+     same route, alongside "the verifier may not own the CAPA".
 
 **Not on this list, and blocking all of it for real users:** `infra/` has never been
 applied — there is no deployed OpsHub environment. Every module above is verifiable
@@ -387,6 +413,15 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **A correlated subquery in a `sql` template needs EXPLICIT qualification.** Drizzle qualifies a
+  column inside `sql` only when the OUTER query has a join. Without one,
+  `${child.parentId} = ${parent.id}` renders `WHERE "parent_id" = "id"` and BOTH bare names bind to the
+  inner table — the predicate becomes `child.parent_id = child.id`, always false, and the count is
+  silently 0 rather than an error. Measured: the internal-audit programme reported `findingCount: 0`
+  for an audit with two findings, while the identical shape on the non-conformance register was correct
+  because that query happens to join. Write the outer reference as `schema.table.column` and alias the
+  inner table; all four correlated counts in the codebase now do. Depending on a join for correctness
+  means removing one silently breaks a count elsewhere in the file.
 - **A CHECK that evaluates to NULL is a CHECK that passes.** `length(btrim(x)) >= 10` on a NULLABLE
   column yields NULL when `x` is null, and Postgres accepts NULL as satisfied — so
   `CHECK (outcome <> 'fail' OR length(btrim(findings)) >= 10)` accepts exactly the row it exists to
