@@ -2,9 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ExclusiveJob } from '@platform';
 import { GraphSecureScoreService } from './graph-secure-score.service';
+import { MS_PER_HOUR } from '@shared-kernel';
 
 /** 23 h — under the daily schedule, so a crashed pod cannot block tomorrow's run. */
-const LOCK_TTL_MS = 23 * 60 * 60_000;
+const LOCK_TTL_MS = 23 * MS_PER_HOUR;
 
 @Injectable()
 export class SecurityPostureSyncCron {

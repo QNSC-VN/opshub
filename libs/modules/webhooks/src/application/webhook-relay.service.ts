@@ -5,6 +5,7 @@ import { createHmac } from 'crypto';
 import { InjectDrizzle, AbstractOutboxRelay, Span } from '@platform';
 import type { DrizzleDB, DrizzleTx, PostCommitTask } from '@platform';
 import { webhookDeliveries, webhookSubscriptions } from '../../../../../db/schema';
+import { MS_PER_SEC } from '@shared-kernel';
 
 const WEBHOOK_TIMEOUT_MS = 10_000; // 10s per delivery attempt
 const RETRY_DELAYS_SECONDS = [60, 300, 900, 3600]; // 1m → 5m → 15m → 1h
@@ -124,7 +125,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
   ): Promise<void> {
     const delaySeconds =
       RETRY_DELAYS_SECONDS[Math.min(newAttempts - 1, RETRY_DELAYS_SECONDS.length - 1)] ?? 3600;
-    const nextAttemptAt = new Date(Date.now() + delaySeconds * 1000);
+    const nextAttemptAt = new Date(Date.now() + delaySeconds * MS_PER_SEC);
     await tx
       .update(webhookDeliveries)
       .set({

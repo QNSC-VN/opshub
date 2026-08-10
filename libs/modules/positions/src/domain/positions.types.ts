@@ -1,4 +1,6 @@
-export type PositionStatus = 'active' | 'frozen' | 'closed';
+import type { positionStatusEnum } from '../../../../../db/schema';
+/** Derived from the DB enum so adding a value there cannot leave this list stale. */
+export type PositionStatus = (typeof positionStatusEnum.enumValues)[number];
 
 export interface Position {
   id: string;

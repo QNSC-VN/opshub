@@ -1,14 +1,11 @@
 import type { DbExecutor } from '../database/drizzle.provider';
+import type { requestPriorityEnum } from '../../../../db/schema';
 
 export type RequestStatus =
-  | 'pending'
-  | 'in_review'
-  | 'approved'
-  | 'rejected'
-  | 'cancelled'
-  | 'expired';
+  'pending' | 'in_review' | 'approved' | 'rejected' | 'cancelled' | 'expired';
 
-export type RequestPriority = 'low' | 'normal' | 'high' | 'urgent';
+/** Derived from the DB enum so adding a value there cannot leave this list stale. */
+export type RequestPriority = (typeof requestPriorityEnum.enumValues)[number];
 
 /**
  * Defines a single step in a multi-step approval chain.
@@ -160,9 +157,19 @@ export interface RequestTypeDef<TPayload = Record<string, unknown>> {
     tx: DbExecutor,
   ): Promise<void>;
   /** Called inside the rejection transaction. Update domain table status here. */
-  onReject?(payload: TPayload, requestId: string, approverId: string, tx: DbExecutor): Promise<void>;
+  onReject?(
+    payload: TPayload,
+    requestId: string,
+    approverId: string,
+    tx: DbExecutor,
+  ): Promise<void>;
   /** Called inside the cancellation transaction. */
-  onCancel?(payload: TPayload, requestId: string, cancelledBy: string, tx: DbExecutor): Promise<void>;
+  onCancel?(
+    payload: TPayload,
+    requestId: string,
+    cancelledBy: string,
+    tx: DbExecutor,
+  ): Promise<void>;
   /** Called inside the expiry transaction (from the worker's expiry cron). */
   onExpire?(payload: TPayload, requestId: string, tx: DbExecutor): Promise<void>;
   /**

@@ -5,7 +5,6 @@ import {
   InjectDrizzle,
   NotFoundException,
   PreconditionFailedException,
-  type DbExecutor,
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
@@ -65,15 +64,15 @@ export class ControlService {
 
     return this.db.transaction(async (tx) => {
       const control = await this.repo.createControl(input, tx);
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.CONTROL_CREATED,
         AUDIT_RESOURCE.CONTROL,
         control.id,
-        actor,
-        tx,
         {
           after: { reference: control.reference, title: control.title, theme: control.theme },
         },
+        tx,
       );
       return control;
     });
@@ -94,10 +93,17 @@ export class ControlService {
 
     return this.db.transaction(async (tx) => {
       const after = await this.repo.updateControl(id, input, tx);
-      await this.record(AUDIT_ACTION.CONTROL_UPDATED, AUDIT_RESOURCE.CONTROL, id, actor, tx, {
-        before: { title: before.title, theme: before.theme },
-        after: { title: after!.title, theme: after!.theme },
-      });
+      await this.audit.recordChange(
+        actor,
+        AUDIT_ACTION.CONTROL_UPDATED,
+        AUDIT_RESOURCE.CONTROL,
+        id,
+        {
+          before: { title: before.title, theme: before.theme },
+          after: { title: after!.title, theme: after!.theme },
+        },
+        tx,
+      );
       return after!;
     });
   }
@@ -114,9 +120,16 @@ export class ControlService {
           'That control is already retired',
         );
       }
-      await this.record(AUDIT_ACTION.CONTROL_RETIRED, AUDIT_RESOURCE.CONTROL, id, actor, tx, {
-        after: { retiredAt: retired.retiredAt },
-      });
+      await this.audit.recordChange(
+        actor,
+        AUDIT_ACTION.CONTROL_RETIRED,
+        AUDIT_RESOURCE.CONTROL,
+        id,
+        {
+          after: { retiredAt: retired.retiredAt },
+        },
+        tx,
+      );
       return retired;
     });
   }
@@ -143,14 +156,21 @@ export class ControlService {
 
     return this.db.transaction(async (tx) => {
       const entry = await this.repo.upsertEntry(controlId, input, tx);
-      await this.record(AUDIT_ACTION.SOA_ENTRY_SET, AUDIT_RESOURCE.SOA_ENTRY, entry.id, actor, tx, {
-        before: before ? { applicable: before.applicable, status: before.status } : null,
-        after: {
-          controlReference: control.reference,
-          applicable: entry.applicable,
-          status: entry.status,
+      await this.audit.recordChange(
+        actor,
+        AUDIT_ACTION.SOA_ENTRY_SET,
+        AUDIT_RESOURCE.SOA_ENTRY,
+        entry.id,
+        {
+          before: before ? { applicable: before.applicable, status: before.status } : null,
+          after: {
+            controlReference: control.reference,
+            applicable: entry.applicable,
+            status: entry.status,
+          },
         },
-      });
+        tx,
+      );
       return entry;
     });
   }
@@ -188,13 +208,13 @@ export class ControlService {
           'That entry disappeared while being reviewed',
         );
       }
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.SOA_ENTRY_REVIEWED,
         AUDIT_RESOURCE.SOA_ENTRY,
         reviewed.id,
-        actor,
-        tx,
         { after: { lastReviewedAt: reviewed.lastReviewedAt, reviewDueOn: reviewed.reviewDueOn } },
+        tx,
       );
       return reviewed;
     });
@@ -215,9 +235,16 @@ export class ControlService {
 
     await this.db.transaction(async (tx) => {
       await this.repo.linkRiskControl(riskId, controlId, actor.sub, tx);
-      await this.record(AUDIT_ACTION.RISK_CONTROL_LINKED, AUDIT_RESOURCE.RISK, riskId, actor, tx, {
-        after: { controlId, controlReference: control.reference },
-      });
+      await this.audit.recordChange(
+        actor,
+        AUDIT_ACTION.RISK_CONTROL_LINKED,
+        AUDIT_RESOURCE.RISK,
+        riskId,
+        {
+          after: { controlId, controlReference: control.reference },
+        },
+        tx,
+      );
     });
   }
 
@@ -230,13 +257,13 @@ export class ControlService {
           'That control is not linked to this risk',
         );
       }
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.RISK_CONTROL_UNLINKED,
         AUDIT_RESOURCE.RISK,
         riskId,
-        actor,
-        tx,
         { before: { controlId } },
+        tx,
       );
     });
   }
@@ -282,19 +309,5 @@ export class ControlService {
           'an excluded control cannot also be implemented',
       );
     }
-  }
-
-  private async record(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
-    resourceType: (typeof AUDIT_RESOURCE)[keyof typeof AUDIT_RESOURCE],
-    resourceId: string,
-    actor: Actor,
-    tx: DbExecutor,
-    changes: { before?: object | null; after?: object | null },
-  ): Promise<void> {
-    await this.audit.record(
-      { actorId: actor.sub, actorEmail: actor.email, action, resourceType, resourceId, changes },
-      tx,
-    );
   }
 }

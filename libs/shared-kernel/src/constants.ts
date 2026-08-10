@@ -62,42 +62,19 @@ export const PAGE_SIZE = {
 } as const;
 
 // ── Audit action strings ──────────────────────────────────────────────────────
-
-export const AUDIT_ACTION = {
-  // Auth
-  // Employees
-  EMPLOYEE_CREATED: 'employee.created',
-  EMPLOYEE_UPDATED: 'employee.updated',
-  EMPLOYEE_STATUS_CHANGED: 'employee.status_changed',
-  // Access requests
-  ACCESS_REQUEST_SUBMITTED: 'access_request.submitted',
-  ACCESS_REQUEST_APPROVED: 'access_request.approved',
-  ACCESS_REQUEST_REJECTED: 'access_request.rejected',
-  ACCESS_GRANT_REVOKED: 'access_grant.revoked',
-  // Catalog
-  CATALOG_ITEM_CREATED: 'catalog.item_created',
-  CATALOG_ITEM_UPDATED: 'catalog.item_updated',
-  CATALOG_ITEM_DELETED: 'catalog.item_deleted',
-  CATALOG_REQUEST_SUBMITTED: 'catalog.request_submitted',
-  // Licenses
-  LICENSE_CREATED: 'license.created',
-  LICENSE_UPDATED: 'license.updated',
-  LICENSE_DELETED: 'license.deleted',
-  LICENSE_SEAT_ASSIGNED: 'license.seat_assigned',
-  LICENSE_SEAT_REVOKED: 'license.seat_revoked',
-  // Assets
-  ASSET_CREATED: 'asset.created',
-  ASSET_ASSIGNED: 'asset.assigned',
-  ASSET_UNASSIGNED: 'asset.unassigned',
-  ASSET_RETIRED: 'asset.retired',
-  // RBAC
-  RBAC_ROLE_CREATED: 'rbac.role_created',
-  RBAC_ROLE_PERMISSIONS_UPDATED: 'rbac.role_permissions_updated',
-  RBAC_ROLE_DELETED: 'rbac.role_deleted',
-  RBAC_ROLE_ASSIGNED: 'rbac.role_assigned',
-  RBAC_ROLE_ASSIGNMENT_REVOKED: 'rbac.role_assignment_revoked',
-  RBAC_DELEGATION_CREATED: 'rbac.delegation_created',
-  RBAC_DELEGATION_REVOKED: 'rbac.delegation_revoked',
-} as const;
-
-export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
+//
+// Deliberately NOT here either — and for exactly the reason described just above
+// about PERMISSION, which is the same mistake this file made twice.
+//
+// A 40-key `AUDIT_ACTION` used to live here alongside the real 181-key catalogue in
+// `@modules/audit` (`domain/audit-catalogue.ts`). Nothing imported this one; every
+// service reaches for `@modules/audit`. But `shared-kernel` is re-exported
+// wholesale, so `import { AUDIT_ACTION } from '@shared-kernel'` silently resolved to
+// the smaller, staler set — one autocomplete away, again.
+//
+// It was not merely redundant. Four keys carried DIFFERENT VALUES for the same event
+// (`catalog.item_created` here against `catalog_item.created` there), and the seven
+// `RBAC_*` keys duplicated `role.*` and `delegation.*` under another name. Writing
+// one and querying the other loses rows from the trail, and nothing fails.
+//
+// `test/audit-catalogue-single-source.spec.ts` keeps a third copy from appearing.

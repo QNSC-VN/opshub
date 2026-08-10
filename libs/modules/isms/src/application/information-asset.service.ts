@@ -5,11 +5,16 @@ import {
   InjectDrizzle,
   NotFoundException,
   PreconditionFailedException,
-  type DbExecutor,
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
-import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import { RATING_MAX, RATING_MIN, isRating } from '../domain/rating';
+import {
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  AuditService,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import {
   INFORMATION_ASSET_REPOSITORY,
   type IInformationAssetRepository,
@@ -25,10 +30,6 @@ import type {
   RegisterAssetInput,
   UpdateAssetInput,
 } from '../domain/information-asset.types';
-
-/** The CIA scale, shared with the risk register's likelihood and impact. */
-const RATING_MIN = 1;
-const RATING_MAX = 5;
 
 /**
  * Which classifications may hold personal data.
@@ -69,11 +70,16 @@ const PERSONAL_DATA_LEVELS: readonly InformationClassification[] = ['confidentia
  */
 @Injectable()
 export class InformationAssetService {
+  private readonly trail: ResourceAuditTrail;
+
   constructor(
     @Inject(INFORMATION_ASSET_REPOSITORY) private readonly repo: IInformationAssetRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly audit: AuditService,
-  ) {}
+  ) {
+    // Resource type named ONCE — see `AuditService.forResource`.
+    this.trail = audit.forResource(AUDIT_RESOURCE.INFORMATION_ASSET);
+  }
 
   // ── Levels ───────────────────────────────────────────────────────────────────
 
@@ -103,7 +109,7 @@ export class InformationAssetService {
     return this.db.transaction(async (tx) => {
       // The repository writes the asset and its first history row together — see its `create`.
       const asset = await this.repo.create({ ...input, registeredBy: actor.sub }, tx);
-      await this.record(AUDIT_ACTION.INFORMATION_ASSET_REGISTERED, asset.id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INFORMATION_ASSET_REGISTERED, asset.id, actor, tx, {
         after: {
           reference: asset.reference,
           name: asset.name,
@@ -151,7 +157,7 @@ export class InformationAssetService {
 
     return this.db.transaction(async (tx) => {
       const after = await this.repo.update(id, input, tx);
-      await this.record(AUDIT_ACTION.INFORMATION_ASSET_UPDATED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INFORMATION_ASSET_UPDATED, id, actor, tx, {
         before: {
           name: before.name,
           ownerId: before.ownerId,
@@ -221,7 +227,7 @@ export class InformationAssetService {
           'That asset disappeared while being reviewed',
         );
       }
-      await this.record(AUDIT_ACTION.INFORMATION_ASSET_REVIEWED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INFORMATION_ASSET_REVIEWED, id, actor, tx, {
         after: { lastReviewedAt: reviewed.lastReviewedAt, reviewDueOn: reviewed.reviewDueOn },
       });
       return reviewed;
@@ -240,7 +246,7 @@ export class InformationAssetService {
           'That information asset is already retired',
         );
       }
-      await this.record(AUDIT_ACTION.INFORMATION_ASSET_RETIRED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INFORMATION_ASSET_RETIRED, id, actor, tx, {
         after: { retiredAt: retired.retiredAt },
       });
       return retired;
@@ -262,7 +268,7 @@ export class InformationAssetService {
 
     await this.db.transaction(async (tx) => {
       await this.repo.linkDevice(id, deviceAssetId, actor.sub, tx);
-      await this.record(AUDIT_ACTION.INFORMATION_ASSET_DEVICE_LINKED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INFORMATION_ASSET_DEVICE_LINKED, id, actor, tx, {
         after: { deviceAssetId, classification: asset.classification },
       });
     });
@@ -279,7 +285,7 @@ export class InformationAssetService {
           'That device is not recorded as holding this information asset',
         );
       }
-      await this.record(AUDIT_ACTION.INFORMATION_ASSET_DEVICE_UNLINKED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INFORMATION_ASSET_DEVICE_UNLINKED, id, actor, tx, {
         before: { deviceAssetId },
       });
     });
@@ -375,7 +381,7 @@ export class InformationAssetService {
         { fromLevel: from, toLevel: to, reason, changedBy: actor.sub },
         tx,
       );
-      await this.record(
+      await this.trail.record(
         isReduction
           ? AUDIT_ACTION.INFORMATION_ASSET_DECLASSIFIED
           : AUDIT_ACTION.INFORMATION_ASSET_RECLASSIFIED,
@@ -408,7 +414,7 @@ export class InformationAssetService {
       ['integrity', row.integrity],
       ['availability', row.availability],
     ] as const) {
-      if (!Number.isInteger(value) || value < RATING_MIN || value > RATING_MAX) {
+      if (!isRating(value)) {
         throw new PreconditionFailedException(
           ErrorCodes.INFORMATION_ASSET_INVALID_RATING,
           `${what} must be a whole number between ${RATING_MIN} and ${RATING_MAX}, got ${value}`,
@@ -470,25 +476,5 @@ export class InformationAssetService {
       InformationClassification,
       number
     >;
-  }
-
-  private async record(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
-    resourceId: string,
-    actor: Actor,
-    tx: DbExecutor,
-    changes: { before?: object | null; after?: object | null },
-  ): Promise<void> {
-    await this.audit.record(
-      {
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action,
-        resourceType: AUDIT_RESOURCE.INFORMATION_ASSET,
-        resourceId,
-        changes,
-      },
-      tx,
-    );
   }
 }

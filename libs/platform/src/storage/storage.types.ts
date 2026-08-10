@@ -1,3 +1,4 @@
+import type { storedFileStatusEnum } from '../../../../db/schema';
 /**
  * Storage types — upload policy descriptors, DTOs, and lifecycle constants.
  *
@@ -117,7 +118,8 @@ export const ORPHAN_CUTOFF_HOURS = 24;
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
-export type StoredFileStatus = 'pending' | 'completed' | 'deleted';
+/** Derived from the DB enum so adding a value there cannot leave this list stale. */
+export type StoredFileStatus = (typeof storedFileStatusEnum.enumValues)[number];
 
 export interface StoredFile {
   id: string;

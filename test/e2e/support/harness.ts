@@ -182,3 +182,52 @@ export async function login(
 export function bearer(session: Session): Record<string, string> {
   return { authorization: `Bearer ${session.accessToken}` };
 }
+
+/** The HTTP verbs the suites use. Named so `apiRequest` cannot be handed a typo. */
+export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+
+export interface ApiResponse {
+  status: number;
+  body: unknown;
+}
+
+/**
+ * One authenticated request against the in-process app.
+ *
+ * This, `unwrap` and `errorCode` were copy-pasted into eight spec files — twenty-four identical
+ * definitions — before they moved here. That is the kind of duplication that looks harmless until one
+ * copy diverges: a spec whose local `unwrap` does not understand the response envelope reads
+ * `undefined` and asserts against it, which passes for the wrong reason.
+ */
+export async function apiRequest(
+  app: NestFastifyApplication,
+  session: Session,
+  method: HttpMethod,
+  url: string,
+  payload?: Record<string, unknown>,
+): Promise<ApiResponse> {
+  const res = await app.inject({
+    method,
+    url: `/v1${url}`,
+    headers: bearer(session),
+    ...(payload === undefined ? {} : { payload }),
+  });
+  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
+}
+
+/**
+ * The payload out of the response envelope.
+ *
+ * Every successful response is `{ data, ... }` — paged ones add `pageInfo`. Falls back to the body
+ * itself so an assertion against an error response still gets something readable rather than
+ * `undefined`.
+ */
+export function unwrap<T>(body: unknown): T {
+  const b = body as { data?: T };
+  return (b.data ?? body) as T;
+}
+
+/** The `error.code` from a refusal, or undefined on success. */
+export function errorCode(body: unknown): string | undefined {
+  return (body as { error?: { code?: string } }).error?.code;
+}

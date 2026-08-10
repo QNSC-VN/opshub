@@ -30,7 +30,15 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { informationClassificationEnum } from '../../db/schema/enums';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `information_asset.read` + `information_asset.manage`, but NOT `.declassify`. */
@@ -97,30 +105,6 @@ interface SummaryRow {
   onDevices: number;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
-
 /**
  * Register an asset, defaulting to a coherent `confidential` personal-data system.
  *
@@ -133,7 +117,7 @@ async function register(
   over: Record<string, unknown> = {},
   session: Session = security,
 ): Promise<AssetRow> {
-  const res = await req(session, 'POST', '/information-assets', {
+  const res = await apiRequest(app, session, 'POST', '/information-assets', {
     reference: nextRef(),
     name: 'Payroll system',
     description: 'Salary, bank details and tax records for staff.',
@@ -148,19 +132,19 @@ async function register(
     ...over,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<AssetRow>(res.body);
+  return unwrap<AssetRow>(res.body);
 }
 
 /** A device from the hardware inventory, to link information to. */
 async function createDevice(tag: string): Promise<string> {
-  const res = await req(admin, 'POST', '/assets', {
+  const res = await apiRequest(app, admin, 'POST', '/assets', {
     assetTag: tag,
     type: 'laptop',
     manufacturer: 'Acme',
     model: 'Book 13',
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<{ id: string }>(res.body).id;
+  return unwrap<{ id: string }>(res.body).id;
 }
 
 beforeAll(async () => {
@@ -180,17 +164,17 @@ describe('classification levels', () => {
     // The FK guarantees a classified asset has a level; it does NOT guarantee the reverse. A label in
     // the enum with no row here is a label that cannot be used, and the failure would appear as a
     // foreign-key 500 rather than as anything about classification.
-    const res = await req(security, 'GET', '/information-assets/classification-levels');
+    const res = await apiRequest(app, security, 'GET', '/information-assets/classification-levels');
     expect(res.status).toBe(200);
-    const levels = data<LevelRow[]>(res.body);
+    const levels = unwrap<LevelRow[]>(res.body);
     expect(new Set(levels.map((l) => l.code))).toEqual(
       new Set(informationClassificationEnum.enumValues),
     );
   });
 
   it('ranks them uniquely and hands over the handling rules', async () => {
-    const levels = data<LevelRow[]>(
-      (await req(security, 'GET', '/information-assets/classification-levels')).body,
+    const levels = unwrap<LevelRow[]>(
+      (await apiRequest(app, security, 'GET', '/information-assets/classification-levels')).body,
     );
     const ranks = levels.map((l) => l.rank);
     expect(new Set(ranks).size).toBe(ranks.length);
@@ -211,8 +195,15 @@ describe('registering', () => {
     const asset = await register();
     expect(asset.classification).toBe('confidential');
 
-    const history = data<ChangeRow[]>(
-      (await req(security, 'GET', `/information-assets/${asset.id}/classification-history`)).body,
+    const history = unwrap<ChangeRow[]>(
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/information-assets/${asset.id}/classification-history`,
+        )
+      ).body,
     );
     expect(history).toHaveLength(1);
     // Null `fromLevel` is the initial classification: the label traces to a decision rather than to
@@ -224,7 +215,7 @@ describe('registering', () => {
 
   it('refuses a duplicate reference', async () => {
     const asset = await register();
-    const res = await req(security, 'POST', '/information-assets', {
+    const res = await apiRequest(app, security, 'POST', '/information-assets', {
       reference: asset.reference,
       name: 'Something else',
       type: 'database',
@@ -240,7 +231,7 @@ describe('registering', () => {
   });
 
   it('refuses an owner who does not exist', async () => {
-    const res = await req(security, 'POST', '/information-assets', {
+    const res = await apiRequest(app, security, 'POST', '/information-assets', {
       reference: nextRef(),
       name: 'Orphan register entry',
       type: 'other',
@@ -273,7 +264,7 @@ describe('registering', () => {
       'INFORMATION_ASSET_CLASSIFICATION_MISMATCH',
     ],
   ])('refuses %s with a code rather than a 500', async (_name, over, code) => {
-    const res = await req(security, 'POST', '/information-assets', {
+    const res = await apiRequest(app, security, 'POST', '/information-assets', {
       reference: nextRef(),
       name: 'Incoherent entry',
       type: 'dataset',
@@ -290,7 +281,7 @@ describe('registering', () => {
   it('rejects a rating off the scale at validation', async () => {
     // The DTO catches this before the service does, which is why the status is 422 and not 412. Both
     // are refusals with a code; what matters is that neither is a 500 from the CHECK.
-    const res = await req(security, 'POST', '/information-assets', {
+    const res = await apiRequest(app, security, 'POST', '/information-assets', {
       reference: nextRef(),
       name: 'Off the scale',
       type: 'other',
@@ -308,15 +299,28 @@ describe('registering', () => {
 describe('classification direction', () => {
   it('lets the holder of manage RAISE a classification, and records why', async () => {
     const asset = await register();
-    const res = await req(security, 'POST', `/information-assets/${asset.id}/reclassify`, {
-      classification: 'restricted',
-      reason: WHY,
-    });
+    const res = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/reclassify`,
+      {
+        classification: 'restricted',
+        reason: WHY,
+      },
+    );
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(data<AssetRow>(res.body).classification).toBe('restricted');
+    expect(unwrap<AssetRow>(res.body).classification).toBe('restricted');
 
-    const history = data<ChangeRow[]>(
-      (await req(security, 'GET', `/information-assets/${asset.id}/classification-history`)).body,
+    const history = unwrap<ChangeRow[]>(
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/information-assets/${asset.id}/classification-history`,
+        )
+      ).body,
     );
     expect(history).toHaveLength(2);
     expect(history[1]).toMatchObject({
@@ -328,20 +332,32 @@ describe('classification direction', () => {
 
   it('refuses the same level it already carries', async () => {
     const asset = await register();
-    const res = await req(security, 'POST', `/information-assets/${asset.id}/reclassify`, {
-      classification: 'confidential',
-      reason: WHY,
-    });
+    const res = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/reclassify`,
+      {
+        classification: 'confidential',
+        reason: WHY,
+      },
+    );
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('INFORMATION_ASSET_NOT_RECLASSIFIED');
   });
 
   it('refuses a REDUCTION through the manage route, naming the permission needed', async () => {
     const asset = await register({ personalData: false });
-    const res = await req(security, 'POST', `/information-assets/${asset.id}/reclassify`, {
-      classification: 'internal',
-      reason: WHY,
-    });
+    const res = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/reclassify`,
+      {
+        classification: 'internal',
+        reason: WHY,
+      },
+    );
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('INFORMATION_ASSET_DECLASSIFY_REQUIRED');
   });
@@ -350,24 +366,30 @@ describe('classification direction', () => {
     // The other half of the same rule. Without this, the coded 412 above could be the ONLY guard, and
     // a caller who found the second route would walk around it.
     const asset = await register({ personalData: false });
-    const res = await req(security, 'POST', `/information-assets/${asset.id}/declassify`, {
-      classification: 'internal',
-      reason: WHY,
-    });
+    const res = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/declassify`,
+      {
+        classification: 'internal',
+        reason: WHY,
+      },
+    );
     expect(res.status).toBe(403);
   });
 
   it('lets the wildcard holder declassify, and audits it as its own act', async () => {
     const asset = await register({ personalData: false });
-    const res = await req(admin, 'POST', `/information-assets/${asset.id}/declassify`, {
+    const res = await apiRequest(app, admin, 'POST', `/information-assets/${asset.id}/declassify`, {
       classification: 'internal',
       reason: WHY,
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(data<AssetRow>(res.body).classification).toBe('internal');
+    expect(unwrap<AssetRow>(res.body).classification).toBe('internal');
 
-    const actions = data<{ action: string }[]>(
-      (await req(admin, 'GET', `/audit-logs?resourceId=${asset.id}&limit=50`)).body,
+    const actions = unwrap<{ action: string }[]>(
+      (await apiRequest(app, admin, 'GET', `/audit-logs?resourceId=${asset.id}&limit=50`)).body,
     ).map((a) => a.action);
     // Its OWN action, so "show me every declassification this quarter" is a query over the trail
     // rather than a filter somebody has to remember to apply.
@@ -379,7 +401,7 @@ describe('classification direction', () => {
     // The permission allows a REDUCTION; it does not allow an INCOHERENT one. This is the case the
     // whole separation exists for.
     const asset = await register({ personalData: true });
-    const res = await req(admin, 'POST', `/information-assets/${asset.id}/declassify`, {
+    const res = await apiRequest(app, admin, 'POST', `/information-assets/${asset.id}/declassify`, {
       classification: 'internal',
       reason: WHY,
     });
@@ -389,10 +411,16 @@ describe('classification direction', () => {
 
   it('requires a reason with substance in either direction', async () => {
     const asset = await register();
-    const res = await req(security, 'POST', `/information-assets/${asset.id}/reclassify`, {
-      classification: 'restricted',
-      reason: 'n/a',
-    });
+    const res = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/reclassify`,
+      {
+        classification: 'restricted',
+        reason: 'n/a',
+      },
+    );
     // `ck_asset_classification_history_reason` demands 10 characters; the DTO refuses first, so the
     // history cannot hold a justification that justifies nothing.
     expect(res.status).toBe(422);
@@ -406,7 +434,7 @@ describe('re-rating', () => {
       confidentiality: 1,
       personalData: false,
     });
-    const res = await req(security, 'PATCH', `/information-assets/${asset.id}`, {
+    const res = await apiRequest(app, security, 'PATCH', `/information-assets/${asset.id}`, {
       confidentiality: 4,
     });
     expect(res.status).toBe(412);
@@ -419,7 +447,7 @@ describe('re-rating', () => {
       confidentiality: 2,
       personalData: false,
     });
-    const res = await req(security, 'PATCH', `/information-assets/${asset.id}`, {
+    const res = await apiRequest(app, security, 'PATCH', `/information-assets/${asset.id}`, {
       personalData: true,
     });
     expect(res.status).toBe(412);
@@ -428,26 +456,27 @@ describe('re-rating', () => {
 
   it('accepts a coherent re-rating', async () => {
     const asset = await register();
-    const res = await req(security, 'PATCH', `/information-assets/${asset.id}`, {
+    const res = await apiRequest(app, security, 'PATCH', `/information-assets/${asset.id}`, {
       integrity: 5,
       availability: 4,
       location: 'eu-west-1',
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(data<AssetRow>(res.body)).toMatchObject({ integrity: 5, availability: 4 });
+    expect(unwrap<AssetRow>(res.body)).toMatchObject({ integrity: 5, availability: 4 });
   });
 
   it('does not accept a classification smuggled through the patch', async () => {
     const asset = await register();
-    const res = await req(security, 'PATCH', `/information-assets/${asset.id}`, {
+    const res = await apiRequest(app, security, 'PATCH', `/information-assets/${asset.id}`, {
       classification: 'public',
     });
     // The field is not in the schema, so this is a validation failure rather than a silent no-op —
     // which matters, because a silent no-op would look like a successful reclassification.
     expect(res.status).toBe(422);
     expect(
-      data<AssetRow>((await req(security, 'GET', `/information-assets/${asset.id}`)).body)
-        .classification,
+      unwrap<AssetRow>(
+        (await apiRequest(app, security, 'GET', `/information-assets/${asset.id}`)).body,
+      ).classification,
     ).toBe('confidential');
   });
 });
@@ -455,63 +484,83 @@ describe('re-rating', () => {
 describe('review and retirement', () => {
   it('stamps a review and moves the next one', async () => {
     const asset = await register();
-    const res = await req(security, 'POST', `/information-assets/${asset.id}/reviewed`, {
-      reviewDueOn: '2027-06-30',
-    });
+    const res = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/reviewed`,
+      {
+        reviewDueOn: '2027-06-30',
+      },
+    );
     expect(res.status).toBe(200);
-    const reviewed = data<AssetRow>(res.body);
+    const reviewed = unwrap<AssetRow>(res.body);
     expect(reviewed.reviewDueOn).toBe('2027-06-30');
     expect(reviewed.lastReviewedAt).not.toBeNull();
   });
 
   it('finds assets due for review on or before a date', async () => {
     const asset = await register({ reviewDueOn: '2026-01-31' });
-    const res = await req(
+    const res = await apiRequest(
+      app,
       security,
       'GET',
       '/information-assets?reviewDueOnOrBefore=2026-02-01&limit=100',
     );
     expect(res.status).toBe(200);
-    const rows = data<AssetListRow[]>(res.body);
+    const rows = unwrap<AssetListRow[]>(res.body);
     expect(rows.map((r) => r.id)).toContain(asset.id);
   });
 
   it('retires an asset once, and then accepts nothing further', async () => {
     const asset = await register();
-    expect((await req(security, 'POST', `/information-assets/${asset.id}/retire`)).status).toBe(
-      200,
-    );
+    expect(
+      (await apiRequest(app, security, 'POST', `/information-assets/${asset.id}/retire`)).status,
+    ).toBe(200);
 
-    const second = await req(security, 'POST', `/information-assets/${asset.id}/retire`);
+    const second = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/retire`,
+    );
     expect(second.status).toBe(412);
     expect(errorCode(second.body)).toBe('INFORMATION_ASSET_RETIRED');
 
-    const patched = await req(security, 'PATCH', `/information-assets/${asset.id}`, {
+    const patched = await apiRequest(app, security, 'PATCH', `/information-assets/${asset.id}`, {
       name: 'Renamed after retirement',
     });
     expect(patched.status).toBe(412);
     expect(errorCode(patched.body)).toBe('INFORMATION_ASSET_RETIRED');
 
-    const reclassified = await req(security, 'POST', `/information-assets/${asset.id}/reclassify`, {
-      classification: 'restricted',
-      reason: WHY,
-    });
+    const reclassified = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/information-assets/${asset.id}/reclassify`,
+      {
+        classification: 'restricted',
+        reason: WHY,
+      },
+    );
     expect(reclassified.status).toBe(412);
     expect(errorCode(reclassified.body)).toBe('INFORMATION_ASSET_RETIRED');
   });
 
   it('excludes retired assets from the register unless asked for', async () => {
     const asset = await register();
-    await req(security, 'POST', `/information-assets/${asset.id}/retire`);
+    await apiRequest(app, security, 'POST', `/information-assets/${asset.id}/retire`);
 
-    const current = data<AssetListRow[]>(
-      (await req(security, 'GET', `/information-assets?search=${asset.reference}`)).body,
+    const current = unwrap<AssetListRow[]>(
+      (await apiRequest(app, security, 'GET', `/information-assets?search=${asset.reference}`))
+        .body,
     );
     expect(current.map((r) => r.id)).not.toContain(asset.id);
 
-    const including = data<AssetListRow[]>(
+    const including = unwrap<AssetListRow[]>(
       (
-        await req(
+        await apiRequest(
+          app,
           security,
           'GET',
           `/information-assets?search=${asset.reference}&includeRetired=true`,
@@ -534,12 +583,24 @@ describe('devices', () => {
     const higher = await register({ classification: 'restricted', confidentiality: 5 });
 
     for (const asset of [lower, higher]) {
-      const link = await req(security, 'PUT', `/information-assets/${asset.id}/devices/${device}`);
+      const link = await apiRequest(
+        app,
+        security,
+        'PUT',
+        `/information-assets/${asset.id}/devices/${device}`,
+      );
       expect(link.status, JSON.stringify(link.body)).toBe(204);
     }
 
-    const holdings = data<HoldingRow[]>(
-      (await req(security, 'GET', `/information-assets/reports/device-holdings/${device}`)).body,
+    const holdings = unwrap<HoldingRow[]>(
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/information-assets/reports/device-holdings/${device}`,
+        )
+      ).body,
     );
     expect(holdings.map((h) => h.reference)).toEqual([higher.reference, lower.reference]);
     // The line that decides whether a lost laptop is an incident comes first, and it says so.
@@ -553,17 +614,25 @@ describe('devices', () => {
     // Twice, deliberately: the second call is the idempotency claim.
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(
-        (await req(security, 'PUT', `/information-assets/${asset.id}/devices/${device}`)).status,
+        (
+          await apiRequest(
+            app,
+            security,
+            'PUT',
+            `/information-assets/${asset.id}/devices/${device}`,
+          )
+        ).status,
         `attempt ${attempt + 1}`,
       ).toBe(204);
     }
-    const devices = data<{ deviceAssetId: string }[]>(
-      (await req(security, 'GET', `/information-assets/${asset.id}/devices`)).body,
+    const devices = unwrap<{ deviceAssetId: string }[]>(
+      (await apiRequest(app, security, 'GET', `/information-assets/${asset.id}/devices`)).body,
     );
     expect(devices).toHaveLength(1);
 
-    const rows = data<AssetListRow[]>(
-      (await req(security, 'GET', `/information-assets?search=${asset.reference}`)).body,
+    const rows = unwrap<AssetListRow[]>(
+      (await apiRequest(app, security, 'GET', `/information-assets?search=${asset.reference}`))
+        .body,
     );
     expect(rows[0].deviceCount).toBe(1);
   });
@@ -571,12 +640,20 @@ describe('devices', () => {
   it('unlinks once and reports a second attempt', async () => {
     const device = await createDevice(`E2E-DEV-${RUN}-C`);
     const asset = await register();
-    await req(security, 'PUT', `/information-assets/${asset.id}/devices/${device}`);
+    await apiRequest(app, security, 'PUT', `/information-assets/${asset.id}/devices/${device}`);
 
     expect(
-      (await req(security, 'DELETE', `/information-assets/${asset.id}/devices/${device}`)).status,
+      (
+        await apiRequest(
+          app,
+          security,
+          'DELETE',
+          `/information-assets/${asset.id}/devices/${device}`,
+        )
+      ).status,
     ).toBe(204);
-    const second = await req(
+    const second = await apiRequest(
+      app,
       security,
       'DELETE',
       `/information-assets/${asset.id}/devices/${device}`,
@@ -588,20 +665,26 @@ describe('devices', () => {
     // Deliberately distinguishable from a 404: the caller asking has just been told a laptop is
     // missing, and "nothing was on it" is the answer they need to be able to read.
     const unknown = '00000000-0000-7000-8000-0000000000fe';
-    const res = await req(
+    const res = await apiRequest(
+      app,
       security,
       'GET',
       `/information-assets/reports/device-holdings/${unknown}`,
     );
     expect(res.status).toBe(200);
-    expect(data<HoldingRow[]>(res.body)).toEqual([]);
+    expect(unwrap<HoldingRow[]>(res.body)).toEqual([]);
   });
 
   it('refuses to link a device to a retired asset', async () => {
     const device = await createDevice(`E2E-DEV-${RUN}-D`);
     const asset = await register();
-    await req(security, 'POST', `/information-assets/${asset.id}/retire`);
-    const res = await req(security, 'PUT', `/information-assets/${asset.id}/devices/${device}`);
+    await apiRequest(app, security, 'POST', `/information-assets/${asset.id}/retire`);
+    const res = await apiRequest(
+      app,
+      security,
+      'PUT',
+      `/information-assets/${asset.id}/devices/${device}`,
+    );
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('INFORMATION_ASSET_RETIRED');
   });
@@ -610,9 +693,14 @@ describe('devices', () => {
 describe('reports and listing', () => {
   it('summarises the register by level, including levels holding nothing', async () => {
     await register({ classification: 'restricted', confidentiality: 5 });
-    const res = await req(security, 'GET', '/information-assets/reports/classification-summary');
+    const res = await apiRequest(
+      app,
+      security,
+      'GET',
+      '/information-assets/reports/classification-summary',
+    );
     expect(res.status).toBe(200);
-    const lines = data<SummaryRow[]>(res.body);
+    const lines = unwrap<SummaryRow[]>(res.body);
     // Every level appears: "we hold nothing restricted" is an answer worth printing, and a join from
     // the asset side would have omitted the line entirely.
     expect(new Set(lines.map((l) => l.classification))).toEqual(
@@ -626,9 +714,9 @@ describe('reports and listing', () => {
   });
 
   it('lists most protected first', async () => {
-    const res = await req(security, 'GET', '/information-assets?limit=100');
+    const res = await apiRequest(app, security, 'GET', '/information-assets?limit=100');
     expect(res.status).toBe(200);
-    const ranks = data<AssetListRow[]>(res.body).map((r) => r.classificationRank);
+    const ranks = unwrap<AssetListRow[]>(res.body).map((r) => r.classificationRank);
     expect([...ranks].sort((a, b) => b - a)).toEqual(ranks);
   });
 
@@ -639,8 +727,15 @@ describe('reports and listing', () => {
       confidentiality: 2,
       personalData: false,
     });
-    const rows = data<AssetListRow[]>(
-      (await req(security, 'GET', '/information-assets?personalDataOnly=true&limit=100')).body,
+    const rows = unwrap<AssetListRow[]>(
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          '/information-assets?personalDataOnly=true&limit=100',
+        )
+      ).body,
     );
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(holding.id);
@@ -652,9 +747,15 @@ describe('reports and listing', () => {
     // One question to the person asking it — "which assets am I responsible for" — rather than two
     // filters a screen has to remember to combine.
     const asset = await register({ custodianId: FIXTURE.AUDITOR.id });
-    const rows = data<AssetListRow[]>(
-      (await req(security, 'GET', `/information-assets?ownerId=${FIXTURE.AUDITOR.id}&limit=100`))
-        .body,
+    const rows = unwrap<AssetListRow[]>(
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/information-assets?ownerId=${FIXTURE.AUDITOR.id}&limit=100`,
+        )
+      ).body,
     );
     expect(rows.map((r) => r.id)).toContain(asset.id);
   });
@@ -662,12 +763,13 @@ describe('reports and listing', () => {
 
 describe('permissions', () => {
   it('lets a read-only identity read but not register', async () => {
-    expect((await req(auditor, 'GET', '/information-assets')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/information-assets')).status).toBe(200);
     expect(
-      (await req(auditor, 'GET', '/information-assets/reports/classification-summary')).status,
+      (await apiRequest(app, auditor, 'GET', '/information-assets/reports/classification-summary'))
+        .status,
     ).toBe(200);
 
-    const res = await req(auditor, 'POST', '/information-assets', {
+    const res = await apiRequest(app, auditor, 'POST', '/information-assets', {
       reference: nextRef(),
       name: 'Auditor should not be able to write this',
       type: 'other',
@@ -682,9 +784,9 @@ describe('permissions', () => {
   });
 
   it('refuses an identity holding no codes at all', async () => {
-    expect((await req(employee, 'GET', '/information-assets')).status).toBe(403);
-    expect((await req(employee, 'GET', '/information-assets/classification-levels')).status).toBe(
-      403,
-    );
+    expect((await apiRequest(app, employee, 'GET', '/information-assets')).status).toBe(403);
+    expect(
+      (await apiRequest(app, employee, 'GET', '/information-assets/classification-levels')).status,
+    ).toBe(403);
   });
 });

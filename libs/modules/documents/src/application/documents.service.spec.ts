@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, PreconditionFailedException, type DrizzleDB } from '@platform';
 import { DocumentsService } from './documents.service';
 import type { ControlledDocument, DocumentVersion } from '../domain/documents.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 
@@ -85,7 +86,7 @@ function makeService(repoOver: Record<string, unknown> = {}) {
     transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
   } as unknown as DrizzleDB;
   const engine = { submit: vi.fn().mockResolvedValue({ id: 'req-1' }) };
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
 
   const service = new DocumentsService(repo, db, engine as never, audit as never);
   return { service, repo, db, engine, audit };

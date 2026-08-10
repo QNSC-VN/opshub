@@ -27,7 +27,15 @@
 import { createHash } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `training.read` AND `training.manage`. */
@@ -88,32 +96,8 @@ interface CertificateRow {
   checksumSha256: string | null;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
-
 async function createCourse(over: Record<string, unknown> = {}): Promise<CourseRow> {
-  const res = await req(hr, 'POST', '/training/courses', {
+  const res = await apiRequest(app, hr, 'POST', '/training/courses', {
     code: nextCode(),
     title: 'Security Awareness',
     category: 'information_security',
@@ -121,21 +105,21 @@ async function createCourse(over: Record<string, unknown> = {}): Promise<CourseR
     ...over,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<CourseRow>(res.body);
+  return unwrap<CourseRow>(res.body);
 }
 
 /** A position nobody else is using, with the employee assigned to it from `effectiveFrom`. */
 async function positionWithEmployee(effectiveFrom: string): Promise<string> {
-  const created = await req(hr, 'POST', '/positions', {
+  const created = await apiRequest(app, hr, 'POST', '/positions', {
     code: nextCode(),
     title: 'Training Subject',
     department: `E2E-TRAIN-${RUN}`,
     headcount: 5,
   });
   expect(created.status).toBe(201);
-  const positionId = data<{ id: string }>(created.body).id;
+  const positionId = unwrap<{ id: string }>(created.body).id;
 
-  const assigned = await req(hr, 'POST', `/positions/${positionId}/assignments`, {
+  const assigned = await apiRequest(app, hr, 'POST', `/positions/${positionId}/assignments`, {
     employeeId: FIXTURE.SECURITY.id,
     effectiveFrom,
   });
@@ -161,13 +145,13 @@ afterAll(async () => {
 describe('the course catalogue', () => {
   it('refuses a duplicate code', async () => {
     const code = nextCode();
-    const first = await req(hr, 'POST', '/training/courses', {
+    const first = await apiRequest(app, hr, 'POST', '/training/courses', {
       code,
       title: 'First Aid Basics',
       category: 'safety',
     });
     expect(first.status, JSON.stringify(first.body)).toBe(201);
-    const dup = await req(hr, 'POST', '/training/courses', {
+    const dup = await apiRequest(app, hr, 'POST', '/training/courses', {
       code,
       title: 'Duplicate Code',
       category: 'safety',
@@ -177,33 +161,47 @@ describe('the course catalogue', () => {
 
   it('hides retired courses unless asked, and keeps them addressable', async () => {
     const course = await createCourse();
-    expect((await req(hr, 'POST', `/training/courses/${course.id}/retire`)).status).toBe(200);
+    expect(
+      (await apiRequest(app, hr, 'POST', `/training/courses/${course.id}/retire`)).status,
+    ).toBe(200);
 
-    const visible = data<CourseRow[]>((await req(hr, 'GET', '/training/courses?limit=100')).body);
+    const visible = unwrap<CourseRow[]>(
+      (await apiRequest(app, hr, 'GET', '/training/courses?limit=100')).body,
+    );
     expect(visible.some((c) => c.id === course.id)).toBe(false);
 
-    const all = data<CourseRow[]>(
-      (await req(hr, 'GET', '/training/courses?limit=100&includeRetired=true')).body,
+    const all = unwrap<CourseRow[]>(
+      (await apiRequest(app, hr, 'GET', '/training/courses?limit=100&includeRetired=true')).body,
     );
     expect(all.some((c) => c.id === course.id)).toBe(true);
     // Past records reference it, so it must still resolve directly.
-    expect((await req(hr, 'GET', `/training/courses/${course.id}`)).status).toBe(200);
+    expect((await apiRequest(app, hr, 'GET', `/training/courses/${course.id}`)).status).toBe(200);
 
     // And retiring twice is refused rather than silently rewriting the date.
-    expect((await req(hr, 'POST', `/training/courses/${course.id}/retire`)).status).toBe(412);
+    expect(
+      (await apiRequest(app, hr, 'POST', `/training/courses/${course.id}/retire`)).status,
+    ).toBe(412);
   });
 
   it('refuses to require or complete a retired course', async () => {
     const course = await createCourse();
     const positionId = await positionWithEmployee('2050-01-01');
-    expect((await req(hr, 'POST', `/training/courses/${course.id}/retire`)).status).toBe(200);
+    expect(
+      (await apiRequest(app, hr, 'POST', `/training/courses/${course.id}/retire`)).status,
+    ).toBe(200);
 
-    const required = await req(hr, 'POST', `/training/positions/${positionId}/requirements`, {
-      courseId: course.id,
-    });
+    const required = await apiRequest(
+      app,
+      hr,
+      'POST',
+      `/training/positions/${positionId}/requirements`,
+      {
+        courseId: course.id,
+      },
+    );
     expect(required.status).toBe(412);
 
-    const completed = await req(hr, 'POST', '/training/records', {
+    const completed = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-01',
@@ -215,7 +213,7 @@ describe('the course catalogue', () => {
 describe('recording a completion', () => {
   it('derives the expiry from the course and freezes it against a later edit', async () => {
     const course = await createCourse({ validityMonths: 12 });
-    const created = await req(hr, 'POST', '/training/records', {
+    const created = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-31',
@@ -223,34 +221,37 @@ describe('recording a completion', () => {
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     // Clamped: there is no 31st of February.
-    expect(data<RecordRow>(created.body).expiresOn).toBe('2027-01-31');
+    expect(unwrap<RecordRow>(created.body).expiresOn).toBe('2027-01-31');
 
-    const edited = await req(hr, 'PATCH', `/training/courses/${course.id}`, { validityMonths: 1 });
+    const edited = await apiRequest(app, hr, 'PATCH', `/training/courses/${course.id}`, {
+      validityMonths: 1,
+    });
     expect(edited.status).toBe(200);
 
     // The record keeps the expiry it was earned with — changing the rule governs the NEXT
     // completion, and restating history would make somebody retroactively non-compliant.
-    const after = data<RecordRow>(
-      (await req(hr, 'GET', `/training/records/${data<RecordRow>(created.body).id}`)).body,
+    const after = unwrap<RecordRow>(
+      (await apiRequest(app, hr, 'GET', `/training/records/${unwrap<RecordRow>(created.body).id}`))
+        .body,
     );
     expect(after.expiresOn).toBe('2027-01-31');
   });
 
   it('leaves the expiry null for a course that never lapses', async () => {
     const course = await createCourse({ validityMonths: null });
-    const created = await req(hr, 'POST', '/training/records', {
+    const created = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-05',
     });
     expect(created.status).toBe(201);
-    expect(data<RecordRow>(created.body).expiresOn).toBeNull();
+    expect(unwrap<RecordRow>(created.body).expiresOn).toBeNull();
   });
 
   it('refuses a future date and an unknown employee', async () => {
     const course = await createCourse();
 
-    const future = await req(hr, 'POST', '/training/records', {
+    const future = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2999-01-01',
@@ -258,7 +259,7 @@ describe('recording a completion', () => {
     expect(future.status).toBe(412);
     expect(errorCode(future.body)).toBe('TRAINING_INVALID_COMPLETION');
 
-    const nobody = await req(hr, 'POST', '/training/records', {
+    const nobody = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: '00000000-0000-7000-8000-0000000000fe',
       courseId: course.id,
       completedOn: '2026-01-01',
@@ -270,32 +271,33 @@ describe('recording a completion', () => {
 describe('retraining', () => {
   it('supersedes the previous record and leaves exactly one current', async () => {
     const course = await createCourse({ validityMonths: 12 });
-    const first = data<RecordRow>(
+    const first = unwrap<RecordRow>(
       (
-        await req(hr, 'POST', '/training/records', {
+        await apiRequest(app, hr, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-01-15',
         })
       ).body,
     );
-    const second = await req(hr, 'POST', '/training/records', {
+    const second = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-07-15',
     });
     expect(second.status, JSON.stringify(second.body)).toBe(201);
-    const successor = data<RecordRow>(second.body);
+    const successor = unwrap<RecordRow>(second.body);
 
-    const predecessor = data<RecordRow>(
-      (await req(hr, 'GET', `/training/records/${first.id}`)).body,
+    const predecessor = unwrap<RecordRow>(
+      (await apiRequest(app, hr, 'GET', `/training/records/${first.id}`)).body,
     );
     expect(predecessor.supersededById).toBe(successor.id);
 
     // `uq_training_record_current` exists to make this true.
-    const current = data<RecordRow[]>(
+    const current = unwrap<RecordRow[]>(
       (
-        await req(
+        await apiRequest(
+          app,
           hr,
           'GET',
           `/training/records?employeeId=${FIXTURE.SECURITY.id}&courseId=${course.id}&currentOnly=true`,
@@ -310,7 +312,7 @@ describe('retraining', () => {
     const course = await createCourse();
     expect(
       (
-        await req(hr, 'POST', '/training/records', {
+        await apiRequest(app, hr, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-06-01',
@@ -318,7 +320,7 @@ describe('retraining', () => {
       ).status,
     ).toBe(201);
 
-    const backdated = await req(hr, 'POST', '/training/records', {
+    const backdated = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-01-01',
@@ -333,9 +335,9 @@ describe('retraining', () => {
 describe('verify and revoke', () => {
   it('attests once, then refuses to overwrite who attested', async () => {
     const course = await createCourse();
-    const record = data<RecordRow>(
+    const record = unwrap<RecordRow>(
       (
-        await req(hr, 'POST', '/training/records', {
+        await apiRequest(app, hr, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-02-02',
@@ -343,20 +345,20 @@ describe('verify and revoke', () => {
       ).body,
     );
 
-    const verified = await req(hr, 'POST', `/training/records/${record.id}/verify`);
+    const verified = await apiRequest(app, hr, 'POST', `/training/records/${record.id}/verify`);
     expect(verified.status).toBe(200);
-    expect(data<RecordRow>(verified.body).verifiedBy).toBe(FIXTURE.HR.id);
+    expect(unwrap<RecordRow>(verified.body).verifiedBy).toBe(FIXTURE.HR.id);
 
-    const again = await req(hr, 'POST', `/training/records/${record.id}/verify`);
+    const again = await apiRequest(app, hr, 'POST', `/training/records/${record.id}/verify`);
     expect(again.status).toBe(409);
     expect(errorCode(again.body)).toBe('TRAINING_RECORD_NOT_VERIFIABLE');
   });
 
   it('requires a reason to revoke, and refuses a second revocation', async () => {
     const course = await createCourse();
-    const record = data<RecordRow>(
+    const record = unwrap<RecordRow>(
       (
-        await req(hr, 'POST', '/training/records', {
+        await apiRequest(app, hr, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-02-03',
@@ -364,15 +366,17 @@ describe('verify and revoke', () => {
       ).body,
     );
 
-    expect((await req(hr, 'POST', `/training/records/${record.id}/revoke`, {})).status).toBe(422);
+    expect(
+      (await apiRequest(app, hr, 'POST', `/training/records/${record.id}/revoke`, {})).status,
+    ).toBe(422);
 
-    const revoked = await req(hr, 'POST', `/training/records/${record.id}/revoke`, {
+    const revoked = await apiRequest(app, hr, 'POST', `/training/records/${record.id}/revoke`, {
       reason: 'certificate could not be verified with the provider',
     });
     expect(revoked.status).toBe(200);
-    expect(data<RecordRow>(revoked.body).status).toBe('revoked');
+    expect(unwrap<RecordRow>(revoked.body).status).toBe('revoked');
 
-    const twice = await req(hr, 'POST', `/training/records/${record.id}/revoke`, {
+    const twice = await apiRequest(app, hr, 'POST', `/training/records/${record.id}/revoke`, {
       reason: 'again',
     });
     expect(twice.status).toBe(412);
@@ -382,9 +386,9 @@ describe('verify and revoke', () => {
     // The partial index excludes revoked rows on purpose: revoking evidence must not lock the
     // employee out of ever recording that course again.
     const course = await createCourse();
-    const first = data<RecordRow>(
+    const first = unwrap<RecordRow>(
       (
-        await req(hr, 'POST', '/training/records', {
+        await apiRequest(app, hr, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-02-04',
@@ -392,11 +396,14 @@ describe('verify and revoke', () => {
       ).body,
     );
     expect(
-      (await req(hr, 'POST', `/training/records/${first.id}/revoke`, { reason: 'wrong person' }))
-        .status,
+      (
+        await apiRequest(app, hr, 'POST', `/training/records/${first.id}/revoke`, {
+          reason: 'wrong person',
+        })
+      ).status,
     ).toBe(200);
 
-    const replacement = await req(hr, 'POST', '/training/records', {
+    const replacement = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-02-05',
@@ -413,14 +420,14 @@ describe('the competency gap report', () => {
 
     expect(
       (
-        await req(hr, 'POST', `/training/positions/${positionId}/requirements`, {
+        await apiRequest(app, hr, 'POST', `/training/positions/${positionId}/requirements`, {
           courseId: mandatory.id,
         })
       ).status,
     ).toBe(201);
     expect(
       (
-        await req(hr, 'POST', `/training/positions/${positionId}/requirements`, {
+        await apiRequest(app, hr, 'POST', `/training/positions/${positionId}/requirements`, {
           courseId: recommended.id,
           kind: 'recommended',
         })
@@ -428,8 +435,8 @@ describe('the competency gap report', () => {
     ).toBe(201);
 
     const mine = () =>
-      req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`).then((r) =>
-        data<GapRow[]>(r.body),
+      apiRequest(app, hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`).then((r) =>
+        unwrap<GapRow[]>(r.body),
       );
 
     const before = await mine();
@@ -438,9 +445,10 @@ describe('the competency gap report', () => {
     expect(before.map((g) => g.courseCode)).not.toContain(recommended.code);
     expect(before.find((g) => g.courseCode === mandatory.code)?.reason).toBe('never_completed');
 
-    const withRecommended = data<GapRow[]>(
+    const withRecommended = unwrap<GapRow[]>(
       (
-        await req(
+        await apiRequest(
+          app,
           hr,
           'GET',
           `/training/gaps?employeeId=${FIXTURE.SECURITY.id}&includeRecommended=true`,
@@ -451,7 +459,7 @@ describe('the competency gap report', () => {
 
     expect(
       (
-        await req(hr, 'POST', '/training/records', {
+        await apiRequest(app, hr, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: mandatory.id,
           completedOn: '2026-03-01',
@@ -463,9 +471,15 @@ describe('the competency gap report', () => {
 
     // Same record, later date: the certificate has lapsed, and the reason distinguishes that from
     // never having taken it because one needs scheduling and the other rescheduling.
-    const later = data<GapRow[]>(
-      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}&asOf=2027-06-01`))
-        .body,
+    const later = unwrap<GapRow[]>(
+      (
+        await apiRequest(
+          app,
+          hr,
+          'GET',
+          `/training/gaps?employeeId=${FIXTURE.SECURITY.id}&asOf=2027-06-01`,
+        )
+      ).body,
     );
     expect(later.find((g) => g.courseCode === mandatory.code)?.reason).toBe('expired');
   });
@@ -476,29 +490,29 @@ describe('the competency gap report', () => {
     const oldPosition = await positionWithEmployee('2052-01-01');
     expect(
       (
-        await req(hr, 'POST', `/training/positions/${oldPosition}/requirements`, {
+        await apiRequest(app, hr, 'POST', `/training/positions/${oldPosition}/requirements`, {
           courseId: course.id,
         })
       ).status,
     ).toBe(201);
 
-    const before = data<GapRow[]>(
-      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`)).body,
+    const before = unwrap<GapRow[]>(
+      (await apiRequest(app, hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`)).body,
     );
     expect(before.map((g) => g.courseCode)).toContain(course.code);
 
     // Transfer to a position with no requirements at all.
     await positionWithEmployee('2053-01-01');
 
-    const after = data<GapRow[]>(
-      (await req(hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`)).body,
+    const after = unwrap<GapRow[]>(
+      (await apiRequest(app, hr, 'GET', `/training/gaps?employeeId=${FIXTURE.SECURITY.id}`)).body,
     );
     // No backfill ran; the report simply reads the CURRENT assignment.
     expect(after.map((g) => g.courseCode)).not.toContain(course.code);
   });
 
   it('lets an employee see their own gaps with no training permission', async () => {
-    const res = await req(subject, 'GET', '/training/me/gaps');
+    const res = await apiRequest(app, subject, 'GET', '/training/me/gaps');
     expect(res.status).toBe(200);
   });
 });
@@ -507,13 +521,15 @@ describe('authorization', () => {
   it('lets a training.read holder read but not manage', async () => {
     const course = await createCourse();
 
-    expect((await req(auditor, 'GET', '/training/courses')).status).toBe(200);
-    expect((await req(auditor, 'GET', `/training/courses/${course.id}`)).status).toBe(200);
-    expect((await req(auditor, 'GET', '/training/gaps')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/training/courses')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', `/training/courses/${course.id}`)).status).toBe(
+      200,
+    );
+    expect((await apiRequest(app, auditor, 'GET', '/training/gaps')).status).toBe(200);
 
     expect(
       (
-        await req(auditor, 'POST', '/training/courses', {
+        await apiRequest(app, auditor, 'POST', '/training/courses', {
           code: nextCode(),
           title: 'X',
           category: 'safety',
@@ -522,7 +538,7 @@ describe('authorization', () => {
     ).toBe(403);
     expect(
       (
-        await req(auditor, 'POST', '/training/records', {
+        await apiRequest(app, auditor, 'POST', '/training/records', {
           employeeId: FIXTURE.SECURITY.id,
           courseId: course.id,
           completedOn: '2026-01-01',
@@ -532,14 +548,14 @@ describe('authorization', () => {
   });
 
   it('refuses the collection to a caller holding nothing, but not their own records', async () => {
-    expect((await req(employee, 'GET', '/training/records')).status).toBe(403);
-    expect((await req(employee, 'GET', '/training/courses')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/training/records')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/training/courses')).status).toBe(403);
 
-    const mine = await req(subject, 'GET', '/training/me');
+    const mine = await apiRequest(app, subject, 'GET', '/training/me');
     expect(mine.status).toBe(200);
     // Their own rows and nobody else's — `/training/me` is keyed on the caller.
-    expect(data<RecordRow[]>(mine.body).length).toBeGreaterThan(0);
-    expect(data<RecordRow[]>(mine.body).every((r) => r.employeeId === FIXTURE.SECURITY.id)).toBe(
+    expect(unwrap<RecordRow[]>(mine.body).length).toBeGreaterThan(0);
+    expect(unwrap<RecordRow[]>(mine.body).every((r) => r.employeeId === FIXTURE.SECURITY.id)).toBe(
       true,
     );
   });
@@ -552,13 +568,13 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
   /** A record owned by the SUBJECT, so the self-service path is the one under test. */
   async function ownRecord(): Promise<string> {
     const course = await createCourse({ validityMonths: null });
-    const created = await req(hr, 'POST', '/training/records', {
+    const created = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.SECURITY.id,
       courseId: course.id,
       completedOn: '2026-04-01',
     });
     expect(created.status).toBe(201);
-    return data<RecordRow>(created.body).id;
+    return unwrap<RecordRow>(created.body).id;
   }
 
   /**
@@ -581,7 +597,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const recordId = await ownRecord();
 
     // No permission code — an employee attaching evidence to their OWN record is self-service.
-    const presigned = await req(
+    const presigned = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
@@ -593,7 +610,7 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
       },
     );
     expect(presigned.status, JSON.stringify(presigned.body)).toBe(201);
-    const presign = data<PresignRow>(presigned.body);
+    const presign = unwrap<PresignRow>(presigned.body);
 
     // The headers the signature covers, returned rather than guessed: sending fewer or more fails
     // the signature, and that failure carries no CORS headers.
@@ -602,28 +619,30 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const uploaded = await put(presign, bytes);
     expect(uploaded.status, uploaded.body).toBe(200);
 
-    const confirmed = await req(
+    const confirmed = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
     );
     expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200);
 
-    const listed = data<CertificateRow[]>(
-      (await req(hr, 'GET', `/training/records/${recordId}/certificates`)).body,
+    const listed = unwrap<CertificateRow[]>(
+      (await apiRequest(app, hr, 'GET', `/training/records/${recordId}/certificates`)).body,
     );
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({ fileName: 'certificate.pdf', sizeBytes: bytes.length });
     // The digest the client declared survived the round trip.
     expect(listed[0].checksumSha256).toBe(digest);
 
-    const download = await req(
+    const download = await apiRequest(
+      app,
       hr,
       'GET',
       `/training/records/${recordId}/certificates/${presign.fileId}/download`,
     );
     expect(download.status).toBe(200);
-    const url = data<{ url: string }>(download.body).url;
+    const url = unwrap<{ url: string }>(download.body).url;
     // A real URL, not a stringified Promise — which is what this used to be.
     expect(url).toMatch(/^https?:\/\//);
     const fetched = await fetch(url);
@@ -632,22 +651,24 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     // a presigned-GET response override would not.
     expect(fetched.headers.get('content-disposition')).toContain('attachment');
 
-    const removed = await req(
+    const removed = await apiRequest(
+      app,
       subject,
       'DELETE',
       `/training/records/${recordId}/certificates/${presign.fileId}`,
     );
     expect(removed.status).toBe(204);
     expect(
-      data<CertificateRow[]>(
-        (await req(hr, 'GET', `/training/records/${recordId}/certificates`)).body,
+      unwrap<CertificateRow[]>(
+        (await apiRequest(app, hr, 'GET', `/training/records/${recordId}/certificates`)).body,
       ),
     ).toHaveLength(0);
   });
 
   it('refuses a size that does not match what was declared', async () => {
     const recordId = await ownRecord();
-    const presigned = await req(
+    const presigned = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
@@ -658,13 +679,14 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
         checksumSha256: digest,
       },
     );
-    const presign = data<PresignRow>(presigned.body);
+    const presign = unwrap<PresignRow>(presigned.body);
 
     // The signature pins content-length, so a different body is rejected at the edge; if a backend
     // ever accepts it, confirm's HeadObject comparison is the second line.
     const putResult = await put(presign, Buffer.from('too short'));
     if (putResult.status === 200) {
-      const confirmed = await req(
+      const confirmed = await apiRequest(
+        app,
         subject,
         'POST',
         `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
@@ -678,7 +700,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
 
   it('refuses to confirm a file that was never uploaded', async () => {
     const recordId = await ownRecord();
-    const presigned = await req(
+    const presigned = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
@@ -688,9 +711,10 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
         sizeBytes: bytes.length,
       },
     );
-    const presign = data<PresignRow>(presigned.body);
+    const presign = unwrap<PresignRow>(presigned.body);
 
-    const confirmed = await req(
+    const confirmed = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
@@ -705,7 +729,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
 
     for (let i = 0; i < limit; i++) {
       const body = Buffer.concat([bytes, Buffer.from([i])]);
-      const presigned = await req(
+      const presigned = await apiRequest(
+        app,
         subject,
         'POST',
         `/training/records/${recordId}/certificates/presign`,
@@ -717,10 +742,11 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
         },
       );
       expect(presigned.status, `presign ${i}: ${JSON.stringify(presigned.body)}`).toBe(201);
-      const presign = data<PresignRow>(presigned.body);
+      const presign = unwrap<PresignRow>(presigned.body);
       const put_ = await put(presign, body);
       expect(put_.status, put_.body).toBe(200);
-      const confirmed = await req(
+      const confirmed = await apiRequest(
+        app,
         subject,
         'POST',
         `/training/records/${recordId}/certificates/${presign.fileId}/confirm`,
@@ -728,7 +754,8 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
       expect(confirmed.status, `confirm ${i}: ${JSON.stringify(confirmed.body)}`).toBe(200);
     }
 
-    const overTheLine = await req(
+    const overTheLine = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${recordId}/certificates/presign`,
@@ -742,32 +769,45 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const recordId = await ownRecord();
     // SVG is active content: an "image" upload that renders inline is stored XSS the moment the
     // bytes come from an origin the app trusts.
-    const svg = await req(subject, 'POST', `/training/records/${recordId}/certificates/presign`, {
-      fileName: 'logo.svg',
-      mimeType: 'image/svg+xml',
-      sizeBytes: 100,
-    });
+    const svg = await apiRequest(
+      app,
+      subject,
+      'POST',
+      `/training/records/${recordId}/certificates/presign`,
+      {
+        fileName: 'logo.svg',
+        mimeType: 'image/svg+xml',
+        sizeBytes: 100,
+      },
+    );
     expect(svg.status).toBe(422);
 
-    const huge = await req(subject, 'POST', `/training/records/${recordId}/certificates/presign`, {
-      fileName: 'big.pdf',
-      mimeType: 'application/pdf',
-      sizeBytes: 21 * 1024 * 1024,
-    });
+    const huge = await apiRequest(
+      app,
+      subject,
+      'POST',
+      `/training/records/${recordId}/certificates/presign`,
+      {
+        fileName: 'big.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 21 * 1024 * 1024,
+      },
+    );
     expect(huge.status).toBe(422);
   });
 
   it("refuses to touch another employee's record without training.manage", async () => {
     const course = await createCourse({ validityMonths: null });
-    const hrOwn = await req(hr, 'POST', '/training/records', {
+    const hrOwn = await apiRequest(app, hr, 'POST', '/training/records', {
       employeeId: FIXTURE.MANAGER.id,
       courseId: course.id,
       completedOn: '2026-04-02',
     });
     expect(hrOwn.status).toBe(201);
-    const foreignId = data<RecordRow>(hrOwn.body).id;
+    const foreignId = unwrap<RecordRow>(hrOwn.body).id;
 
-    const presigned = await req(
+    const presigned = await apiRequest(
+      app,
       subject,
       'POST',
       `/training/records/${foreignId}/certificates/presign`,
@@ -777,12 +817,18 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
 
     // HR holds `training.manage`, so the same call is allowed — the 403 above is the rule, not a
     // broken route.
-    const asHr = await req(hr, 'POST', `/training/records/${foreignId}/certificates/presign`, {
-      fileName: 'mine-to-manage.pdf',
-      mimeType: 'application/pdf',
-      sizeBytes: bytes.length,
-      checksumSha256: digest,
-    });
+    const asHr = await apiRequest(
+      app,
+      hr,
+      'POST',
+      `/training/records/${foreignId}/certificates/presign`,
+      {
+        fileName: 'mine-to-manage.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: bytes.length,
+        checksumSha256: digest,
+      },
+    );
     expect(asHr.status).toBe(201);
   });
 
@@ -790,22 +836,35 @@ describe.runIf(HAS_S3)('certificates, against real S3', () => {
     const a = await ownRecord();
     const b = await ownRecord();
 
-    const presigned = await req(subject, 'POST', `/training/records/${a}/certificates/presign`, {
-      fileName: 'a.pdf',
-      mimeType: 'application/pdf',
-      sizeBytes: bytes.length,
-      checksumSha256: digest,
-    });
-    const presign = data<PresignRow>(presigned.body);
+    const presigned = await apiRequest(
+      app,
+      subject,
+      'POST',
+      `/training/records/${a}/certificates/presign`,
+      {
+        fileName: 'a.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: bytes.length,
+        checksumSha256: digest,
+      },
+    );
+    const presign = unwrap<PresignRow>(presigned.body);
     const uploaded = await put(presign, bytes);
     expect(uploaded.status, uploaded.body).toBe(200);
     expect(
-      (await req(subject, 'POST', `/training/records/${a}/certificates/${presign.fileId}/confirm`))
-        .status,
+      (
+        await apiRequest(
+          app,
+          subject,
+          'POST',
+          `/training/records/${a}/certificates/${presign.fileId}/confirm`,
+        )
+      ).status,
     ).toBe(200);
 
     // The file id is a capability only in combination with the record that owns it.
-    const crossed = await req(
+    const crossed = await apiRequest(
+      app,
       hr,
       'GET',
       `/training/records/${b}/certificates/${presign.fileId}/download`,

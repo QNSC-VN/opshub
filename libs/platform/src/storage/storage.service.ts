@@ -28,6 +28,7 @@ import {
   DOWNLOAD_URL_TTL_SECONDS,
   ORPHAN_CUTOFF_HOURS,
 } from './storage.types';
+import { MS_PER_HOUR } from '@shared-kernel';
 
 /** Base64 SHA-256 is always 44 chars ending in '='. */
 const BASE64_SHA256 = /^[A-Za-z0-9+/]{43}=$/;
@@ -302,7 +303,7 @@ export class StorageService {
    * Called by StorageCleanupCron — returns number of rows deleted.
    */
   async purgeOrphanedUploads(): Promise<number> {
-    const cutoff = new Date(Date.now() - ORPHAN_CUTOFF_HOURS * 3_600_000);
+    const cutoff = new Date(Date.now() - ORPHAN_CUTOFF_HOURS * MS_PER_HOUR);
     const rows = await this.db
       .select({ id: storedFiles.id, key: storedFiles.key })
       .from(storedFiles)

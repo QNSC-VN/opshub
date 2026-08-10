@@ -12,8 +12,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, PreconditionFailedException, type DrizzleDB } from '@platform';
-import { TrainingService, addMonths, today } from './training.service';
+import { addMonths, today } from '@shared-kernel';
+import { TrainingService } from './training.service';
 import type { TrainingCourse, TrainingRecord } from '../domain/training.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 
@@ -66,27 +68,23 @@ function makeService(repoOver: Record<string, unknown> = {}) {
         Promise.resolve(course({ id, ...input })),
       ),
     retireCourse: vi.fn().mockResolvedValue(course({ retiredAt: new Date() })),
-    addRequirement: vi
-      .fn()
-      .mockResolvedValue({
-        id: 'req-1',
-        positionId: 'pos-1',
-        courseId: 'course-1',
-        kind: 'mandatory',
-        graceDays: null,
-        createdAt: new Date(),
-      }),
+    addRequirement: vi.fn().mockResolvedValue({
+      id: 'req-1',
+      positionId: 'pos-1',
+      courseId: 'course-1',
+      kind: 'mandatory',
+      graceDays: null,
+      createdAt: new Date(),
+    }),
     findRequirement: vi.fn().mockResolvedValue(null),
-    removeRequirement: vi
-      .fn()
-      .mockResolvedValue({
-        id: 'req-1',
-        positionId: 'pos-1',
-        courseId: 'course-1',
-        kind: 'mandatory',
-        graceDays: null,
-        createdAt: new Date(),
-      }),
+    removeRequirement: vi.fn().mockResolvedValue({
+      id: 'req-1',
+      positionId: 'pos-1',
+      courseId: 'course-1',
+      kind: 'mandatory',
+      graceDays: null,
+      createdAt: new Date(),
+    }),
     listRequirementsForPosition: vi.fn().mockResolvedValue([]),
     createRecord: vi
       .fn()
@@ -114,7 +112,7 @@ function makeService(repoOver: Record<string, unknown> = {}) {
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
   const attachments = {
     list: vi.fn().mockResolvedValue([]),
     presign: vi.fn().mockResolvedValue({ fileId: 'f1', uploadUrl: 'u', requiredHeaders: {} }),

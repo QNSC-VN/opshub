@@ -267,6 +267,44 @@ another copy of presign/confirm.
   migrated onto the link table: the column IS the relationship, and a join per avatar render buys
   only uniformity.
 
+## Shared primitives: use these, do not re-declare them
+
+A codebase-wide audit on 2026-08-10, run before starting QMS, found the same failure mode seven
+times: **something shared already existed and a second copy grew beside it.** Each one is now
+consolidated, and each is listed here so the next module reaches for the existing thing.
+
+| Concern | The one place | What it replaced |
+| --- | --- | --- |
+| Milliseconds and seconds | `MS_PER_HOUR`, `MS_PER_DAY`, `SEC_PER_DAY`… in `@shared-kernel/time` | 14 files hand-rolling `3_600_000`, `23 * 60 * 60_000`, `30 * 24 * 60 * 60 * 1000` |
+| ISO-date arithmetic | `today`, `toIsoDate`, `addDays`, `addMonths` in `@shared-kernel/time` | `today()` implemented identically in contracts, the risk register and training |
+| The ISMS 1..5 scale | `RATING_MIN`/`RATING_MAX`/`isRating` in `isms/domain/rating.ts` | four independent TS definitions; the two migration CHECKs now name this file |
+| Date validation in DTOs | `z.string().date()` | a hand-rolled `/^\d{4}-\d{2}-\d{2}$/` in three DTOs, which also accepted `2026-02-31` |
+| Writing an audit entry | `AuditService.recordChange` and `AuditService.forResource` | six private `record()` wrappers whose only content was flattening `Actor` |
+| The audit catalogue | `@modules/audit` → `domain/audit-catalogue.ts` | a stale 40-key `AUDIT_ACTION` in `shared-kernel/constants.ts` |
+| Faking audit in unit tests | `createFakeAudit()` in `@modules/audit` → `testing/audit.fake.ts` | ten copies of `{ record: vi.fn() }` |
+| Driving the API in e2e | `apiRequest`, `unwrap`, `errorCode` in `test/e2e/support/harness.ts` | 24 copies across eight spec files |
+| A status union in TS | `(typeof someEnum.enumValues)[number]` | three hand-written unions shadowing DB enums they could not track |
+
+Two of these were more than untidiness:
+
+- **The duplicate `AUDIT_ACTION` was a correctness trap, not just dead code.** Nothing imported it —
+  every service reaches for `@modules/audit` — but `shared-kernel` is re-exported wholesale, so
+  `import { AUDIT_ACTION } from '@shared-kernel'` resolved to the smaller set. Four keys carried
+  DIFFERENT VALUES for the same event (`catalog.item_created` against `catalog_item.created`) and
+  seven `RBAC_*` keys duplicated `role.*` under another name. Writing one and querying the other
+  loses rows from the trail and nothing fails. `constants.ts` already documented an identical
+  incident with a duplicate `PERMISSION` map — the same mistake, twice, in one file. The guard is
+  `test/audit-catalogue-single-source.spec.ts`, which asserts each catalogue is declared in exactly
+  one file and every value is unique; mutation-checked by adding a second declaration.
+- **The narrower type was right, and now says so.** `WebhookDeliveryStatus` omits `sent`, which the
+  shared `outbox_status` enum allows, because this relay overrides `markSent` to write `delivered`.
+  Deriving it from the enum would have made it wider than reality and lost exhaustiveness. Left
+  hand-written, with the reason recorded — the one case where NOT deriving is correct.
+
+**Still open from that audit:** report limit defaults are bare literals (`limit = 50 | 100 | 200 |
+500` across six services). `PAGE_SIZE.MAX` governs pagination; nothing governs report caps, and
+picking one number needs a decision about what a report is for rather than a refactor.
+
 ## Checklist for a new module
 
 The platform enforces most of this automatically; the ratchets will fail a PR that skips a

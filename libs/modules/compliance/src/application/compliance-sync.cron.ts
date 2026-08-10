@@ -3,10 +3,11 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ExclusiveJob } from '@platform';
 import { GraphSyncService } from './graph-sync.service';
 import { ShadowItDetectionService } from './shadow-it-detection.service';
+import { MS_PER_HOUR } from '@shared-kernel';
 
 /** Lock TTL sits just under each schedule so a crashed pod never blocks the next tick. */
 const DEVICE_SYNC_LOCK_TTL_MS = 25 * 60_000;
-const SHADOW_IT_LOCK_TTL_MS = 5 * 60 * 60_000;
+const SHADOW_IT_LOCK_TTL_MS = 5 * MS_PER_HOUR;
 
 @Injectable()
 export class ComplianceSyncCron {

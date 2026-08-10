@@ -13,8 +13,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, PreconditionFailedException, type DrizzleDB } from '@platform';
-import { ContractsService, addDays, today } from './contracts.service';
+import { addDays, today } from '@shared-kernel';
+import { ContractsService } from './contracts.service';
 import type { EmploymentContract } from '../domain/contracts.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 
@@ -83,7 +85,7 @@ function makeService(repoOver: Record<string, unknown> = {}) {
   // object — what `@typescript-eslint/unbound-method` objects to.
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
   const notifications = { schedule: vi.fn().mockResolvedValue(undefined) };
   const employees = { getById: vi.fn().mockResolvedValue({ displayName: 'Mai Nguyen' }) };
 
@@ -416,20 +418,18 @@ describe('renewContract', () => {
     // Without this the route was unusable: the incoming draft is unsigned, so every renewal
     // answered CONTRACT_NOT_SIGNED. Found by probing the live API.
     const { service, repo } = renewService({
-      findById: vi
-        .fn()
-        .mockImplementation((id: string) =>
-          Promise.resolve(
-            id === 'con-old'
-              ? outgoing
-              : contract({
-                  id: 'con-new',
-                  signedAt: null,
-                  startDate: '2031-01-01',
-                  endDate: '2031-12-31',
-                }),
-          ),
+      findById: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve(
+          id === 'con-old'
+            ? outgoing
+            : contract({
+                id: 'con-new',
+                signedAt: null,
+                startDate: '2031-01-01',
+                endDate: '2031-12-31',
+              }),
         ),
+      ),
     });
 
     await service.renewContract(

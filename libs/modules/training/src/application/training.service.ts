@@ -8,11 +8,10 @@ import {
   PreconditionFailedException,
   assertDateOrder,
   type AttachmentRef,
-  type DbExecutor,
   type DrizzleDB,
   type EntityAttachment,
 } from '@platform';
-import { newId, type Actor } from '@shared-kernel';
+import { addMonths, newId, today, type Actor } from '@shared-kernel';
 import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
 import { TRAINING_REPOSITORY, type ITrainingRepository } from '../domain/ports/training.repository';
 import type {
@@ -33,28 +32,6 @@ const CERTIFICATE_SURFACE = 'training-certificate' as const;
 
 /** The link table's entity type for a training record. */
 const RECORD_ENTITY = 'training_record';
-
-/** `YYYY-MM-DD` in UTC, matching every other date in this module. */
-export function today(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
-
-/**
- * `completedOn` plus `months`, as `YYYY-MM-DD`, clamped to the end of the target month.
- *
- * MONTHS, NOT DAYS, because certifications are stated in months and 24 × 30 drifts. The clamp is
- * the part worth stating: `2026-01-31` plus one month has no 31st to land on, and JavaScript's
- * `setUTCMonth` silently rolls into March. A certificate earned on the 31st should lapse on the
- * last day of the month it lapses in, not three days later.
- */
-export function addMonths(from: string, months: number): string {
-  const start = new Date(`${from}T00:00:00Z`);
-  const year = start.getUTCFullYear();
-  const month = start.getUTCMonth() + months;
-  const day = start.getUTCDate();
-  const lastOfTarget = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(day, lastOfTarget))).toISOString().slice(0, 10);
-}
 
 /**
  * Training courses, what each POSITION requires, and who has completed what.
@@ -102,15 +79,15 @@ export class TrainingService {
 
     return this.db.transaction(async (tx) => {
       const course = await this.repo.createCourse(input, tx);
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_COURSE_CREATED,
         AUDIT_RESOURCE.TRAINING_COURSE,
         course.id,
-        actor,
-        tx,
         {
           after: { code: course.code, title: course.title, validityMonths: course.validityMonths },
         },
+        tx,
       );
       return course;
     });
@@ -139,16 +116,16 @@ export class TrainingService {
 
     return this.db.transaction(async (tx) => {
       const after = await this.repo.updateCourse(id, input, tx);
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_COURSE_UPDATED,
         AUDIT_RESOURCE.TRAINING_COURSE,
         id,
-        actor,
-        tx,
         {
           before: { title: before.title, validityMonths: before.validityMonths },
           after: { title: after!.title, validityMonths: after!.validityMonths },
         },
+        tx,
       );
       return after!;
     });
@@ -166,15 +143,15 @@ export class TrainingService {
           'That course is already retired',
         );
       }
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_COURSE_RETIRED,
         AUDIT_RESOURCE.TRAINING_COURSE,
         id,
-        actor,
-        tx,
         {
           after: { retiredAt: retired.retiredAt },
         },
+        tx,
       );
       return retired;
     });
@@ -210,15 +187,15 @@ export class TrainingService {
         { ...input, kind: input.kind ?? 'mandatory' },
         tx,
       );
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_REQUIREMENT_ADDED,
         AUDIT_RESOURCE.TRAINING_REQUIREMENT,
         requirement.id,
-        actor,
-        tx,
         {
           after: { positionId: input.positionId, courseCode: course.code, kind: requirement.kind },
         },
+        tx,
       );
       return requirement;
     });
@@ -230,13 +207,13 @@ export class TrainingService {
       if (!removed) {
         throw new NotFoundException(ErrorCodes.NOT_FOUND, `Requirement ${id} not found`);
       }
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_REQUIREMENT_REMOVED,
         AUDIT_RESOURCE.TRAINING_REQUIREMENT,
         id,
-        actor,
-        tx,
         { before: { positionId: removed.positionId, courseId: removed.courseId } },
+        tx,
       );
     });
   }
@@ -316,12 +293,11 @@ export class TrainingService {
 
       const created = await this.repo.createRecord({ ...input, expiresOn, id: successorId }, tx);
 
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_RECORDED,
         AUDIT_RESOURCE.TRAINING_RECORD,
         created.id,
-        actor,
-        tx,
         {
           before: current ? { supersededRecordId: current.id } : null,
           after: {
@@ -331,6 +307,7 @@ export class TrainingService {
             expiresOn: created.expiresOn,
           },
         },
+        tx,
       );
       return created;
     });
@@ -373,15 +350,15 @@ export class TrainingService {
           'That record has already been verified',
         );
       }
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_VERIFIED,
         AUDIT_RESOURCE.TRAINING_RECORD,
         id,
-        actor,
-        tx,
         {
           after: { verifiedBy: actor.sub },
         },
+        tx,
       );
       return verified;
     });
@@ -411,16 +388,16 @@ export class TrainingService {
           'That record changed while being revoked',
         );
       }
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_REVOKED,
         AUDIT_RESOURCE.TRAINING_RECORD,
         id,
-        actor,
-        tx,
         {
           before: { status: record.status },
           after: { status: 'revoked', revokedReason: reason },
         },
+        tx,
       );
       return revoked;
     });
@@ -464,13 +441,13 @@ export class TrainingService {
     );
 
     await this.db.transaction(async (tx) => {
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_CERTIFICATE_ATTACHED,
         AUDIT_RESOURCE.TRAINING_RECORD,
         record.id,
-        actor,
-        tx,
         { after: { fileId, fileName: attachment.fileName } },
+        tx,
       );
     });
     return attachment;
@@ -498,13 +475,13 @@ export class TrainingService {
     await this.attachments.remove(this.ref(recordId), fileId, actor.sub, canManage);
 
     await this.db.transaction(async (tx) => {
-      await this.record(
+      await this.audit.recordChange(
+        actor,
         AUDIT_ACTION.TRAINING_CERTIFICATE_REMOVED,
         AUDIT_RESOURCE.TRAINING_RECORD,
         record.id,
-        actor,
-        tx,
         { before: { fileId } },
+        tx,
       );
     });
   }
@@ -532,25 +509,4 @@ export class TrainingService {
   }
 
   // ── Shared internals ─────────────────────────────────────────────────────────
-
-  private async record(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
-    resourceType: (typeof AUDIT_RESOURCE)[keyof typeof AUDIT_RESOURCE],
-    resourceId: string,
-    actor: Actor,
-    tx: DbExecutor,
-    changes: { before?: object | null; after?: object | null },
-  ): Promise<void> {
-    await this.audit.record(
-      {
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action,
-        resourceType,
-        resourceId,
-        changes,
-      },
-      tx,
-    );
-  }
 }

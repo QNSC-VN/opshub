@@ -12,8 +12,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, PreconditionFailedException, type DrizzleDB } from '@platform';
-import { ACCEPTANCE_APPROVAL_THRESHOLD, RiskService, today } from './risk.service';
+import { today } from '@shared-kernel';
+import { ACCEPTANCE_APPROVAL_THRESHOLD, RiskService } from './risk.service';
 import type { Risk, RiskTreatment } from '../domain/risk.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 
@@ -100,7 +102,7 @@ function makeService(repoOver: Record<string, unknown> = {}) {
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
   const engine = { submit: vi.fn().mockResolvedValue({ id: 'req-1' }) };
 
   const service = new RiskService(repo, db, audit as never, engine as never);

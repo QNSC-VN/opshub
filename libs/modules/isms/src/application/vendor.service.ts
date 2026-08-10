@@ -6,11 +6,16 @@ import {
   NotFoundException,
   PreconditionFailedException,
   assertDateOrder,
-  type DbExecutor,
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
-import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import {
+  AUDIT_ACTION,
+  type AuditAction,
+  AUDIT_RESOURCE,
+  AuditService,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { VENDOR_REPOSITORY, type IVendorRepository } from '../domain/ports/vendor.repository';
 import type { Risk } from '../domain/risk.types';
 import type {
@@ -79,11 +84,16 @@ const PASSING_OUTCOMES: readonly VendorAssessmentOutcome[] = ['pass', 'pass_with
  */
 @Injectable()
 export class VendorService {
+  private readonly trail: ResourceAuditTrail;
+
   constructor(
     @Inject(VENDOR_REPOSITORY) private readonly repo: IVendorRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly audit: AuditService,
-  ) {}
+  ) {
+    // Resource type named ONCE — see `AuditService.forResource`.
+    this.trail = audit.forResource(AUDIT_RESOURCE.VENDOR);
+  }
 
   // ── Criticality tiers ────────────────────────────────────────────────────────
 
@@ -105,7 +115,7 @@ export class VendorService {
 
     return this.db.transaction(async (tx) => {
       const vendor = await this.repo.create(input, tx);
-      await this.record(AUDIT_ACTION.VENDOR_REGISTERED, vendor.id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.VENDOR_REGISTERED, vendor.id, actor, tx, {
         after: {
           reference: vendor.reference,
           name: vendor.name,
@@ -157,7 +167,7 @@ export class VendorService {
 
     return this.db.transaction(async (tx) => {
       const after = await this.repo.update(id, input, tx);
-      await this.record(AUDIT_ACTION.VENDOR_UPDATED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.VENDOR_UPDATED, id, actor, tx, {
         before: {
           name: before.name,
           criticality: before.criticality,
@@ -297,7 +307,7 @@ export class VendorService {
       // repository. Uses the SAME timestamp that was recorded, so the stored due date always agrees
       // with the assessment it came from.
       await this.repo.setReviewDueOn(id, assessedAt, interval, tx);
-      await this.record(AUDIT_ACTION.VENDOR_ASSESSED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.VENDOR_ASSESSED, id, actor, tx, {
         after: {
           assessmentId: assessment.id,
           outcome: assessment.outcome,
@@ -321,7 +331,9 @@ export class VendorService {
 
     await this.db.transaction(async (tx) => {
       await this.repo.linkRisk(id, riskId, actor.sub, tx);
-      await this.record(AUDIT_ACTION.VENDOR_RISK_LINKED, id, actor, tx, { after: { riskId } });
+      await this.trail.record(AUDIT_ACTION.VENDOR_RISK_LINKED, id, actor, tx, {
+        after: { riskId },
+      });
     });
   }
 
@@ -333,7 +345,9 @@ export class VendorService {
       if (!removed) {
         throw new NotFoundException(ErrorCodes.NOT_FOUND, 'That risk is not linked to this vendor');
       }
-      await this.record(AUDIT_ACTION.VENDOR_RISK_UNLINKED, id, actor, tx, { before: { riskId } });
+      await this.trail.record(AUDIT_ACTION.VENDOR_RISK_UNLINKED, id, actor, tx, {
+        before: { riskId },
+      });
     });
   }
 
@@ -372,7 +386,7 @@ export class VendorService {
     vendor: Vendor,
     to: VendorStatus,
     extra: Partial<Pick<Vendor, 'terminatedAt' | 'terminationReason'>>,
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
+    action: AuditAction,
     actor: Actor,
     metadata: Record<string, unknown>,
   ): Promise<Vendor> {
@@ -388,7 +402,7 @@ export class VendorService {
           `${vendor.reference} was no longer '${from}' — read it again and retry`,
         );
       }
-      await this.record(action, vendor.id, actor, tx, {
+      await this.trail.record(action, vendor.id, actor, tx, {
         before: { status: from },
         after: { status: to, ...metadata },
       });
@@ -464,26 +478,6 @@ export class VendorService {
       );
     }
     return level.reviewIntervalMonths;
-  }
-
-  private async record(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
-    resourceId: string,
-    actor: Actor,
-    tx: DbExecutor,
-    changes: { before?: object | null; after?: object | null },
-  ): Promise<void> {
-    await this.audit.record(
-      {
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action,
-        resourceType: AUDIT_RESOURCE.VENDOR,
-        resourceId,
-        changes,
-      },
-      tx,
-    );
   }
 }
 

@@ -11,8 +11,13 @@ const criticality = z.enum(vendorCriticalityEnum.enumValues);
 const status = z.enum(vendorStatusEnum.enumValues);
 const outcome = z.enum(vendorAssessmentOutcomeEnum.enumValues);
 
-/** `YYYY-MM-DD`. The whole codebase compares dates as strings — see `assertDateOrder`. */
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
+/**
+ * `YYYY-MM-DD`. The whole codebase compares dates as strings — see `assertDateOrder`.
+ *
+ * `z.string().date()` rather than a shape regex: it is the idiom the other 27 date fields use, and it
+ * rejects `2026-02-31`, which a regex happily accepts.
+ */
+const isoDate = z.string().date();
 
 /** 10 characters minimum, matching the substance CHECKs and the service's refusals. */
 const substantial = z.string().min(10).max(5000);

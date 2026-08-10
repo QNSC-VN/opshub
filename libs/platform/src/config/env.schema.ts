@@ -1,5 +1,6 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { z } from 'zod';
+import { SEC_PER_DAY } from '@shared-kernel';
 
 const booleanish = (defaultValue: boolean) =>
   z
@@ -111,7 +112,7 @@ export const EnvSchema = z
       .number()
       .int()
       .positive()
-      .default(30 * 24 * 60 * 60),
+      .default(30 * SEC_PER_DAY),
     /**
      * HMAC key binding a CSRF token to the session that requested it, so a token
      * lifted from one session cannot be replayed in another.

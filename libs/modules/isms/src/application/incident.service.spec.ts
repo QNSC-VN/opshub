@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, type DrizzleDB } from '@platform';
 import { BREACH_NOTIFICATION_HOURS, IncidentService } from './incident.service';
 import type { Incident, IncidentEvent } from '../domain/incident.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 const DETECTED = new Date('2026-03-01T02:00:00.000Z');
@@ -95,7 +96,7 @@ function makeService(over: Record<string, unknown> = {}) {
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
 
   const service = new IncidentService(repo, db, audit as never);
   return { service, repo, transaction, audit, TX };

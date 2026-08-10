@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import { newId, type Actor } from '@shared-kernel';
+import { MS_PER_HOUR, newId, type Actor } from '@shared-kernel';
 import { InjectDrizzle, type DrizzleDB } from '../database/drizzle.provider';
 import { AuthzService } from '../auth/authz.service';
 import { ActorScope } from '../auth/actor-scope.service';
@@ -62,11 +62,11 @@ export class RequestEngine {
 
     const expiresAt =
       opts?.expiresAt ??
-      (def.defaultExpiryHours ? new Date(Date.now() + def.defaultExpiryHours * 3_600_000) : null);
+      (def.defaultExpiryHours ? new Date(Date.now() + def.defaultExpiryHours * MS_PER_HOUR) : null);
 
     // SLA deadline — stored for breach cron; separate from expiry
     const slaHours = def.slaHours ?? null;
-    const slaDeadline = slaHours ? new Date(Date.now() + slaHours * 3_600_000) : null;
+    const slaDeadline = slaHours ? new Date(Date.now() + slaHours * MS_PER_HOUR) : null;
 
     // Multi-step chain metadata — stored immutably at submit time
     const totalSteps = def.approvalSteps ? def.approvalSteps.length : 1;

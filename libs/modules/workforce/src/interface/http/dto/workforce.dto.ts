@@ -9,7 +9,9 @@ import {
   shiftTypeEnum,
 } from '@db/schema/enums';
 
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
+// `z.string().date()`, not a shape regex: it is the idiom the rest of the codebase uses and it
+// rejects impossible dates like `2026-02-31` that a regex accepts.
+const dateStr = z.string().date();
 
 // ── Timesheets ───────────────────────────────────────────────────────────────
 export const CreateTimesheetSchema = z.object({

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthzService } from '@platform';
-import type { AuditService } from '@modules/audit';
 import { AuthzAdminService } from './authz-admin.service';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 /**
  * Cache invalidation on role-DEFINITION changes.
@@ -58,11 +58,9 @@ function build(overrides: { holders?: string[]; system?: boolean } = {}) {
     invalidate: vi.fn().mockResolvedValue(undefined),
     resolve: vi.fn(),
   } as unknown as AuthzService & { invalidate: ReturnType<typeof vi.fn> };
-  const audit = {
-    record: vi.fn().mockResolvedValue(undefined),
-  } as unknown as AuditService & { record: ReturnType<typeof vi.fn> };
+  const audit = createFakeAudit();
 
-  const service = new AuthzAdminService(roleRepo, assignmentRepo, authz, audit);
+  const service = new AuthzAdminService(roleRepo, assignmentRepo, authz, audit as never);
 
   return { service, roleRepo, assignmentRepo, authz, holders };
 }
