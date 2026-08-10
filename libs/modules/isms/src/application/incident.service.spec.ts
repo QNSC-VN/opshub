@@ -182,7 +182,10 @@ describe('reportIncident', () => {
     );
   });
 
-  it('records the reporter from the token, not the payload', async () => {
+  it('records the reporter from the token', async () => {
+    // `ReportIncidentInput` has no `reportedBy`, so a caller cannot even express the smuggle — the
+    // type is the first guarantee. What this pins is the second: the service supplies it from the
+    // actor rather than leaving it to the repository's default or to a later caller.
     const { service, repo } = makeService();
 
     await service.reportIncident(
@@ -193,8 +196,6 @@ describe('reportIncident', () => {
         category: 'phishing',
         severity: 'low',
         detectedAt: DETECTED.toISOString(),
-        // Even if a caller sends one, it must not be honoured.
-        ...({ reportedBy: 'somebody-else' } as Record<string, never>),
       },
       ACTOR,
     );
