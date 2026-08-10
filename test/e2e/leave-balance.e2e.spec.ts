@@ -62,7 +62,17 @@ async function balances(
   session: Session,
   query = '',
 ): Promise<
-  { leaveType: string; grantedDays: number; consumedDays: number; remainingDays: number }[]
+  {
+    leaveType: string;
+    grantedDays: number;
+    accruedDays: number;
+    carriedOverDays: number;
+    carriedOverExpiresOn: string | null;
+    carriedOverAvailable: boolean;
+    consumedDays: number;
+    availableDays: number;
+    remainingDays: number;
+  }[]
 > {
   const res = await app.inject({
     method: 'GET',
@@ -214,6 +224,252 @@ describe('leave entitlement and balances', () => {
     expect(body.workingDays).toBe(5);
     // And it does not appear as a balance, because there is no allowance to report.
     expect((await balances(employee)).map((b) => b.leaveType)).not.toContain('unpaid');
+  });
+});
+
+describe('accrual and carry-over', () => {
+  /** Set an allowance for a year, so each test can pick its own without colliding. */
+  async function grant(year: number, days: number, leaveType = 'annual'): Promise<void> {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/v1/workforce/leave/entitlement',
+      headers: bearer(hr),
+      payload: { employeeId: FIXTURE.NO_PERMISSIONS.id, leaveType, year, grantedDays: days },
+    });
+    expect(res.statusCode, res.body).toBe(204);
+  }
+
+  async function balancesFor(year: number) {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/workforce/leave/balance?year=${year}`,
+      headers: bearer(employee),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return JSON.parse(res.body) as Awaited<ReturnType<typeof balances>>;
+  }
+
+  it('publishes a policy per leave type, marking the ones nobody configured', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/workforce/leave/policies',
+      headers: bearer(hr),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const policies = JSON.parse(res.body) as {
+      leaveType: string;
+      accrualMethod: string;
+      carryOverMaxDays: number;
+      isDefault: boolean;
+    }[];
+
+    const byType = Object.fromEntries(policies.map((p) => [p.leaveType, p]));
+    // Seeded: annual earns monthly and carries five days; sick is available in full and carries none.
+    expect(byType.annual).toMatchObject({
+      accrualMethod: 'monthly_accrual',
+      carryOverMaxDays: 5,
+      isDefault: false,
+    });
+    expect(byType.sick).toMatchObject({ accrualMethod: 'annual_grant', isDefault: false });
+    // Untracked types have NO row, and that absence is a meaning rather than a gap — so they appear
+    // with the pre-accrual default and say so.
+    expect(byType.unpaid).toMatchObject({
+      accrualMethod: 'annual_grant',
+      carryOverMaxDays: 0,
+      isDefault: true,
+    });
+  });
+
+  it('distinguishes the two accrual methods WITHIN the current year', async () => {
+    // The methods differ over the course of a year, which is the only place the difference exists:
+    // annual leave is earned a twelfth per month, sick leave is available in full from January.
+    const year = new Date().getUTCFullYear();
+    const month = new Date().getUTCMonth() + 1;
+    await grant(year, 12);
+    await grant(year, 8, 'sick');
+    const now = await balancesFor(year);
+
+    // A 12-day grant earns exactly one day per month, so today's month IS the accrued figure.
+    const annual = now.find((b) => b.leaveType === 'annual')!;
+    expect(annual.accruedDays).toBe(month);
+    // The whole allowance for the year is still reported, whatever is earned so far.
+    expect(annual.grantedDays).toBe(12);
+    expect(now.find((b) => b.leaveType === 'sick')!.accruedDays).toBe(8);
+  });
+
+  it('treats a finished year as fully earned and a future one as earning nothing YET', async () => {
+    // A year in the PAST is fully earned under either method: the year finished.
+    const past = 2020;
+    await grant(past, 12);
+    await grant(past, 8, 'sick');
+    const settled = await balancesFor(past);
+    expect(settled.find((b) => b.leaveType === 'annual')!.accruedDays).toBe(12);
+    expect(settled.find((b) => b.leaveType === 'sick')!.accruedDays).toBe(8);
+
+    // A future year has earned nothing AS OF TODAY under either method — an annual grant is
+    // available from the first day of ITS year, not before it. So `accruedDays` for a future year is
+    // 0 for every type, and the balance screen for next year reads as a plan rather than a wallet.
+    const future = new Date().getUTCFullYear() + 3;
+    await grant(future, 12);
+    await grant(future, 8, 'sick');
+    const ahead = await balancesFor(future);
+    for (const leaveType of ['annual', 'sick']) {
+      const row = ahead.find((b) => b.leaveType === leaveType)!;
+      expect(row.accruedDays, leaveType).toBe(0);
+      expect(row.availableDays, leaveType).toBe(0);
+    }
+    // …while `remainingDays` still reports what the year will settle at, so one screen can show both.
+    expect(ahead.find((b) => b.leaveType === 'annual')!.remainingDays).toBe(12);
+    // And booking INSIDE that year is still allowed, because accrual is judged at the window's end
+    // rather than today — the next test.
+  });
+
+  it('allows an advance booking whose days will have accrued by then', async () => {
+    // ACCRUAL LIMITS WHAT MAY BE TAKEN, NOT WHEN IT MAY BE BOOKED. Judging accrual today would refuse
+    // every future request, which is not what earning leave monthly means.
+    const year = new Date().getUTCFullYear() + 4;
+    await grant(year, 12);
+
+    // December of that year: twelve twelfths earned by then, so a five-day request is fine even
+    // though nothing is accrued today.
+    const december = `${year}-12-07`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave',
+      headers: bearer(employee),
+      payload: {
+        leaveType: 'annual',
+        startDate: december,
+        endDate: `${year}-12-11`,
+        reason: 'e2e advance booking',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+  });
+
+  it('refuses a booking for days that will NOT have accrued by then', async () => {
+    // January of a monthly-accrued year has earned one twelfth, so a five-day request is refused —
+    // and the message says why, because "1 available" against a 12-day allowance is otherwise
+    // indistinguishable from a bug.
+    const year = new Date().getUTCFullYear() + 5;
+    await grant(year, 12);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave',
+      headers: bearer(employee),
+      payload: {
+        leaveType: 'annual',
+        startDate: `${year}-01-05`,
+        endDate: `${year}-01-09`,
+        reason: 'e2e unearned booking',
+      },
+    });
+    expect(res.statusCode).toBe(412);
+    const body = JSON.parse(res.body) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('LEAVE_INSUFFICIENT_BALANCE');
+    expect(body.error.message).toContain('accrued');
+  });
+
+  it('carries unused days forward, capped by the policy, with an expiry date', async () => {
+    const from = 2021;
+    const to = 2022;
+    // Nine days unused last year, but the annual policy caps carry-over at five.
+    await grant(from, 9);
+    await grant(to, 12);
+
+    const run = await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave/carry-over',
+      headers: bearer(hr),
+      payload: { year: to },
+    });
+    expect(run.statusCode, run.body).toBe(200);
+
+    const target = (await balancesFor(to)).find((b) => b.leaveType === 'annual')!;
+    expect(target.carriedOverDays, 'capped at the policy maximum').toBe(5);
+    // Six months into the year, meaning THROUGH June rather than until 1 July.
+    expect(target.carriedOverExpiresOn).toBe(`${to}-06-30`);
+    // Both years are in the past, so the carried days have long lapsed and do not count today.
+    expect(target.carriedOverAvailable).toBe(false);
+    expect(target.availableDays).toBe(12 - target.consumedDays);
+    // `remainingDays` still shows what the year settled at, carried days included.
+    expect(target.remainingDays).toBe(17 - target.consumedDays);
+  });
+
+  it('is idempotent — a second run lands on the same figure', async () => {
+    // It SETS the carried figure from last year's closing balance rather than adding to it. An
+    // additive run would double every balance the second time somebody clicked the button.
+    const from = 2023;
+    const to = 2024;
+    await grant(from, 4);
+    await grant(to, 12);
+
+    for (const attempt of [1, 2, 3]) {
+      const run = await app.inject({
+        method: 'POST',
+        url: '/v1/workforce/leave/carry-over',
+        headers: bearer(hr),
+        payload: { year: to },
+      });
+      expect(run.statusCode, `attempt ${attempt}: ${run.body}`).toBe(200);
+    }
+    const target = (await balancesFor(to)).find((b) => b.leaveType === 'annual')!;
+    expect(target.carriedOverDays).toBe(4);
+  });
+
+  it('carries nothing for a type whose policy forbids it', async () => {
+    const from = 2025;
+    const to = 2026;
+    await grant(from, 8, 'sick');
+    await grant(to, 8, 'sick');
+
+    await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave/carry-over',
+      headers: bearer(hr),
+      payload: { year: to },
+    });
+    const target = (await balancesFor(to)).find((b) => b.leaveType === 'sick')!;
+    // An unused sick allowance is not a saving.
+    expect(target.carriedOverDays).toBe(0);
+    expect(target.carriedOverExpiresOn).toBeNull();
+  });
+
+  it('reports an employee with no entitlement row for the target year instead of inventing one', async () => {
+    // The new year's allowance is HR's decision; a row created here with a zero grant would read as
+    // an entitlement of nothing.
+    const from = 2018;
+    const to = 2019;
+    await grant(from, 9);
+
+    const run = await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave/carry-over',
+      headers: bearer(hr),
+      payload: { year: to },
+    });
+    expect(run.statusCode, run.body).toBe(200);
+    const result = JSON.parse(run.body) as {
+      applied: { employeeId: string }[];
+      skippedNoTargetRow: { employeeId: string; days: number }[];
+    };
+    const skipped = result.skippedNoTargetRow.find(
+      (r) => r.employeeId === FIXTURE.NO_PERMISSIONS.id,
+    );
+    expect(skipped, 'the missing target row must be reported').toBeDefined();
+    expect(skipped!.days).toBe(5);
+    expect(await balancesFor(to)).toEqual([]);
+  });
+
+  it('refuses the carry-over run to an identity without workforce.manage', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave/carry-over',
+      headers: bearer(employee),
+      payload: { year: 2030 },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });
 

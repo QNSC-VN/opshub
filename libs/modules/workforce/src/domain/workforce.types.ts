@@ -1,13 +1,16 @@
 import type {
-  timesheetStatusEnum,
-  leaveTypeEnum,
+  leaveAccrualMethodEnum,
   leaveStatusEnum,
+  leaveTypeEnum,
   overtimeStatusEnum,
   shiftTypeEnum,
+  timesheetStatusEnum,
 } from '../../../../../db/schema';
 
 export type TimesheetStatus = (typeof timesheetStatusEnum.enumValues)[number];
 export type LeaveType = (typeof leaveTypeEnum.enumValues)[number];
+/** How a year's granted days become available — see `workforce.leave_policies`. */
+export type LeaveAccrualMethod = (typeof leaveAccrualMethodEnum.enumValues)[number];
 export type LeaveStatus = (typeof leaveStatusEnum.enumValues)[number];
 export type OvertimeStatus = (typeof overtimeStatusEnum.enumValues)[number];
 export type ShiftType = (typeof shiftTypeEnum.enumValues)[number];

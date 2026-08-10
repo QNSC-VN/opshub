@@ -220,11 +220,61 @@ export class LeaveBalanceQueryDto extends createZodDto(LeaveBalanceQuerySchema) 
 export class LeaveBalanceResponseDto {
   leaveType!: string;
   year!: number;
+  /** The year's whole entitlement, as HR set it. */
   grantedDays!: number;
+  /** How much of it has been EARNED so far — equal to `grantedDays` unless accrual is monthly. */
+  accruedDays!: number;
   carriedOverDays!: number;
+  /** When carried days lapse, or null when they do not. */
+  carriedOverExpiresOn!: string | null;
+  /** Whether those carried days still count today. */
+  carriedOverAvailable!: boolean;
   /** Working days already committed — approved AND still-pending requests. */
   consumedDays!: number;
+  /**
+   * What may be booked RIGHT NOW: `accrued + carried (if unexpired) − consumed`.
+   *
+   * This is the figure the balance check enforces, and it is smaller than `remainingDays` whenever
+   * the year is part-accrued or carried days have lapsed.
+   */
+  availableDays!: number;
+  /** What the year will settle at: `granted + carried − consumed`, ignoring accrual and expiry. */
   remainingDays!: number;
+}
+
+export class LeavePolicyResponseDto {
+  leaveType!: string;
+  /** `annual_grant` — available in full from 1 January — or `monthly_accrual`. */
+  accrualMethod!: string;
+  carryOverMaxDays!: number;
+  /** Months into the new year that carried days survive, or null when they never lapse. */
+  carryOverExpiryMonths!: number | null;
+  note!: string | null;
+  /**
+   * True when this type has NO policy row and is running on the default.
+   *
+   * The default is `annual_grant` with no carry-over, which is how every entitlement behaved before
+   * accrual existed — so a reader can tell "nobody has decided" from "somebody decided this".
+   */
+  isDefault!: boolean;
+}
+
+export const RunCarryOverSchema = z.object({
+  /** The year to bring days INTO. Days come from `year - 1`. */
+  year: z.coerce.number().int().min(2000).max(2100),
+});
+export class RunCarryOverDto extends createZodDto(RunCarryOverSchema) {}
+
+export class CarryOverResultResponseDto {
+  applied!: { employeeId: string; leaveType: string; days: number; expiresOn: string | null }[];
+  /**
+   * Employees whose previous year had days to carry but who have no entitlement row for the target
+   * year yet.
+   *
+   * Reported rather than invented: the new year's grant is HR's decision, and a row created here with
+   * a zero grant would read as an entitlement of nothing.
+   */
+  skippedNoTargetRow!: { employeeId: string; leaveType: string; days: number }[];
 }
 
 export const SetLeaveEntitlementSchema = z.object({

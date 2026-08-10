@@ -1197,7 +1197,7 @@ export interface paths {
     };
     /**
      * Leave balances for a year
-     * @description granted + carriedOver − consumed, where consumed counts APPROVED and still-PENDING requests. A leave type with no entitlement row is untracked and absent from the result.
+     * @description `availableDays` is what may be booked now — accrued so far, plus unexpired carried days, minus consumed — and it is the figure the balance check enforces. `remainingDays` is what the year settles at (granted + carried − consumed) and is the larger number whenever the year is part-accrued or carried days have lapsed. Consumed counts APPROVED and still-PENDING requests. A leave type with no entitlement row is untracked and absent from the result.
      */
     get: operations['WorkforceController_listLeaveBalances'];
     put?: never;
@@ -1222,6 +1222,46 @@ export interface paths {
      */
     put: operations['WorkforceController_setLeaveEntitlement'];
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/workforce/leave/policies': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Leave accrual and carry-over policy per type
+     * @description One row per leave type. `isDefault` marks a type with NO policy row, which behaves as every entitlement did before accrual existed — available in full from 1 January, nothing carried. That default is a MEANING, not a gap: `unpaid` and `other` are untracked, so a policy for them would govern nothing.
+     */
+    get: operations['WorkforceController_listLeavePolicies'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/workforce/leave/carry-over': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Carry unused days from the previous year into this one
+     * @description IDEMPOTENT: it SETS each carried figure from the previous year's closing balance rather than adding to it, so a second run — or a run after a late correction to last year — lands on the same answer. Capped per type by the policy, and stamped with the date the carried days lapse. Employees with days to carry but no entitlement row for the target year are REPORTED, not given a row with a zero grant: the new year's allowance is HR's decision, not this run's.
+     */
+    post: operations['WorkforceController_runLeaveCarryOver'];
     delete?: never;
     options?: never;
     head?: never;
@@ -5125,10 +5165,25 @@ export interface components {
     LeaveBalanceResponseDto: {
       leaveType: string;
       year: number;
+      /** @description The year's whole entitlement, as HR set it. */
       grantedDays: number;
+      /** @description How much of it has been EARNED so far — equal to `grantedDays` unless accrual is monthly. */
+      accruedDays: number;
       carriedOverDays: number;
+      /** @description When carried days lapse, or null when they do not. */
+      carriedOverExpiresOn: string | null;
+      /** @description Whether those carried days still count today. */
+      carriedOverAvailable: boolean;
       /** @description Working days already committed — approved AND still-pending requests. */
       consumedDays: number;
+      /**
+       * @description What may be booked RIGHT NOW: `accrued + carried (if unexpired) − consumed`.
+       *
+       *     This is the figure the balance check enforces, and it is smaller than `remainingDays` whenever
+       *     the year is part-accrued or carried days have lapsed.
+       */
+      availableDays: number;
+      /** @description What the year will settle at: `granted + carried − consumed`, ignoring accrual and expiry. */
       remainingDays: number;
     };
     SetLeaveEntitlementDto: {
@@ -5140,6 +5195,38 @@ export interface components {
       grantedDays: number;
       carriedOverDays?: number;
       note?: string;
+    };
+    LeavePolicyResponseDto: {
+      leaveType: string;
+      /** @description `annual_grant` — available in full from 1 January — or `monthly_accrual`. */
+      accrualMethod: string;
+      carryOverMaxDays: number;
+      /** @description Months into the new year that carried days survive, or null when they never lapse. */
+      carryOverExpiryMonths: number | null;
+      note: string | null;
+      /**
+       * @description True when this type has NO policy row and is running on the default.
+       *
+       *     The default is `annual_grant` with no carry-over, which is how every entitlement behaved before
+       *     accrual existed — so a reader can tell "nobody has decided" from "somebody decided this".
+       */
+      isDefault: boolean;
+    };
+    RunCarryOverDto: {
+      year: number;
+    };
+    CarryOverResultResponseDto: {
+      applied: {
+        employeeId: string;
+        leaveType: string;
+        days: number;
+        expiresOn: string | null;
+      }[];
+      skippedNoTargetRow: {
+        employeeId: string;
+        leaveType: string;
+        days: number;
+      }[];
     };
     HolidayResponseDto: {
       id: string;
@@ -10346,6 +10433,90 @@ export interface operations {
     };
     responses: {
       204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_listLeavePolicies: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LeavePolicyResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WorkforceController_runLeaveCarryOver: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RunCarryOverDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CarryOverResultResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
         headers: {
           [name: string]: unknown;
         };

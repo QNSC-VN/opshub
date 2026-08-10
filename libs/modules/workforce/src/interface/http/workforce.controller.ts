@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   Post,
   Put,
@@ -38,7 +39,10 @@ import {
   HolidayQueryDto,
   HolidayResponseDto,
   LeaveBalanceQueryDto,
+  CarryOverResultResponseDto,
   LeaveBalanceResponseDto,
+  LeavePolicyResponseDto,
+  RunCarryOverDto,
   SetLeaveEntitlementDto,
   CreateTimesheetDto,
   ListTimesheetsQueryDto,
@@ -548,7 +552,10 @@ export class WorkforceController {
   @ApiOperation({
     summary: 'Leave balances for a year',
     description:
-      'granted + carriedOver − consumed, where consumed counts APPROVED and still-PENDING ' +
+      '`availableDays` is what may be booked now — accrued so far, plus unexpired carried days, ' +
+      'minus consumed — and it is the figure the balance check enforces. `remainingDays` is what the ' +
+      'year settles at (granted + carried − consumed) and is the larger number whenever the year is ' +
+      'part-accrued or carried days have lapsed. Consumed counts APPROVED and still-PENDING ' +
       'requests. A leave type with no entitlement row is untracked and absent from the result.',
   })
   @ApiOkResponse({ type: [LeaveBalanceResponseDto] })
@@ -581,6 +588,51 @@ export class WorkforceController {
     // orphan row that no screen can show and no balance can use.
     await this.employeeService.getById(dto.employeeId);
     await this.service.setLeaveEntitlement(dto, user);
+  }
+
+  /** How each leave type accrues, and what it carries over. */
+  @Get('leave/policies')
+  @RequirePermission('workforce.read')
+  @ApiOperation({
+    summary: 'Leave accrual and carry-over policy per type',
+    description:
+      'One row per leave type. `isDefault` marks a type with NO policy row, which behaves as every ' +
+      'entitlement did before accrual existed — available in full from 1 January, nothing carried. ' +
+      'That default is a MEANING, not a gap: `unpaid` and `other` are untracked, so a policy for ' +
+      'them would govern nothing.',
+  })
+  @ApiOkResponse({ type: [LeavePolicyResponseDto] })
+  @ApiCommonErrors(401, 403)
+  async listLeavePolicies(): Promise<LeavePolicyResponseDto[]> {
+    return this.service.listLeavePolicies();
+  }
+
+  /**
+   * Bring last year's unused days forward.
+   *
+   * `workforce.manage` and not `workforce.approve`: this sets what every employee may take next year,
+   * which is the same blast radius as declaring a public holiday or setting an allowance — and
+   * distinctly not the same act as deciding one person's request.
+   */
+  @Post('leave/carry-over')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('workforce.manage')
+  @ApiOperation({
+    summary: 'Carry unused days from the previous year into this one',
+    description:
+      "IDEMPOTENT: it SETS each carried figure from the previous year's closing balance rather than " +
+      'adding to it, so a second run — or a run after a late correction to last year — lands on the ' +
+      'same answer. Capped per type by the policy, and stamped with the date the carried days lapse. ' +
+      'Employees with days to carry but no entitlement row for the target year are REPORTED, not ' +
+      "given a row with a zero grant: the new year's allowance is HR's decision, not this run's.",
+  })
+  @ApiOkResponse({ type: CarryOverResultResponseDto })
+  @ApiCommonErrors(400, 401, 403, 422)
+  async runLeaveCarryOver(
+    @Body() dto: RunCarryOverDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CarryOverResultResponseDto> {
+    return this.service.runLeaveCarryOver(dto.year, user);
   }
 
   @Get('holidays')

@@ -14,11 +14,12 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import {
-  timesheetStatusEnum,
-  leaveTypeEnum,
+  leaveAccrualMethodEnum,
   leaveStatusEnum,
+  leaveTypeEnum,
   overtimeStatusEnum,
   shiftTypeEnum,
+  timesheetStatusEnum,
 } from './enums';
 import { requestItems } from './requests';
 
@@ -164,6 +165,15 @@ export const leaveEntitlements = workforceSchema.table(
     carriedOverDays: numeric('carried_over_days', { precision: 5, scale: 2 })
       .notNull()
       .default('0'),
+    /**
+     * When those carried days stop being available.
+     *
+     * Written by the carry-over run from the policy's `carry_over_expiry_months`; null means they
+     * never expire. Carried days are DEDUCTED from availability once this date has passed rather
+     * than being zeroed on it: the row stays honest about what was carried, and no cron has to fire
+     * on the right morning for the balance to be correct.
+     */
+    carriedOverExpiresOn: date('carried_over_expires_on'),
     note: text('note'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -173,3 +183,44 @@ export const leaveEntitlements = workforceSchema.table(
     employeeIdx: index('ix_leave_entitlement_employee').on(t.employeeId, t.year),
   }),
 );
+
+/**
+ * How each leave type accrues, and what it may carry over — reference data.
+ *
+ * WHAT THIS TABLE DOES NOT HOLD
+ * -----------------------------
+ * It carries no days-per-year. `leave_entitlements.granted_days` is already the year's entitlement,
+ * set by HR and pro-rated by hand for a mid-year joiner — and two sources of truth for "how many
+ * days" is exactly the drift this module's own docblock warns about for balances. So the policy
+ * decides HOW those days become available and WHAT survives into the next year, and nothing else.
+ *
+ * A LEAVE TYPE WITH NO ROW HERE BEHAVES AS IT ALWAYS DID: `annual_grant`, no carry-over. That
+ * default is what keeps this migration behaviour-preserving for every existing entitlement, and it
+ * is why there is deliberately no test asserting the enum is fully covered — unlike the
+ * classification, criticality and severity tables, an absent row here is a MEANING rather than a gap.
+ *
+ * Keyed by the enum, as those three are, so a policy and a leave type are one thing.
+ */
+export const leavePolicies = workforceSchema.table('leave_policies', {
+  leaveType: leaveTypeEnum('leave_type').primaryKey(),
+  accrualMethod: leaveAccrualMethodEnum('accrual_method').notNull().default('annual_grant'),
+  /**
+   * The most days that may be carried into the next year. `0` means none.
+   *
+   * A cap rather than a boolean because "carry over up to five days" is the shape every policy
+   * actually takes, and a boolean would put the number somewhere else.
+   */
+  carryOverMaxDays: numeric('carry_over_max_days', { precision: 5, scale: 2 })
+    .notNull()
+    .default('0'),
+  /**
+   * How many months into the new year carried days survive. Null means they never expire.
+   *
+   * Paired with the cap by `ck_leave_policy_expiry_needs_carry_over`: an expiry on a policy that
+   * carries nothing describes nothing.
+   */
+  carryOverExpiryMonths: integer('carry_over_expiry_months'),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
