@@ -59,6 +59,12 @@ const ROOT = join(__dirname, '..');
  *   - `vendorCriticalityLevels.code` PRIMARY KEY (db/schema/isms-vendors.ts and migration 0023:
  *                          `code vendor_criticality PRIMARY KEY`). Same shape as the classification
  *                          levels above, and `rank` is UNIQUE there too.
+ *   - `nonconformanceSeverities.code` PRIMARY KEY (db/schema/qms.ts and migration 0024).
+ *
+ * The last three are the same pattern: a REFERENCE TABLE keyed by its enum, carrying a `rank` column
+ * and the policy that rank implies. They are enumerated individually rather than matched by a naming
+ * rule on purpose — an entry here is a claim about a specific schema, and a pattern match would
+ * exempt the next table that merely happens to have a `code` column.
  *
  * Extending this list is a claim about the SCHEMA. Verify the constraint exists before
  * adding one, because a wrong entry here silently exempts a broken query.
@@ -77,6 +83,7 @@ const UNIQUE_NON_ID_COLUMNS = [
   'attachments.fileId',
   'classificationLevels.code',
   'vendorCriticalityLevels.code',
+  'nonconformanceSeverities.code',
 ] as const;
 
 interface Ordering {

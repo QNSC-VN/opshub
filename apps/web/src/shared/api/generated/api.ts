@@ -3691,6 +3691,421 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/nonconformances/severities': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The severity grades, their ranking and the policy each carries
+     * @description The RANK here is authoritative. `requiresCapa` is what the closure gate reads: a grade with it set cannot be closed until a corrective action has been verified effective.
+     */
+    get: operations['NonconformanceController_severities'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/reports/containment-overdue': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Findings past the containment deadline their grade allows
+     * @description Most overdue first. The deadline is `detectedAt + the grade's containmentDueDays`, derived in one query so this report and the register column cannot disagree. Only findings still `open` appear: a contained one met the deadline by definition.
+     */
+    get: operations['NonconformanceController_containmentOverdue'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/reports/recurrence': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Process areas where findings recur despite a verified corrective action
+     * @description The report ISO 9001 §10.2(d) exists for. Two findings in one area is ordinary; a finding raised AFTER somebody signed off a fix for that area is evidence the effectiveness review was wrong. Nothing else in the system can say that, because it needs both dates.
+     */
+    get: operations['NonconformanceController_recurrence'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The non-conformance register
+     * @description Worst grade first, then oldest detection — the order a work queue is read in. Each row carries its grade's policy, its CAPA counts and its containment deadline, resolved in the same query.
+     */
+    get: operations['NonconformanceController_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/report': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Raise a non-conformance
+     * @description CARRIES NO PERMISSION BEYOND BEING AUTHENTICATED. A quality system where recording a process failure needs a role is one where failures go unrecorded — the same argument that keeps incident reporting open. Handling still requires `nonconformance.manage`. `raisedBy` comes from the token, never the payload.
+     */
+    post: operations['NonconformanceController_report'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One finding */
+    get: operations['NonconformanceController_getOne'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Correct a finding, including its grade
+     * @description The status is NOT settable here — closing through a patch would skip the CAPA gate. Re-grading IS allowed: it is ordinary work on better information, and the gate then reads the new grade, which is what makes re-grading meaningful.
+     */
+    patch: operations['NonconformanceController_update'];
+    trace?: never;
+  };
+  '/v1/nonconformances/{id}/contain': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record the immediate fix
+     * @description The containment action is required — a contained finding with no action describes nothing.
+     */
+    post: operations['NonconformanceController_contain'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/{id}/close': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Close a finding
+     * @description THE GATE: a grade whose `requiresCapa` is set cannot be closed until a corrective action against it has been verified effective (ISO 9001 §10.2(d)), and the answer is a coded 412 rather than a silent success. A grade without it closes on its containment and closure note.
+     */
+    post: operations['NonconformanceController_close'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/{id}/void': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Mark a finding as raised in error
+     * @description Kept rather than deleted: "we looked and there was nothing wrong" is a record an auditor may ask about. Refused once a containment action exists — containing something is saying it was real.
+     */
+    post: operations['NonconformanceController_voidFinding'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/nonconformances/{id}/capas': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Corrective actions against this finding, newest first
+     * @description Guarded by `nonconformance.read` and not a separate `capa.read`: a CAPA only ever exists against a finding, so anybody who may read the finding may read what was done about it.
+     */
+    get: operations['NonconformanceController_capasFor'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Corrective actions
+     * @description Soonest due first, undated last — the order a work queue is read in. Each row carries the finding it answers, so a list needs no second round trip. Guarded by `nonconformance.read`: there is deliberately no `capa.read`, because a CAPA only exists against a finding.
+     */
+    get: operations['CapaController_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/for/{nonconformanceId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Open a corrective action against a finding
+     * @description Mounted under the FINDING because a CAPA cannot exist without one — `nonconformance_id` is NOT NULL. Opens in `analysis`: the root cause comes next, and the CAPA cannot be planned until it is recorded. Refused once the finding is closed or void, since there is nothing left to correct.
+     */
+    post: operations['CapaController_open'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One corrective action */
+    get: operations['CapaController_getOne'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/analysis': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record the root cause, the method behind it, and the plan
+     * @description All three together: a cause with no method is an assertion, and a plan built on no stated cause is a guess. Accepted only while the CAPA is in `analysis` — including the `analysis` a failed effectiveness review returned it to, which is how a second attempt records a different cause without touching the first attempt's evidence.
+     */
+    post: operations['CapaController_recordAnalysis'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/plan': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Accept the plan
+     * @description Refuses until the analysis is complete, naming the fields that are missing.
+     */
+    post: operations['CapaController_plan'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Begin the work */
+    post: operations['CapaController_start'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/implemented': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record that the actions are done
+     * @description Done, not proven — whether it worked is the effectiveness review below.
+     */
+    post: operations['CapaController_markImplemented'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Sign off that the action was effective (ISO 9001 §10.2(d))
+     * @description THE LOAD-BEARING SIGNATURE: verifying is what unlocks closing a major finding. Needs `capa.verify`, which is in no default role bundle — like `risk.accept`, `information_asset.declassify` and `vendor.approve`. The service ALSO refuses a verifier who owns the CAPA: the permission says who may sign, and that rule is what makes the signature a review rather than a formality.
+     */
+    post: operations['CapaController_verify'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/ineffective': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record that the action did NOT work
+     * @description Not terminal — it returns the CAPA to `analysis`, and the finding stays open because no verified CAPA exists. This is the path that makes the effectiveness review mean something: a review that can only pass is not a review. Refused to the CAPA owner in this direction too.
+     */
+    post: operations['CapaController_markIneffective'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/reopen-analysis': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Return a failed action to analysis so a different cause can be recorded
+     * @description Legal only from `ineffective`. `verified` is terminal: a CAPA that needs revisiting after sign-off is a NEW CAPA against the same finding, because re-opening the old one would overwrite the evidence somebody relied on.
+     */
+    post: operations['CapaController_reopenAnalysis'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/capas/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Abandon the action
+     * @description Terminal, and it does NOT close the finding: a cancelled CAPA is not a verified one, so a major finding stays open until another action is verified effective.
+     */
+    post: operations['CapaController_cancel'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/ai/chat': {
     parameters: {
       query?: never;
@@ -5477,6 +5892,212 @@ export interface components {
       findings: string | null;
       conditions: string | null;
       evidenceDocumentId: string | null;
+    };
+    NonconformanceSeverityResponseDto: {
+      code: string;
+      /** @description Higher is worse. THE ordering — the enum's declaration order is not authoritative. */
+      rank: number;
+      label: string;
+      description: string;
+      /** @description Whether closing at this grade requires a corrective action verified effective. */
+      requiresCapa: boolean;
+      containmentDueDays: number;
+    };
+    ContainmentOverdueResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      severity: string;
+      severityRank: number;
+      processArea: string;
+      ownerId: string;
+      detectedAt: string;
+      dueOn: string;
+      daysOverdue: number;
+    };
+    RecurrenceSignalResponseDto: {
+      processArea: string;
+      findings: number;
+      verifiedCapas: number;
+      /** @description The most recent finding raised AFTER a CAPA in that area was verified effective. */
+      latestReference: string;
+      latestDetectedAt: string;
+      /** @description When the CAPA that should have prevented it was signed off. */
+      earlierCapaVerifiedAt: string;
+    };
+    NonconformanceRowResponseDto: {
+      /** @description Resolved from `qms.nonconformance_severities` in the same query as the row. */
+      severityRank: number;
+      requiresCapa: boolean;
+      containmentDueDays: number;
+      capaCount: number;
+      verifiedCapaCount: number;
+      /** @description `detectedAt + containmentDueDays`. Null once contained — a met deadline is not a deadline. */
+      containmentDueOn: string | null;
+      id: string;
+      reference: string;
+      title: string;
+      description: string;
+      requirement: string;
+      source: string;
+      severity: string;
+      status: string;
+      processArea: string;
+      ownerId: string;
+      detectedAt: string;
+      raisedBy: string;
+      incidentId: string | null;
+      evidenceDocumentId: string | null;
+      containmentAction: string | null;
+      containedAt: string | null;
+      closedAt: string | null;
+      closureNote: string | null;
+      closedBy: string | null;
+      voidReason: string | null;
+      createdAt: string;
+    };
+    RaiseNonconformanceDto: {
+      reference: string;
+      title: string;
+      description: string;
+      requirement: string;
+      /** @enum {string} */
+      source:
+        | 'internal_audit'
+        | 'external_audit'
+        | 'customer_complaint'
+        | 'process_monitoring'
+        | 'employee_report'
+        | 'supplier'
+        | 'incident'
+        | 'other';
+      /** @enum {string} */
+      severity: 'observation' | 'minor' | 'major' | 'critical';
+      processArea: string;
+      /** Format: uuid */
+      ownerId: string;
+      /** Format: date-time */
+      detectedAt?: string;
+      incidentId?: string | null;
+      evidenceDocumentId?: string | null;
+    };
+    NonconformanceResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      description: string;
+      requirement: string;
+      source: string;
+      severity: string;
+      status: string;
+      processArea: string;
+      ownerId: string;
+      detectedAt: string;
+      raisedBy: string;
+      incidentId: string | null;
+      evidenceDocumentId: string | null;
+      containmentAction: string | null;
+      containedAt: string | null;
+      closedAt: string | null;
+      closureNote: string | null;
+      closedBy: string | null;
+      voidReason: string | null;
+      createdAt: string;
+    };
+    UpdateNonconformanceDto: {
+      title?: string;
+      description?: string;
+      requirement?: string;
+      /** @enum {string} */
+      source?:
+        | 'internal_audit'
+        | 'external_audit'
+        | 'customer_complaint'
+        | 'process_monitoring'
+        | 'employee_report'
+        | 'supplier'
+        | 'incident'
+        | 'other';
+      /** @enum {string} */
+      severity?: 'observation' | 'minor' | 'major' | 'critical';
+      processArea?: string;
+      /** Format: uuid */
+      ownerId?: string;
+      /** Format: date-time */
+      detectedAt?: string;
+      incidentId?: string | null;
+      evidenceDocumentId?: string | null;
+    };
+    ContainNonconformanceDto: {
+      containmentAction: string;
+      /** Format: date-time */
+      containedAt?: string;
+    };
+    CloseNonconformanceDto: {
+      closureNote: string;
+    };
+    VoidNonconformanceDto: {
+      reason: string;
+    };
+    CapaResponseDto: {
+      id: string;
+      reference: string;
+      nonconformanceId: string;
+      status: string;
+      ownerId: string;
+      rootCause: string | null;
+      rootCauseMethod: string | null;
+      actionPlan: string | null;
+      dueOn: string | null;
+      implementedAt: string | null;
+      verifiedAt: string | null;
+      verifiedBy: string | null;
+      effectivenessEvidence: string | null;
+      outcomeNote: string | null;
+      createdAt: string;
+    };
+    CapaRowResponseDto: {
+      id: string;
+      reference: string;
+      nonconformanceId: string;
+      status: string;
+      ownerId: string;
+      rootCause: string | null;
+      rootCauseMethod: string | null;
+      actionPlan: string | null;
+      dueOn: string | null;
+      implementedAt: string | null;
+      verifiedAt: string | null;
+      verifiedBy: string | null;
+      effectivenessEvidence: string | null;
+      outcomeNote: string | null;
+      createdAt: string;
+      nonconformanceReference: string;
+      nonconformanceTitle: string;
+      nonconformanceSeverity: string;
+    };
+    OpenCapaDto: {
+      reference: string;
+      /** Format: uuid */
+      ownerId: string;
+      dueOn?: string | null;
+    };
+    CapaAnalysisDto: {
+      rootCause: string;
+      /** @enum {string} */
+      rootCauseMethod: 'five_whys' | 'fishbone' | 'fault_tree' | 'pareto' | 'other';
+      actionPlan: string;
+      dueOn?: string | null;
+    };
+    MarkImplementedDto: {
+      /** Format: date-time */
+      implementedAt?: string;
+    };
+    VerifyCapaDto: {
+      effectivenessEvidence: string;
+    };
+    CapaOutcomeDto: {
+      reason: string;
     };
     ChatRequestDto: {
       messages: {
@@ -16753,6 +17374,1231 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_severities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceSeverityResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_containmentOverdue: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ContainmentOverdueResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_recurrence: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurrenceSignalResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_list: {
+    parameters: {
+      query?: {
+        status?: 'open' | 'contained' | 'closed' | 'void';
+        severity?: 'observation' | 'minor' | 'major' | 'critical';
+        source?:
+          | 'internal_audit'
+          | 'external_audit'
+          | 'customer_complaint'
+          | 'process_monitoring'
+          | 'employee_report'
+          | 'supplier'
+          | 'incident'
+          | 'other';
+        ownerId?: string;
+        processArea?: string;
+        openOnly?: boolean;
+        capaRequiredOnly?: boolean;
+        search?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['NonconformanceRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_report: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RaiseNonconformanceDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_getOne: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateNonconformanceDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_contain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ContainNonconformanceDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_close: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CloseNonconformanceDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_voidFinding: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VoidNonconformanceDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NonconformanceResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NonconformanceController_capasFor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_list: {
+    parameters: {
+      query?: {
+        status?:
+          | 'analysis'
+          | 'planned'
+          | 'in_progress'
+          | 'implemented'
+          | 'verified'
+          | 'ineffective'
+          | 'cancelled';
+        ownerId?: string;
+        nonconformanceId?: string;
+        openOnly?: boolean;
+        dueOnOrBefore?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['CapaRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_open: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        nonconformanceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OpenCapaDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_getOne: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_recordAnalysis: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CapaAnalysisDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_plan: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_start: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_markImplemented: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MarkImplementedDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_verify: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VerifyCapaDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_markIneffective: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CapaOutcomeDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_reopenAnalysis: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CapaController_cancel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CapaOutcomeDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapaResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
         headers: {
           [name: string]: unknown;
         };

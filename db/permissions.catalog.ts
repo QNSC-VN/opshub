@@ -146,6 +146,38 @@ export const PERMISSION = {
    */
   VENDOR_APPROVE: 'vendor.approve',
 
+  // ── QMS non-conformance and CAPA ───────────────────────────────────────────
+  /**
+   * View the non-conformance register, its corrective actions and the quality reports.
+   *
+   * There is deliberately no `capa.read`. A CAPA only ever exists against a finding, so anybody who
+   * may read the finding may read what was done about it — a second code would be one more thing to
+   * grant and would gate nothing that this one does not already.
+   */
+  NONCONFORMANCE_READ: 'nonconformance.read',
+  /**
+   * Grade, own, contain, close and void findings.
+   *
+   * RAISING one needs no permission: anybody who notices a process failure must be able to record
+   * it, and `POST /nonconformances/report` is self-service for exactly that reason — the same
+   * argument that keeps incident reporting open. This code governs HANDLING.
+   */
+  NONCONFORMANCE_MANAGE: 'nonconformance.manage',
+  /** Open corrective actions, record the analysis, plan and implement them. */
+  CAPA_MANAGE: 'capa.manage',
+  /**
+   * Sign off the EFFECTIVENESS REVIEW — ISO 9001 §10.2(d).
+   *
+   * The fourth permission in this codebase for an act that creates exposure by choice, after
+   * `risk.accept`, `information_asset.declassify` and `vendor.approve`. Verifying a CAPA is what
+   * unlocks closing a major finding, so the person who did the work should not be the person who
+   * certifies it worked — the service also refuses a verifier who owns the CAPA, because a
+   * permission says who MAY sign and not whether this signature means anything.
+   *
+   * In NO default role bundle.
+   */
+  CAPA_VERIFY: 'capa.verify',
+
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
   ASSET_WRITE: 'asset.write',
@@ -264,6 +296,10 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.VENDOR_READ]: 'View the supplier register and its assessments',
   [PERMISSION.VENDOR_MANAGE]: 'Register suppliers, assess them, suspend and terminate',
   [PERMISSION.VENDOR_APPROVE]: 'Approve a supplier for live use',
+  [PERMISSION.NONCONFORMANCE_READ]: 'View the non-conformance register and its corrective actions',
+  [PERMISSION.NONCONFORMANCE_MANAGE]: 'Grade, contain, close and void non-conformances',
+  [PERMISSION.CAPA_MANAGE]: 'Open, analyse, plan and implement corrective actions',
+  [PERMISSION.CAPA_VERIFY]: 'Sign off that a corrective action was effective',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -419,6 +455,11 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.INFORMATION_ASSET_MANAGE,
     PERMISSION.VENDOR_READ,
     PERMISSION.VENDOR_MANAGE,
+    PERMISSION.NONCONFORMANCE_READ,
+    PERMISSION.NONCONFORMANCE_MANAGE,
+    PERMISSION.CAPA_MANAGE,
+    // Deliberately WITHOUT `CAPA_VERIFY`, on the same reasoning that keeps `RISK_ACCEPT`,
+    // `INFORMATION_ASSET_DECLASSIFY` and `VENDOR_APPROVE` out of every bundle.
     // Deliberately WITHOUT `VENDOR_APPROVE`, on the same reasoning that keeps `RISK_ACCEPT` and
     // `INFORMATION_ASSET_DECLASSIFY` out of every bundle.
     // Deliberately WITHOUT `INFORMATION_ASSET_DECLASSIFY`, on the same reasoning that keeps
@@ -503,6 +544,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.INCIDENT_READ,
     PERMISSION.INFORMATION_ASSET_READ,
     PERMISSION.VENDOR_READ,
+    PERMISSION.NONCONFORMANCE_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,
