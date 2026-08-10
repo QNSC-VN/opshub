@@ -50,6 +50,12 @@ const ROOT = join(__dirname, '..');
  *   - `roles.key`         uniqueIndex('uq_role_key')
  *   - `attachments.fileId` part of PRIMARY KEY (entity_type, entity_id, file_id)
  *                          (db/schema/storage.ts, migration 0018)
+ *   - `classificationLevels.code` PRIMARY KEY (db/schema/isms-information-assets.ts and
+ *                          migration 0022: `code information_classification PRIMARY KEY`).
+ *                          The table's `rank` is UNIQUE too, so ordering by rank alone is
+ *                          already total — `code` is appended anyway so the total order rests
+ *                          on the primary key rather than on a constraint a reader has to
+ *                          go and find.
  *
  * Extending this list is a claim about the SCHEMA. Verify the constraint exists before
  * adding one, because a wrong entry here silently exempts a broken query.
@@ -62,7 +68,12 @@ const ROOT = join(__dirname, '..');
  * would be exempted by this entry and should not be: order such a query by the entity columns
  * too, or it is genuinely partial.
  */
-const UNIQUE_NON_ID_COLUMNS = ['permissions.key', 'roles.key', 'attachments.fileId'] as const;
+const UNIQUE_NON_ID_COLUMNS = [
+  'permissions.key',
+  'roles.key',
+  'attachments.fileId',
+  'classificationLevels.code',
+] as const;
 
 interface Ordering {
   file: string;

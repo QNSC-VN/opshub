@@ -42,7 +42,15 @@ export class InformationAssetDrizzleRepository implements IInformationAssetRepos
   // ── Levels ───────────────────────────────────────────────────────────────────
 
   async listLevels(): Promise<ClassificationLevel[]> {
-    return this.db.select().from(classificationLevels).orderBy(asc(classificationLevels.rank));
+    return (
+      this.db
+        .select()
+        .from(classificationLevels)
+        // `rank` carries a UNIQUE constraint, so it already orders totally — `code` is appended
+        // because it is the PRIMARY KEY, which makes the total order structural rather than
+        // something a reader has to go and confirm in the migration.
+        .orderBy(asc(classificationLevels.rank), asc(classificationLevels.code))
+    );
   }
 
   // ── Register ─────────────────────────────────────────────────────────────────
@@ -371,7 +379,8 @@ export class InformationAssetDrizzleRepository implements IInformationAssetRepos
           ),
         )
         .groupBy(classificationLevels.code, classificationLevels.rank)
-        .orderBy(desc(classificationLevels.rank))
+        // `code` last for the same reason as `listLevels` — the PK makes the order total.
+        .orderBy(desc(classificationLevels.rank), asc(classificationLevels.code))
     );
   }
 }
