@@ -169,6 +169,13 @@
       "when": 1783950406000,
       "tag": "0023_isms_vendor_risk",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784036806000,
+      "tag": "0024_qms_nonconformance_and_capa",
+      "breakpoints": true
     }
   ]
 }

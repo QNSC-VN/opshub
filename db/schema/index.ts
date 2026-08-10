@@ -19,6 +19,7 @@ export * from './isms-controls';
 export * from './isms-incidents';
 export * from './isms-information-assets';
 export * from './isms-vendors';
+export * from './qms';
 export * from './audit';
 export * from './messaging';
 export * from './notifications';

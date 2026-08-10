@@ -193,6 +193,29 @@ export const AUDIT_ACTION = {
   VENDOR_RISK_LINKED: 'vendor_risk.linked',
   VENDOR_RISK_UNLINKED: 'vendor_risk.unlinked',
 
+  // ── QMS non-conformance and CAPA ──
+  NONCONFORMANCE_RAISED: 'nonconformance.raised',
+  NONCONFORMANCE_UPDATED: 'nonconformance.updated',
+  NONCONFORMANCE_CONTAINED: 'nonconformance.contained',
+  NONCONFORMANCE_CLOSED: 'nonconformance.closed',
+  NONCONFORMANCE_VOIDED: 'nonconformance.voided',
+  CAPA_OPENED: 'capa.opened',
+  CAPA_ANALYSED: 'capa.analysed',
+  CAPA_PLANNED: 'capa.planned',
+  CAPA_STARTED: 'capa.started',
+  CAPA_IMPLEMENTED: 'capa.implemented',
+  /** The effectiveness review PASSED. Its own action — this is what closes a major finding. */
+  CAPA_VERIFIED: 'capa.verified',
+  /**
+   * The effectiveness review FAILED.
+   *
+   * Separate from `capa.verified` because "show me every corrective action that did not work" is the
+   * management-review question, and it has to be a query over the trail rather than a filter
+   * somebody remembers to apply.
+   */
+  CAPA_INEFFECTIVE: 'capa.ineffective',
+  CAPA_CANCELLED: 'capa.cancelled',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -270,6 +293,8 @@ export const AUDIT_RESOURCE = {
   INCIDENT: 'incident',
   INFORMATION_ASSET: 'information_asset',
   VENDOR: 'vendor',
+  NONCONFORMANCE: 'nonconformance',
+  CAPA: 'capa',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

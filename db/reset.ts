@@ -153,6 +153,15 @@ export const FIXTURE_TABLES = [
   'isms.vendor_assessments',
   'isms.vendor_risks',
   'isms.vendors',
+  // QMS findings and their corrective actions. `uq_nc_reference` and `uq_capa_reference` are global,
+  // so a leftover makes the next run's first report a 409 nobody wrote. CAPAs cascade from findings;
+  // listed for intent.
+  //
+  // `qms.nonconformance_severities` is NOT here and must not be, for the same reason
+  // `isms.classification_levels` and `isms.vendor_criticality_levels` are not: reference data seeded
+  // by migration 0024, and `nonconformances.severity` is an FK to it.
+  'qms.capas',
+  'qms.nonconformances',
   // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this
   // table, but listing it explicitly keeps the intent visible rather than incidental.
   'storage.attachments',

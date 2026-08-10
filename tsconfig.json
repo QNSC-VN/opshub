@@ -56,6 +56,8 @@
       "@modules/training/*": ["./libs/modules/training/src/*"],
       "@modules/isms": ["./libs/modules/isms/src/index"],
       "@modules/isms/*": ["./libs/modules/isms/src/*"],
+      "@modules/qms": ["./libs/modules/qms/src/index"],
+      "@modules/qms/*": ["./libs/modules/qms/src/*"],
       "@modules/documents": ["./libs/modules/documents/src/index"],
       "@modules/documents/*": ["./libs/modules/documents/src/*"],
       "@modules/catalog": ["./libs/modules/catalog/src/index"],

@@ -178,6 +178,26 @@ export const ErrorCodes = {
   VENDOR_ASSESSMENT_INCOMPLETE: 'VENDOR_ASSESSMENT_INCOMPLETE',
   /** The relationship has ended, so the record accepts nothing further. */
   VENDOR_TERMINATED: 'VENDOR_TERMINATED',
+
+  // ── QMS non-conformance and CAPA ───────────────────────────────────────────
+  /** The transition is not legal from the finding's current status. */
+  NONCONFORMANCE_NOT_IN_STATE: 'NONCONFORMANCE_NOT_IN_STATE',
+  /**
+   * The finding's grade demands a corrective action verified effective before closure.
+   *
+   * Not expressible as a CHECK: it is a statement about rows in another table.
+   */
+  NONCONFORMANCE_CAPA_REQUIRED: 'NONCONFORMANCE_CAPA_REQUIRED',
+  /** The finding is closed or void, so it accepts nothing further. */
+  NONCONFORMANCE_SETTLED: 'NONCONFORMANCE_SETTLED',
+  /** The transition is not legal from the CAPA's current status. */
+  CAPA_NOT_IN_STATE: 'CAPA_NOT_IN_STATE',
+  /** A root cause, the method behind it, and a plan are all required before planning. */
+  CAPA_ANALYSIS_INCOMPLETE: 'CAPA_ANALYSIS_INCOMPLETE',
+  /** The effectiveness review cannot be signed off by the person who owns the action. */
+  CAPA_SELF_VERIFICATION: 'CAPA_SELF_VERIFICATION',
+  /** The CAPA is verified or cancelled, so it accepts nothing further. */
+  CAPA_SETTLED: 'CAPA_SETTLED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

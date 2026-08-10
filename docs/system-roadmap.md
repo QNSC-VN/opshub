@@ -15,7 +15,7 @@ says something is absent, that was checked.
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
 | **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings. **Vendor risk**: criticality tiers with review cadence, due-diligence assessments, a go-live gate, GDPR Article 28 agreements, vendor↔risk links, unassessed-spend report | **Complete**                                                                                    |
-| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
+| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training. **Non-conformance register**: severity grades with policy, containment windows, a closure gate. **CAPA**: root-cause analysis, an effectiveness review that can fail and loops back, separation of duties on sign-off, recurrence detection | Internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
 `vendor` returns hits that are **not** domain tables — `risk_accepted` is a
@@ -223,10 +223,44 @@ action. It does not add a `*_history` table.
      the service passes the inputs and Postgres does the arithmetic once, and every reader compares
      against the stored column. See the checklist entry below.
 
-5. **QMS** — CAPA, non-conformance, internal audit, management review.
+5. **QMS** — ~~non-conformance + CAPA~~ (**done**), then internal audit and management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
    of everything above: documents, training records, the request engine and the audit
    trail. Built last, it is mostly composition.
+
+   Non-conformance and CAPA shipped TOGETHER, and that was the first decision. ISO 9001 §10.2 is
+   one obligation in five parts — react, evaluate whether corrective action is needed, implement it,
+   review whether it WORKED, record both. A register without CAPAs records that something went wrong
+   and nothing was done; CAPAs without a register are floating actions nobody can trace to a cause.
+   The rule that makes the pair worth having needs both tables to exist, so either alone would have
+   been the half that enforces nothing. Four decisions worth carrying:
+
+   - **The closure gate is the rule no CHECK can hold.** A finding whose grade `requiresCapa`
+     cannot be closed until a CAPA is `verified` — a statement about rows in another table.
+     `qms.nonconformance_severities` is the third reference table of the same shape as
+     `isms.classification_levels` and `isms.vendor_criticality_levels`: keyed by its enum, `rank` in
+     a column, and the policy that rank implies (`requires_capa`, `containment_due_days`) stated
+     once and READ by the gate rather than restated in it. Re-grading a finding therefore tightens
+     its closure requirement with no code change, which is what makes re-grading meaningful.
+   - **`open → closed` is not legal, and the database taught me that.** The first draft of the state
+     machine allowed a minor finding to close on its closure note alone; `ck_nc_contained_states` —
+     written first — refused it, and the CHECK was right. §10.2(a) requires reacting to the
+     nonconformity, so a finding that goes from "found" to "closed" with nothing recorded in between
+     is exactly the box-ticking the clause exists to prevent. Both the map and the CHECK now say so.
+   - **The effectiveness review can FAIL, and failing is not terminal.** `ineffective` returns the
+     CAPA to `analysis`, the finding stays unclosable because no verified CAPA exists, and a second
+     attempt records a different cause without touching the first attempt's evidence. A review that
+     can only pass is not a review. `verified`, by contrast, IS terminal: revisiting after sign-off
+     is a NEW CAPA, because re-opening the old one would overwrite the evidence somebody relied on.
+   - **`capa.verify` is the fourth exposure permission,** after `risk.accept`,
+     `information_asset.declassify` and `vendor.approve`, and in no default bundle. The service
+     ALSO refuses a verifier who owns the CAPA — in both directions, pass and fail — because a
+     permission says who MAY sign and not whether the signature means anything.
+
+   The recurrence report is the one worth knowing about: a process area with a CAPA already verified
+   effective AND a finding raised after that verification. Two findings in one area is ordinary; a
+   finding that arrives after somebody signed off a fix is evidence the review was wrong. It needs
+   both dates, so it is one query rather than a number on a dashboard.
 
 **Not on this list, and blocking all of it for real users:** `infra/` has never been
 applied — there is no deployed OpsHub environment. Every module above is verifiable

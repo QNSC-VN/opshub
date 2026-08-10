@@ -33,6 +33,7 @@ import { PositionsModule } from '@modules/positions';
 import { ContractsModule } from '@modules/contracts';
 import { TrainingModule } from '@modules/training';
 import { IsmsModule } from '@modules/isms';
+import { QmsModule } from '@modules/qms';
 import { AiModule } from '@modules/ai';
 import { SecurityPostureModule } from '@modules/security-posture';
 
@@ -87,6 +88,7 @@ import { SecurityPostureModule } from '@modules/security-posture';
     ContractsModule,
     TrainingModule,
     IsmsModule,
+    QmsModule,
     AiModule,
     SecurityPostureModule,
   ],

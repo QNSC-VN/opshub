@@ -427,3 +427,79 @@ export const vendorAssessmentOutcomeEnum = pgEnum('vendor_assessment_outcome', [
   'pass_with_conditions',
   'fail',
 ]);
+
+// ── QMS non-conformance and CAPA ─────────────────────────────────────────────
+/**
+ * How the non-conformance came to light.
+ *
+ * `incident` and `supplier` exist so the QMS does not become a parallel universe: a security
+ * incident or a supplier failure that also breaches a quality requirement is ONE finding with a
+ * pointer back, not a retyped copy.
+ */
+export const nonconformanceSourceEnum = pgEnum('nonconformance_source', [
+  'internal_audit',
+  'external_audit',
+  'customer_complaint',
+  'process_monitoring',
+  'employee_report',
+  'supplier',
+  'incident',
+  'other',
+]);
+
+/**
+ * How serious the breach is.
+ *
+ * As with `information_classification` and `vendor_criticality`, THE ORDER OF THESE VALUES IS NOT
+ * THE RANKING — the rank, and the policy each grade carries (whether a CAPA is mandatory, how long
+ * containment may take), live on `qms.nonconformance_severities`.
+ *
+ * `observation` is included deliberately: an auditor's "this would fail next year" is worth
+ * recording, and forcing it to be called a minor non-conformance is how observations stop being
+ * raised at all.
+ */
+export const nonconformanceSeverityEnum = pgEnum('nonconformance_severity', [
+  'observation',
+  'minor',
+  'major',
+  'critical',
+]);
+
+/**
+ * Where the finding stands.
+ *
+ * `void` is for one raised in error — kept rather than deleted, because "we looked and there was
+ * nothing wrong" is itself a record an auditor may ask about.
+ */
+export const nonconformanceStatusEnum = pgEnum('nonconformance_status', [
+  'open',
+  'contained',
+  'closed',
+  'void',
+]);
+
+/**
+ * The CAPA lifecycle.
+ *
+ * `ineffective` is not terminal — it returns to `analysis`. That loop is the whole point of ISO 9001
+ * §10.2(d): the effectiveness review can FAIL, and a process where failing it quietly closes the
+ * record is the box-ticking the clause exists to prevent.
+ */
+export const capaStatusEnum = pgEnum('capa_status', [
+  'analysis',
+  'planned',
+  'in_progress',
+  'implemented',
+  'verified',
+  'ineffective',
+  'cancelled',
+]);
+
+/** How the root cause was established. Recorded because "we thought about it" is not a method. */
+export const capaRootCauseMethodEnum = pgEnum('capa_root_cause_method', [
+  'five_whys',
+  'fishbone',
+  'fault_tree',
+  'pareto',
+  'other',
+]);
