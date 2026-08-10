@@ -14,7 +14,7 @@ says something is absent, that was checked.
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
-| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings | Vendor risk                                                                                    |
+| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings. **Vendor risk**: criticality tiers with review cadence, due-diligence assessments, a go-live gate, GDPR Article 28 agreements, vendor↔risk links, unassessed-spend report | **Complete**                                                                                    |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
@@ -108,7 +108,7 @@ action. It does not add a `*_history` table.
    `storage.attachments` and the policy descriptors with it — see the upload section below.
 
 4. **ISMS** — ~~risk register~~, ~~controls / Statement of Applicability~~, ~~incidents~~,
-   ~~asset classification~~ (all **done**), then vendor risk.
+   ~~asset classification~~, ~~vendor risk~~ — **the system is complete**.
    Reuses compliance findings, the asset inventory, the access-control model and the
    document module, so most of its foundation is already here.
 
@@ -196,6 +196,32 @@ action. It does not add a `*_history` table.
      0022 would have READ like a restriction and changed nothing. The same revoke was applied to
      `isms.incident_events` from 0021, which had been append-only in its port's comments and fully
      writable in the database since the day it shipped. See the checklist entry below.
+
+   Vendor risk closed the system, and reused nearly everything the four modules before it
+   established. Four decisions worth carrying:
+
+   - **`vendor_criticality_levels` is the second reference table of exactly the shape
+     `classification_levels` has** — keyed by the enum, `rank` in a column, and the policy that
+     depends on the tier (`review_interval_months`) stated once. Two tables of one shape is not
+     duplication when they describe different domains; what would be duplication is a second copy of
+     the *ordering*, which is why neither reads the enum's declaration order.
+   - **The go-live gate is the rule no CHECK can hold.** Activation requires the LATEST assessment to
+     be a pass — a statement about another table's most recent row. `vendor.approve` is the third
+     permission for an act that creates exposure by choice, after `risk.accept` and
+     `information_asset.declassify`, and like both it is in no default bundle. Suspension and
+     termination stay with `manage`: stopping is never the risky direction, and making the scarcer
+     permission necessary to stop would be a reason not to.
+   - **`software_licenses.vendor_id` was added ALONGSIDE the free-text `vendor`, not instead of it** —
+     the same move `positions` made with `employees.job_title`, and for the same reasons. Nothing was
+     backfilled: matching names to register rows is a judgement, and guessing it in a migration would
+     silently attach spend to the wrong supplier. The `unassessed-spend` report is what makes the
+     unlinked rows visible rather than forgotten, and it reports both shapes of the gap — unlinked,
+     and linked-but-never-assessed — because they are one problem to whoever acts on them.
+   - **The review date has ONE definition, and it lives in SQL.** It was first computed in TypeScript
+     with `setUTCMonth` while the report derived it with `+ interval '1 month'`; those two disagree at
+     month ends, so the date on the screen would have differed from the date the report tested. Now
+     the service passes the inputs and Postgres does the arithmetic once, and every reader compares
+     against the stored column. See the checklist entry below.
 
 5. **QMS** — CAPA, non-conformance, internal audit, management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
@@ -289,6 +315,13 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **A CHECK that evaluates to NULL is a CHECK that passes.** `length(btrim(x)) >= 10` on a NULLABLE
+  column yields NULL when `x` is null, and Postgres accepts NULL as satisfied — so
+  `CHECK (outcome <> 'fail' OR length(btrim(findings)) >= 10)` accepts exactly the row it exists to
+  reject: the one where the column was left out entirely. Wrap the nullable side in
+  `coalesce(x, '')` (migration 0021 does; 0023 did not until it was probed). This is not visible by
+  reading the constraint, which is why every implication CHECK has to be tested with the column
+  OMITTED and not merely set to a bad value — the bad-value test passes either way.
 - **A narrower `GRANT` does not narrow anything.** Both `isms` and any schema covered by
   migration 0012 carry `ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT, UPDATE, DELETE ON
   TABLES`, so privileges are attached at `CREATE TABLE`, before any grant block in the migration

@@ -178,6 +178,21 @@ export const AUDIT_ACTION = {
   INFORMATION_ASSET_DEVICE_LINKED: 'information_asset.device_linked',
   INFORMATION_ASSET_DEVICE_UNLINKED: 'information_asset.device_unlinked',
 
+  // ── ISMS vendor risk ──
+  VENDOR_REGISTERED: 'vendor.registered',
+  VENDOR_UPDATED: 'vendor.updated',
+  /**
+   * Going live. Its own action because this is the moment the organisation starts depending on the
+   * supplier — "which suppliers were approved this quarter, and by whom" has to be a query.
+   */
+  VENDOR_ACTIVATED: 'vendor.activated',
+  VENDOR_SUSPENDED: 'vendor.suspended',
+  VENDOR_REINSTATED: 'vendor.reinstated',
+  VENDOR_TERMINATED: 'vendor.terminated',
+  VENDOR_ASSESSED: 'vendor.assessed',
+  VENDOR_RISK_LINKED: 'vendor_risk.linked',
+  VENDOR_RISK_UNLINKED: 'vendor_risk.unlinked',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -254,6 +269,7 @@ export const AUDIT_RESOURCE = {
   SOA_ENTRY: 'soa_entry',
   INCIDENT: 'incident',
   INFORMATION_ASSET: 'information_asset',
+  VENDOR: 'vendor',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

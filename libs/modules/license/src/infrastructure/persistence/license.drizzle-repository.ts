@@ -24,6 +24,7 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
         id: newId(),
         name: input.name,
         vendor: input.vendor,
+        vendorId: input.vendorId ?? null,
         licenseType: input.licenseType,
         seatCount: input.seatCount ?? null,
         costPerSeatCents: input.costPerSeatCents ?? null,
@@ -69,6 +70,7 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.name !== undefined) patch['name'] = input.name;
     if (input.vendor !== undefined) patch['vendor'] = input.vendor;
+    if (input.vendorId !== undefined) patch['vendorId'] = input.vendorId;
     if (input.licenseType !== undefined) patch['licenseType'] = input.licenseType;
     if ('seatCount' in input) patch['seatCount'] = input.seatCount;
     if ('costPerSeatCents' in input) patch['costPerSeatCents'] = input.costPerSeatCents;
@@ -90,7 +92,11 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     await this.db.delete(softwareLicenses).where(eq(softwareLicenses.id, id));
   }
 
-  async assign(licenseId: string, employeeId: string, notes: string | null): Promise<LicenseAssignment> {
+  async assign(
+    licenseId: string,
+    employeeId: string,
+    notes: string | null,
+  ): Promise<LicenseAssignment> {
     const [row] = await this.db
       .insert(licenseAssignments)
       .values({ id: newId(), licenseId, employeeId, notes })
@@ -114,7 +120,10 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
       .where(and(...conditions));
   }
 
-  async findActiveAssignment(licenseId: string, employeeId: string): Promise<LicenseAssignment | null> {
+  async findActiveAssignment(
+    licenseId: string,
+    employeeId: string,
+  ): Promise<LicenseAssignment | null> {
     const [row] = await this.db
       .select()
       .from(licenseAssignments)
@@ -133,7 +142,9 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     const [row] = await this.db
       .select({ n: count() })
       .from(licenseAssignments)
-      .where(and(eq(licenseAssignments.licenseId, licenseId), isNull(licenseAssignments.revokedAt)));
+      .where(
+        and(eq(licenseAssignments.licenseId, licenseId), isNull(licenseAssignments.revokedAt)),
+      );
     return row?.n ?? 0;
   }
 
@@ -160,7 +171,8 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     return rows.map((r) => {
       const used = Number(r.usedSeats);
       const available = r.seatCount != null ? r.seatCount - used : null;
-      const pct = r.seatCount != null && r.seatCount > 0 ? Math.round((used / r.seatCount) * 100) : null;
+      const pct =
+        r.seatCount != null && r.seatCount > 0 ? Math.round((used / r.seatCount) * 100) : null;
       const spend = r.costPerSeatCents != null ? used * r.costPerSeatCents : null;
       return {
         licenseId: r.licenseId,

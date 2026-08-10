@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, ParseUUIDPipe} from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -37,6 +47,7 @@ function toLicenseDto(l: SoftwareLicense): LicenseResponseDto {
     id: l.id,
     name: l.name,
     vendor: l.vendor,
+    vendorId: l.vendorId,
     licenseType: l.licenseType,
     seatCount: l.seatCount,
     costPerSeatCents: l.costPerSeatCents,
@@ -108,6 +119,7 @@ export class LicensesController {
         {
           name: dto.name,
           vendor: dto.vendor,
+          vendorId: dto.vendorId,
           licenseType: dto.licenseType,
           seatCount: dto.seatCount,
           costPerSeatCents: dto.costPerSeatCents,
@@ -158,7 +170,10 @@ export class LicensesController {
   @ApiOperation({ summary: 'Delete a license (no active seats allowed)' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404, 409)
-  async delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+  async delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
     await this.licenseService.delete(id, { sub: user.sub, email: user.email });
   }
 

@@ -385,3 +385,45 @@ export const informationAssetTypeEnum = pgEnum('information_asset_type', [
   'service',
   'other',
 ]);
+
+// ── ISMS vendor risk ─────────────────────────────────────────────────────────
+/**
+ * How much of the organisation rests on this supplier.
+ *
+ * As with `information_classification`, THE ORDER OF THESE VALUES IS NOT THE RANKING — the
+ * authoritative rank, and the review interval each tier demands, live on
+ * `isms.vendor_criticality_levels`.
+ */
+export const vendorCriticalityEnum = pgEnum('vendor_criticality', [
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
+
+/**
+ * Where the supplier stands with us.
+ *
+ * `prospective` is the state a vendor is registered in: assessed but not yet relied upon. Going
+ * `active` is the act that creates exposure, which is why it needs its own permission and its own
+ * preconditions — see `VendorService`.
+ */
+export const vendorStatusEnum = pgEnum('vendor_status', [
+  'prospective',
+  'active',
+  'suspended',
+  'terminated',
+]);
+
+/**
+ * The outcome of a due-diligence assessment.
+ *
+ * `pass_with_conditions` is the honest middle that a pass/fail pair forces people to lie about: the
+ * supplier is usable, and something has to be fixed by a date. The conditions are then REQUIRED —
+ * see `ck_vendor_assessment_conditions`.
+ */
+export const vendorAssessmentOutcomeEnum = pgEnum('vendor_assessment_outcome', [
+  'pass',
+  'pass_with_conditions',
+  'fail',
+]);

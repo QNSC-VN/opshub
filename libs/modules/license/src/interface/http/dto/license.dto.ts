@@ -9,6 +9,14 @@ const licenseStatusZ = z.enum(licenseStatusEnum.enumValues);
 export const CreateLicenseSchema = z.object({
   name: z.string().min(1).max(150),
   vendor: z.string().min(1).max(120),
+  /**
+   * The supplier in the ISMS vendor register, when they are in it.
+   *
+   * Optional and alongside the free-text `vendor`, not instead of it — see `db/schema/licenses.ts`.
+   * Setting it is what puts this licence into the vendor-spend join and out of the
+   * `unassessed-spend` report.
+   */
+  vendorId: z.string().uuid().optional().nullable(),
   licenseType: licenseTypeZ,
   seatCount: z.number().int().positive().optional().nullable(),
   costPerSeatCents: z.number().int().nonnegative().optional().nullable(),
@@ -21,6 +29,7 @@ export class CreateLicenseDto extends createZodDto(CreateLicenseSchema) {}
 export const UpdateLicenseSchema = z.object({
   name: z.string().min(1).max(150).optional(),
   vendor: z.string().min(1).max(120).optional(),
+  vendorId: z.string().uuid().optional().nullable(),
   licenseType: licenseTypeZ.optional(),
   seatCount: z.number().int().positive().optional().nullable(),
   costPerSeatCents: z.number().int().nonnegative().optional().nullable(),
@@ -31,11 +40,13 @@ export const UpdateLicenseSchema = z.object({
 });
 export class UpdateLicenseDto extends createZodDto(UpdateLicenseSchema) {}
 
-export const ListLicensesQuerySchema = z.object({
-  status: licenseStatusZ.optional(),
-  vendor: z.string().optional(),
-  search: z.string().optional(),
-}).merge(PaginationQuerySchema);
+export const ListLicensesQuerySchema = z
+  .object({
+    status: licenseStatusZ.optional(),
+    vendor: z.string().optional(),
+    search: z.string().optional(),
+  })
+  .merge(PaginationQuerySchema);
 export class ListLicensesQueryDto extends createZodDto(ListLicensesQuerySchema) {}
 
 export const AssignSeatSchema = z.object({
@@ -53,6 +64,8 @@ export class LicenseResponseDto {
   id!: string;
   name!: string;
   vendor!: string;
+  /** The linked supplier in the ISMS register, or null when nobody has linked one. */
+  vendorId!: string | null;
   licenseType!: string;
   seatCount!: number | null;
   costPerSeatCents!: number | null;

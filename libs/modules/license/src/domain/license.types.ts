@@ -7,6 +7,8 @@ export interface SoftwareLicense {
   id: string;
   name: string;
   vendor: string;
+  /** The supplier in the ISMS vendor register, when they are in it. */
+  vendorId: string | null;
   licenseType: LicenseType;
   seatCount: number | null;
   costPerSeatCents: number | null;
@@ -41,6 +43,7 @@ export interface LicenseUtilization {
 export interface CreateLicenseInput {
   name: string;
   vendor: string;
+  vendorId?: string | null;
   licenseType: LicenseType;
   seatCount?: number | null;
   costPerSeatCents?: number | null;
@@ -52,6 +55,7 @@ export interface CreateLicenseInput {
 export interface UpdateLicenseInput {
   name?: string;
   vendor?: string;
+  vendorId?: string | null;
   licenseType?: LicenseType;
   seatCount?: number | null;
   costPerSeatCents?: number | null;

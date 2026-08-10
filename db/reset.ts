@@ -137,6 +137,22 @@ export const FIXTURE_TABLES = [
   'isms.asset_classification_history',
   'isms.information_asset_devices',
   'isms.information_assets',
+  // The supplier register. `uq_vendor_reference` is global, so a leftover makes the next run's first
+  // registration a 409 nobody wrote. Assessments and risk links cascade from vendors; listed for
+  // intent.
+  //
+  // `isms.vendor_criticality_levels` is NOT here and must not be, for the same reason
+  // `isms.classification_levels` is not: it is reference data seeded by migration 0023, and
+  // `vendors.criticality` is an FK to it.
+  //
+  // `licenses.software_licenses.vendor_id` references this table with ON DELETE SET NULL, but
+  // TRUNCATE does not honour referential actions — it requires every referencing table in the same
+  // statement. `licenses.software_licenses` is already listed above, so the pair is consistent; if it
+  // is ever removed, truncating vendors starts failing with a foreign-key error rather than silently
+  // leaving stale links.
+  'isms.vendor_assessments',
+  'isms.vendor_risks',
+  'isms.vendors',
   // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this
   // table, but listing it explicitly keeps the intent visible rather than incidental.
   'storage.attachments',

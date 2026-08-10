@@ -3424,6 +3424,273 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/vendors/criticality-levels': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The criticality tiers, their ranking and the reassessment cadence each demands
+     * @description The RANK here is authoritative — nothing should infer the ordering from the order the tiers appear in. `reviewIntervalMonths` is what `reviewDueOn` is computed from.
+     */
+    get: operations['VendorController_levels'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/reports/review-gaps': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Suppliers never assessed, or past the cadence their tier demands
+     * @description Never-assessed first, because "nobody has ever looked" is worse than "the last look is stale". `daysOverdue` is null for those, since there is no interval to be overdue by. Covers `active` and `suspended` suppliers only: a prospective one is not yet relied upon and a terminated one needs no reassessment.
+     */
+    get: operations['VendorController_reviewGaps'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/reports/critical-without-risk': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Active top-tier suppliers with no register risk linked
+     * @description The same anti-join as the untreated-risk and unlinked-incident reports: depending on a critical supplier while recording no risk about them is a gap in the assessment, not an absence of risk. The tiers included are chosen by RANK, so adding a tier above `critical` widens this report without anybody editing it.
+     */
+    get: operations['VendorController_criticalWithoutRisk'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/reports/unassessed-spend': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Active licences whose supplier is unlinked or unassessed
+     * @description Money going somewhere nobody checked. Two shapes of gap are reported together because they are one problem to whoever acts on them: a licence not linked to the register, and a licence whose supplier has never been assessed. Soonest renewal first — that is the deadline by which the gap has to close or the payment stops.
+     */
+    get: operations['VendorController_unassessedSpend'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The supplier register
+     * @description Most critical first. Terminated suppliers are excluded unless `includeTerminated` is set, because the register means who we use now. Each row carries its tier rank and cadence and its latest assessment, resolved in the same query.
+     */
+    get: operations['VendorController_list'];
+    put?: never;
+    /**
+     * Register a supplier
+     * @description Registered as `prospective`: assessed but not yet relied upon. Going live is a separate act with its own permission and its own preconditions — see `POST /vendors/:id/activate`.
+     */
+    post: operations['VendorController_register'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One supplier */
+    get: operations['VendorController_getOne'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Correct a supplier record
+     * @description The status is NOT settable here — approving through a patch would skip the assessment requirement. `reviewDueOn` is not settable either: it is computed when an assessment is recorded, and a cadence the caller can move is not a cadence.
+     */
+    patch: operations['VendorController_update'];
+    trace?: never;
+  };
+  '/v1/vendors/{id}/activate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve a supplier for live use
+     * @description Requires a CURRENT PASSING ASSESSMENT — a rule about the latest row of another table, which no CHECK can express. A data processor also needs a recorded agreement (GDPR Article 28(3)). `vendor.approve` is in no default role bundle, like `risk.accept` and `information_asset.declassify`: the person who ran the due diligence should not be the only one who decides we may now depend on it.
+     */
+    post: operations['VendorController_activate'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}/suspend': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Stop relying on a supplier without ending the relationship
+     * @description Only `vendor.manage`, not `vendor.approve`. Stopping is never the risky direction, and requiring the scarcer permission to suspend would be a reason not to.
+     */
+    post: operations['VendorController_suspend'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}/reinstate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Return a suspended supplier to live use
+     * @description Held to the same preconditions as activation rather than being a plain status flip: whatever caused the suspension is exactly the reason to re-check the assessment.
+     */
+    post: operations['VendorController_reinstate'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}/terminate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * End the relationship
+     * @description Terminal. Restarting with a supplier means assessing them again, which means a new register entry — resurrecting the old row would carry its stale assessment forward. The record, its assessments and its risk links all stay: they are the audit evidence.
+     */
+    post: operations['VendorController_terminate'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}/assessments': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Every assessment of this supplier
+     * @description Latest first. Append-only: the application holds no privilege to update or delete these rows, because last year's result is the evidence that last year's decision was reasonable.
+     */
+    get: operations['VendorController_assessments'];
+    put?: never;
+    /**
+     * Record a due-diligence assessment
+     * @description Moves the next review date with it, computed from the tier — an assessment that does not reset the clock leaves the supplier permanently overdue. A conditional pass must state its conditions and a failure must state its findings.
+     */
+    post: operations['VendorController_assess'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}/risks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Register risks linked to this supplier, worst first */
+    get: operations['VendorController_risks'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/vendors/{id}/risks/{riskId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Record that this supplier carries a register risk
+     * @description Idempotent — the pair is the natural key, so linking twice is still one link.
+     */
+    put: operations['VendorController_linkRisk'];
+    post?: never;
+    /** Remove the link between this supplier and a risk */
+    delete: operations['VendorController_unlinkRisk'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/ai/chat': {
     parameters: {
       query?: never;
@@ -4173,6 +4440,8 @@ export interface components {
       id: string;
       name: string;
       vendor: string;
+      /** @description The linked supplier in the ISMS register, or null when nobody has linked one. */
+      vendorId: string | null;
       licenseType: string;
       seatCount: number | null;
       costPerSeatCents: number | null;
@@ -4186,6 +4455,7 @@ export interface components {
     CreateLicenseDto: {
       name: string;
       vendor: string;
+      vendorId?: string | null;
       /** @enum {string} */
       licenseType: 'perpetual' | 'subscription' | 'per_seat' | 'concurrent';
       seatCount?: number | null;
@@ -4207,6 +4477,7 @@ export interface components {
     UpdateLicenseDto: {
       name?: string;
       vendor?: string;
+      vendorId?: string | null;
       /** @enum {string} */
       licenseType?: 'perpetual' | 'subscription' | 'per_seat' | 'concurrent';
       seatCount?: number | null;
@@ -5062,6 +5333,145 @@ export interface components {
       type: string;
       status: string;
       assignedTo: string | null;
+    };
+    VendorCriticalityLevelResponseDto: {
+      code: string;
+      /** @description Higher matters more. THE ordering — the enum's declaration order is not authoritative. */
+      rank: number;
+      label: string;
+      description: string;
+      /** @description How often a supplier at this tier must be reassessed. Drives `reviewDueOn`. */
+      reviewIntervalMonths: number;
+      requiresIndependentEvidence: boolean;
+    };
+    VendorReviewGapResponseDto: {
+      id: string;
+      reference: string;
+      name: string;
+      criticality: string;
+      criticalityRank: number;
+      status: string;
+      lastAssessedAt: string | null;
+      dueOn: string | null;
+      /** @description Null when never assessed: there is no interval to be overdue by. */
+      daysOverdue: number | null;
+    };
+    VendorResponseDto: {
+      id: string;
+      reference: string;
+      name: string;
+      legalName: string | null;
+      services: string;
+      criticality: string;
+      status: string;
+      ownerId: string;
+      dataProcessor: boolean;
+      dataProcessingAgreementId: string | null;
+      dataLocation: string | null;
+      contractStartsOn: string | null;
+      contractEndsOn: string | null;
+      noticePeriodDays: number | null;
+      /** @description Computed from the criticality tier when an assessment is recorded. Never settable. */
+      reviewDueOn: string | null;
+      terminatedAt: string | null;
+      terminationReason: string | null;
+      createdAt: string;
+    };
+    UnassessedSpendResponseDto: {
+      licenseId: string;
+      licenseName: string;
+      /** @description The free-text vendor on the licence — what to search the register for. */
+      vendorText: string;
+      /** @description Null when the licence is not linked to the register at all. */
+      vendorId: string | null;
+      vendorReference: string | null;
+      renewalDate: string | null;
+      costPerSeatCents: number | null;
+      seatCount: number | null;
+    };
+    VendorRowResponseDto: {
+      id: string;
+      reference: string;
+      name: string;
+      legalName: string | null;
+      services: string;
+      criticality: string;
+      status: string;
+      ownerId: string;
+      dataProcessor: boolean;
+      dataProcessingAgreementId: string | null;
+      dataLocation: string | null;
+      contractStartsOn: string | null;
+      contractEndsOn: string | null;
+      noticePeriodDays: number | null;
+      /** @description Computed from the criticality tier when an assessment is recorded. Never settable. */
+      reviewDueOn: string | null;
+      terminatedAt: string | null;
+      terminationReason: string | null;
+      createdAt: string;
+      /** @description Resolved from `isms.vendor_criticality_levels` in the same query as the row. */
+      criticalityRank: number;
+      reviewIntervalMonths: number;
+      requiresIndependentEvidence: boolean;
+      /** @description Null when nobody has ever assessed them — the gap the review report looks for. */
+      lastAssessedAt: string | null;
+      lastOutcome: string | null;
+      riskCount: number;
+    };
+    RegisterVendorDto: {
+      reference: string;
+      name: string;
+      legalName?: string | null;
+      services: string;
+      /** @enum {string} */
+      criticality: 'low' | 'medium' | 'high' | 'critical';
+      /** Format: uuid */
+      ownerId: string;
+      dataProcessor?: boolean;
+      dataProcessingAgreementId?: string | null;
+      dataLocation?: string | null;
+      contractStartsOn?: string | null;
+      contractEndsOn?: string | null;
+      noticePeriodDays?: number | null;
+    };
+    UpdateVendorDto: {
+      name?: string;
+      legalName?: string | null;
+      services?: string;
+      /** @enum {string} */
+      criticality?: 'low' | 'medium' | 'high' | 'critical';
+      /** Format: uuid */
+      ownerId?: string;
+      dataProcessor?: boolean;
+      dataProcessingAgreementId?: string | null;
+      dataLocation?: string | null;
+      contractStartsOn?: string | null;
+      contractEndsOn?: string | null;
+      noticePeriodDays?: number | null;
+    };
+    VendorReasonDto: {
+      reason: string;
+    };
+    RecordAssessmentDto: {
+      /** @enum {string} */
+      outcome: 'pass' | 'pass_with_conditions' | 'fail';
+      scope: string;
+      findings?: string | null;
+      conditions?: string | null;
+      evidenceDocumentId?: string | null;
+      /** Format: date-time */
+      assessedAt?: string;
+    };
+    VendorAssessmentResponseDto: {
+      id: string;
+      vendorId: string;
+      assessedAt: string;
+      assessedBy: string;
+      outcome: string;
+      scope: string;
+      findings: string | null;
+      conditions: string | null;
+      evidenceDocumentId: string | null;
     };
     ChatRequestDto: {
       messages: {
@@ -15481,6 +15891,836 @@ export interface operations {
       path: {
         id: string;
         deviceAssetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_levels: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorCriticalityLevelResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_reviewGaps: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorReviewGapResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_criticalWithoutRisk: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_unassessedSpend: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnassessedSpendResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_list: {
+    parameters: {
+      query?: {
+        status?: 'prospective' | 'active' | 'suspended' | 'terminated';
+        criticality?: 'low' | 'medium' | 'high' | 'critical';
+        ownerId?: string;
+        processorsOnly?: boolean;
+        reviewDueOnOrBefore?: string;
+        includeTerminated?: boolean;
+        search?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['VendorRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_register: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RegisterVendorDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_getOne: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateVendorDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_activate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_suspend: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VendorReasonDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_reinstate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_terminate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VendorReasonDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_assessments: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorAssessmentResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_assess: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordAssessmentDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VendorAssessmentResponseDto'];
+        };
+      };
+      /** @description Bad Request — validation error or malformed input */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_risks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RiskResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_linkRisk: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        riskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  VendorController_unlinkRisk: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        riskId: string;
       };
       cookie?: never;
     };

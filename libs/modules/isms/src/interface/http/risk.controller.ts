@@ -39,7 +39,12 @@ import {
   UpdateTreatmentDto,
 } from './dto/risk.dto';
 
-function toRiskDto(r: Risk): RiskResponseDto {
+/**
+ * Exported so the vendor controller can render the risks linked to a supplier with the SAME shape.
+ *
+ * A second mapper is how one of them silently stops emitting a field that a screen reads.
+ */
+export function toRiskDto(r: Risk): RiskResponseDto {
   return {
     id: r.id,
     reference: r.reference,
