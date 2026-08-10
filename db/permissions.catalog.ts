@@ -62,6 +62,16 @@ export const PERMISSION = {
    * pay is theirs, and that is a scope rule, not a permission.
    */
   CONTRACT_COMPENSATION_READ: 'contract.compensation.read',
+  /** View the course catalogue, position requirements, records and the competency gap report. */
+  TRAINING_READ: 'training.read',
+  /**
+   * Manage the catalogue and requirements, and VERIFY or revoke a record.
+   *
+   * Recording your OWN completion needs no permission — that is self-service, gated by scope. What
+   * needs one is attesting that somebody else's evidence is genuine, which is the control an ISO
+   * competency audit actually looks for.
+   */
+  TRAINING_MANAGE: 'training.manage',
 
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
@@ -165,6 +175,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.CONTRACT_READ]: 'View employment contracts (excluding pay)',
   [PERMISSION.CONTRACT_MANAGE]: 'Draft, activate, renew and terminate employment contracts',
   [PERMISSION.CONTRACT_COMPENSATION_READ]: 'See the pay figures on an employment contract',
+  [PERMISSION.TRAINING_READ]: 'View training courses, requirements and records',
+  [PERMISSION.TRAINING_MANAGE]: 'Manage courses and requirements; verify or revoke records',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -332,6 +344,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.CONTRACT_READ,
     PERMISSION.CONTRACT_MANAGE,
     PERMISSION.CONTRACT_COMPENSATION_READ,
+    PERMISSION.TRAINING_READ,
+    PERMISSION.TRAINING_MANAGE,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -350,6 +364,7 @@ export const ROLE_PERMISSIONS: Record<
   [ROLE.MANAGER]: [
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.POSITION_READ,
+    PERMISSION.TRAINING_READ,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -380,6 +395,7 @@ export const ROLE_PERMISSIONS: Record<
     // Deliberately WITHOUT `CONTRACT_COMPENSATION_READ`: an auditor checks that every employee has
     // a signed contract, which does not require knowing what any of them pays.
     PERMISSION.CONTRACT_READ,
+    PERMISSION.TRAINING_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

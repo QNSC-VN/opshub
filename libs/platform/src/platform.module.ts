@@ -33,6 +33,7 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
 import { DelegationService } from './authz/delegation.service';
 import { WebhookEnqueueService } from './webhooks/webhook-enqueue.service';
 import { StorageService } from './storage/storage.service';
+import { EntityAttachmentsService } from './storage/entity-attachments.service';
 
 /**
  * Platform module — cross-cutting infrastructure shared by every bounded context:
@@ -118,10 +119,12 @@ import { StorageService } from './storage/storage.service';
     DelegationService,
     WebhookEnqueueService,
     StorageService,
+    EntityAttachmentsService,
     ExclusiveJob,
   ],
   exports: [
     StorageService,
+    EntityAttachmentsService,
     ActorScope,
     ExclusiveJob,
     AppConfigModule,

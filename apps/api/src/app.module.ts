@@ -31,6 +31,7 @@ import { CatalogModule } from '@modules/catalog';
 import { DocumentsModule } from '@modules/documents';
 import { PositionsModule } from '@modules/positions';
 import { ContractsModule } from '@modules/contracts';
+import { TrainingModule } from '@modules/training';
 import { AiModule } from '@modules/ai';
 import { SecurityPostureModule } from '@modules/security-posture';
 
@@ -83,6 +84,7 @@ import { SecurityPostureModule } from '@modules/security-posture';
     DocumentsModule,
     PositionsModule,
     ContractsModule,
+    TrainingModule,
     AiModule,
     SecurityPostureModule,
   ],

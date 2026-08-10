@@ -119,6 +119,18 @@ export const AUDIT_ACTION = {
   CONTRACT_TERMINATED: 'contract.terminated',
   CONTRACT_EXPIRED: 'contract.expired',
 
+  // ── Training ──
+  TRAINING_COURSE_CREATED: 'training_course.created',
+  TRAINING_COURSE_UPDATED: 'training_course.updated',
+  TRAINING_COURSE_RETIRED: 'training_course.retired',
+  TRAINING_REQUIREMENT_ADDED: 'training_requirement.added',
+  TRAINING_REQUIREMENT_REMOVED: 'training_requirement.removed',
+  TRAINING_RECORDED: 'training_record.recorded',
+  TRAINING_VERIFIED: 'training_record.verified',
+  TRAINING_REVOKED: 'training_record.revoked',
+  TRAINING_CERTIFICATE_ATTACHED: 'training_record.certificate_attached',
+  TRAINING_CERTIFICATE_REMOVED: 'training_record.certificate_removed',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -186,6 +198,9 @@ export const AUDIT_RESOURCE = {
   POSITION: 'position',
   EMPLOYEE_POSITION: 'employee_position',
   EMPLOYMENT_CONTRACT: 'employment_contract',
+  TRAINING_COURSE: 'training_course',
+  TRAINING_REQUIREMENT: 'training_requirement',
+  TRAINING_RECORD: 'training_record',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

@@ -107,6 +107,14 @@ export const FIXTURE_TABLES = [
   // employment contracts — `uq_employee_active_contract` is per employee, so one left active by a
   // previous run makes the next run's first activation a 409 that names a contract nobody wrote.
   'contracts.employment_contracts',
+  // training — `uq_training_record_current` is per (employee, course), so a record left current by a
+  // previous run makes the next run's first completion for that pair a 409 nobody wrote.
+  'training.records',
+  'training.position_requirements',
+  'training.courses',
+  // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this
+  // table, but listing it explicitly keeps the intent visible rather than incidental.
+  'storage.attachments',
   // audit trail and uploaded file metadata
   'audit.audit_logs',
   'storage.stored_files',

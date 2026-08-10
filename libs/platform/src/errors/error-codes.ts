@@ -111,6 +111,18 @@ export const ErrorCodes = {
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   FILE_TYPE_NOT_ALLOWED: 'FILE_TYPE_NOT_ALLOWED',
   FILE_SIZE_MISMATCH: 'FILE_SIZE_MISMATCH',
+  /** The stored object's checksum differs from the one declared at presign. */
+  FILE_CHECKSUM_MISMATCH: 'FILE_CHECKSUM_MISMATCH',
+  /** The owning entity already holds this surface's maximum number of files. */
+  ATTACHMENT_LIMIT_EXCEEDED: 'ATTACHMENT_LIMIT_EXCEEDED',
+  /** The file exists but is not attached to the entity the caller named. */
+  ATTACHMENT_NOT_FOUND: 'ATTACHMENT_NOT_FOUND',
+
+  // ── Training ───────────────────────────────────────────────────────────────
+  /** A completion date is in the future, behind the live record, or expires before it was earned. */
+  TRAINING_INVALID_COMPLETION: 'TRAINING_INVALID_COMPLETION',
+  /** Already verified, already revoked, or otherwise not in a state that transition allows. */
+  TRAINING_RECORD_NOT_VERIFIABLE: 'TRAINING_RECORD_NOT_VERIFIABLE',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

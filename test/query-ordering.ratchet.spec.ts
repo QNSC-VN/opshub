@@ -48,11 +48,21 @@ const ROOT = join(__dirname, '..');
  *
  *   - `permissions.key`   PRIMARY KEY (db/schema/authz.ts)
  *   - `roles.key`         uniqueIndex('uq_role_key')
+ *   - `attachments.fileId` part of PRIMARY KEY (entity_type, entity_id, file_id)
+ *                          (db/schema/storage.ts, migration 0018)
  *
  * Extending this list is a claim about the SCHEMA. Verify the constraint exists before
  * adding one, because a wrong entry here silently exempts a broken query.
+ *
+ * `attachments.fileId` carries a CONDITION worth stating, because it is weaker than the other
+ * two. It is unique only WITHIN one `(entity_type, entity_id)` pair — the same file may be
+ * attached to two different entities — and it is listed here because every query in
+ * `entity-attachments.service.ts` filters on both of those columns first, which makes the
+ * remaining ordering total. A future query that orders by `file_id` WITHOUT pinning the entity
+ * would be exempted by this entry and should not be: order such a query by the entity columns
+ * too, or it is genuinely partial.
  */
-const UNIQUE_NON_ID_COLUMNS = ['permissions.key', 'roles.key'] as const;
+const UNIQUE_NON_ID_COLUMNS = ['permissions.key', 'roles.key', 'attachments.fileId'] as const;
 
 interface Ordering {
   file: string;

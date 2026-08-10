@@ -13,9 +13,9 @@ says something is absent, that was checked.
 | System                                    | State                                                                                                                       | Missing                                                                                                            |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
-| **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with approved headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal chain, expiry sweep, pay gated by its own permission | Training records, performance reviews                                                                              |
+| **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
 | **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory, controlled policies with acknowledgement | **Risk register**, asset classification, controls / Statement of Applicability, incidents, vendor risk              |
-| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking     | CAPA, non-conformance, internal audit, management review, training records                                          |
+| **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
 `vendor` returns hits that are **not** domain tables — `risk_accepted` is a
@@ -79,8 +79,7 @@ action. It does not add a `*_history` table.
 2. ~~**Controlled-document module**~~ — **done**: the shared primitive from decision 2,
    ahead of the ISMS policies and QMS SOPs that both need it.
 
-3. **EMS depth** — ~~positions and headcount~~ (**done**), ~~contracts~~ (**done**), then
-   training records.
+3. ~~**EMS depth**~~ — **done**: positions and headcount, contracts, training records.
    Before QMS and ISMS, because QMS competency/training records and ISMS policy
    acknowledgement both hang off employee and position data. Building those first means
    modelling training twice.
@@ -92,8 +91,15 @@ action. It does not add a `*_history` table.
 
    Contracts came second and confirmed the ordering: `employment_contracts.position_id` is a
    real reference, so "what does this role pay" and "who is on a fixed term ending this
-   quarter" are both queries rather than string matching. Training records are next and hang
-   off the same `position_id`.
+   quarter" are both queries rather than string matching.
+
+   Training closed the step and paid the ordering off completely: requirements hang off
+   `position_id`, so the competency gap report reads each employee's CURRENT assignment and
+   survives a transfer with no backfill. That is also the QMS competency artefact and the ISMS
+   awareness-training evidence, so neither system needs its own model of it.
+
+   Training was also the first upload surface that ACCUMULATES, which is why it brought
+   `storage.attachments` and the policy descriptors with it — see the upload section below.
 
 4. **ISMS** — risk register, controls / Statement of Applicability, incidents, asset
    classification, vendor risk.
@@ -109,6 +115,40 @@ action. It does not add a `*_history` table.
 applied — there is no deployed OpsHub environment. Every module above is verifiable
 locally and in CI, and none of it is usable by an employee until that happens. Decide
 whether it lands before or alongside module 1.
+
+## Uploads: one policy descriptor per surface
+
+Ported from rally, which arrived at this shape after every new upload surface had produced
+another copy of presign/confirm.
+
+- **`RESOURCE_RULES` in `libs/platform/src/storage/storage.types.ts`** is the whole policy: MIME
+  allow-list, size ceiling, `maxPerOwner`, and `inlineDisposition`. The key of the entry is also
+  the object-key prefix. Adding a surface is an entry here plus, for multi-file surfaces, link
+  rows in `storage.attachments`. It is never a change to `StorageService`.
+- **Mechanics in the platform, authorization in the owning module.** `EntityAttachmentsService`
+  does presign / confirm / list / download / unlink and the quota; it never maps an entity type to
+  a permission. The owning controller proves the subject exists and decides who may act, then
+  delegates. An `entityType → permission` map inside the shared service is where cross-entity
+  authorization bugs hide.
+- **SVG is excluded from every policy, permanently.** It is active content, so an "image" that
+  renders inline is stored XSS the moment the bytes come from an origin the app trusts — which is
+  exactly what `CDN_FILES_BASE_URL` is.
+- **`Content-Disposition` is STORED object metadata, not a response override.** This is a
+  deliberate deviation from rally, which applies it on its presigned GET. `resolveUrl` here prefers
+  the CDN whenever one is configured and a plain CDN read carries no overrides, so the override
+  alone would silently not apply on the path production uses. The header must therefore be in
+  `signableHeaders` AND sent by the client — a header named in the command but unsigned is dropped
+  by the presigner, verified against LocalStack.
+- **`requiredHeaders` is returned, not documented.** The client must send exactly that set: fewer
+  fails the signature and so does more, and the failure is a 403 with no CORS headers, which a
+  browser reports as an opaque network error.
+- **The checksum is advisory.** A presigned PUT cannot require one without the client sending a
+  matching `x-amz-*` header, which the presigner drops — rally proved that the hard way. It is
+  recorded at presign and compared on confirm where the backend reports one, because size alone
+  cannot catch a same-length substitution.
+- **1:1 surfaces keep their key column.** `employees.photo_storage_key` and friends are not
+  migrated onto the link table: the column IS the relationship, and a join per avatar render buys
+  only uniformity.
 
 ## Checklist for a new module
 
@@ -147,6 +187,11 @@ step, which is the point.
   OpenAPI document — and the client generated from it — promises a status the server never sends.
   15 routes across six controllers were doing this. Enforced by
   `test/post-status-contract.ratchet.spec.ts`, baseline 0.
+- **Uploads** — a `RESOURCE_RULES` entry, and `EntityAttachmentsService` for anything that can
+  own more than one file. Never a second copy of presign/confirm. E2E it against the LocalStack
+  service in CI rather than a stubbed `StorageService`: a stub agrees with whatever the code does,
+  and both real defects here (an unsigned header silently dropped, a presigned GET returning a
+  Promise cast to a string) were invisible without real bytes.
 - **E2E reset** — add every new table to `FIXTURE_TABLES` in `db/reset.ts`. Nothing in the
   suite tears down what it creates, so an unlisted table keeps its rows forever and the
   failure arrives later, in someone else's spec, looking like a product bug. Positions found
