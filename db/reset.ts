@@ -115,6 +115,12 @@ export const FIXTURE_TABLES = [
   // ISMS — `uq_risk_reference` is global, and a risk left `accepted` by a previous run makes the
   // next run's acceptance a 412 nobody wrote. Treatments cascade from risks, listed for intent.
   'isms.risk_treatments',
+  // The risk↔control link and the SoA. `risk_controls` cascades from risks, but `soa_entries` and
+  // `controls` do not — and `uq_control_reference` is global, so a leftover control makes the next
+  // run's catalogue insert a 409 nobody wrote.
+  'isms.risk_controls',
+  'isms.soa_entries',
+  'isms.controls',
   'isms.risks',
   // The attachment link rows. `storage.stored_files` is truncated below and CASCADEs into this
   // table, but listing it explicitly keeps the intent visible rather than incidental.

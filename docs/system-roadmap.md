@@ -14,7 +14,7 @@ says something is absent, that was checked.
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
 | **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
-| **ISMS** — information security           | Partial. Access control (RBAC + scoped PBAC), audit trail, software/device compliance findings, security posture, asset inventory, controlled policies with acknowledgement. **Risk register**: generated scoring, treatment plans, acceptance through the request engine | Asset classification, controls / Statement of Applicability, incidents, vendor risk                                  |
+| **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register**: generated scoring, treatment plans, acceptance through the request engine. **Controls + Statement of Applicability**: catalogue, per-control decision, risk↔control coverage, gap reports | Asset classification, incidents, vendor risk                                                                          |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training | CAPA, non-conformance, internal audit, management review                                                            |
 
 A caution on searching for these: grepping the schema for `risk`, `policy`, `document` or
@@ -107,8 +107,8 @@ action. It does not add a `*_history` table.
    Training was also the first upload surface that ACCUMULATES, which is why it brought
    `storage.attachments` and the policy descriptors with it — see the upload section below.
 
-4. **ISMS** — ~~risk register~~ (**done**), then controls / Statement of Applicability,
-   incidents, asset classification, vendor risk.
+4. **ISMS** — ~~risk register~~ (**done**), ~~controls / Statement of Applicability~~
+   (**done**), then incidents, asset classification, vendor risk.
    Reuses compliance findings, the asset inventory, the access-control model and the
    document module, so most of its foundation is already here.
 
@@ -122,6 +122,21 @@ action. It does not add a `*_history` table.
    scan-detected, so findings are INPUTS to risks rather than risks. And scoring is a
    GENERATED column (`likelihood * impact`), which is why no API accepts a score: a register
    cannot hold a row that disagrees with its own factors.
+
+   The SoA followed and confirmed the sequencing: a control exists to treat a risk, so
+   `isms.risk_controls` turns "we have controls" into "this risk is treated by these", and the
+   untreated-risk report is that join's anti-join. Three structural decisions worth carrying:
+
+   - The CATALOGUE and the DECISION are separate tables. Merging them would let a re-seed of
+     Annex A overwrite the organisation's justifications, and it would make "which controls
+     have we not decided about yet?" unanswerable — an ABSENT `soa_entries` row is exactly
+     that state, and no column value can distinguish it from "decided, no comment". That
+     absence is what `undecided` in the coverage report counts.
+   - The SoA is written with PUT, never PATCH. Applicability, justification and status are one
+     statement; letting them change independently is how an entry ends up excluded while its
+     rationale still argues for inclusion.
+   - `ck_soa_applicability` pairs `applicable = false` with `not_applicable`, so "excluded but
+     implemented" is unrepresentable rather than merely discouraged.
 
 5. **QMS** — CAPA, non-conformance, internal audit, management review.
    Last of the four not because it matters least, but because it is the heaviest consumer
@@ -215,6 +230,10 @@ step, which is the point.
   this as `POSITION_INVALID_WINDOW` on a second run; the leave suite found it as arithmetic
   drifting once 12 years' worth of stale holidays had piled up. Both were "passes exactly
   once per database".
+- **Read every CHECK you write back to yourself.** Migration 0020's first draft carried
+  `CHECK (a IS NOT NULL OR b IS NOT NULL OR TRUE)` — a tautology that can never fail, which would
+  have sat in the schema looking like a guarantee while enforcing nothing. Same family as a ratchet
+  that cannot fail: if you cannot state the row it rejects, it is not a constraint.
 - **Invariants the database cannot hold** — count-based rules (`at most N open rows`) need a
   service check INSIDE the transaction, because a unique index cannot express them and a CHECK
   cannot see other rows. Where a CHECK *does* hold the rule, still refuse the bad input in the

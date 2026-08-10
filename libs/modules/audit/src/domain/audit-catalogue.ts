@@ -142,6 +142,15 @@ export const AUDIT_ACTION = {
   RISK_TREATMENT_ADDED: 'risk_treatment.added',
   RISK_TREATMENT_UPDATED: 'risk_treatment.updated',
 
+  // ── ISMS controls and the SoA ──
+  CONTROL_CREATED: 'control.created',
+  CONTROL_UPDATED: 'control.updated',
+  CONTROL_RETIRED: 'control.retired',
+  SOA_ENTRY_SET: 'soa_entry.set',
+  SOA_ENTRY_REVIEWED: 'soa_entry.reviewed',
+  RISK_CONTROL_LINKED: 'risk_control.linked',
+  RISK_CONTROL_UNLINKED: 'risk_control.unlinked',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -214,6 +223,8 @@ export const AUDIT_RESOURCE = {
   TRAINING_RECORD: 'training_record',
   RISK: 'risk',
   RISK_TREATMENT: 'risk_treatment',
+  CONTROL: 'control',
+  SOA_ENTRY: 'soa_entry',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',
