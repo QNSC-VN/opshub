@@ -19,6 +19,7 @@ import type {
   ClassificationLevel,
   InformationAsset,
 } from '../domain/information-asset.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 const REASON = 'The board approved wider circulation of the anonymised figures.';
@@ -121,7 +122,7 @@ function makeService(over: Record<string, unknown> = {}) {
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
 
   const service = new InformationAssetService(repo, db, audit as never);
   return { service, repo, transaction, audit, TX };

@@ -20,6 +20,7 @@ import type {
   VendorCriticalityLevel,
   VendorStatus,
 } from '../domain/vendor.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 const REASON = 'They failed to remediate the findings from the last assessment.';
@@ -142,7 +143,7 @@ function makeService(over: Record<string, unknown> = {}) {
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
 
   const service = new VendorService(repo, db, audit as never);
   return { service, repo, transaction, audit, TX };

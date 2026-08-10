@@ -11,7 +11,8 @@ import {
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
-import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import { addDays, today } from '@shared-kernel';
+import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService, type AuditAction } from '@modules/audit';
 import { EmployeeService } from '@modules/identity';
 import {
   CONTRACTS_REPOSITORY,
@@ -24,18 +25,6 @@ import type {
   EmploymentContract,
   UpdateContractInput,
 } from '../domain/contracts.types';
-
-/** `YYYY-MM-DD` in UTC. The whole module compares dates as strings; see `assertDateOrder`. */
-export function today(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
-
-/** `days` after `from`, as `YYYY-MM-DD`. */
-export function addDays(from: string, days: number): string {
-  const d = new Date(`${from}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 /**
  * Employment contracts: their terms, their lifecycle, and their succession.
@@ -476,7 +465,7 @@ export class ContractsService {
     signedAt: string | undefined,
     actor: Actor,
     tx: DbExecutor,
-    audit?: { action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION]; before: object },
+    audit?: { action: AuditAction; before: object },
   ): Promise<EmploymentContract> {
     const activated = await this.repo.transition(
       contract.id,
@@ -515,7 +504,7 @@ export class ContractsService {
   }
 
   private async recordAudit(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
+    action: AuditAction,
     contract: EmploymentContract,
     actor: Actor,
     tx: DbExecutor,

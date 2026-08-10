@@ -170,6 +170,10 @@ CREATE TABLE IF NOT EXISTS isms.information_assets (
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
 
+  -- The 1..5 bounds are mirrored in `libs/modules/isms/src/domain/rating.ts`, which is the
+  -- single source for the application layer. SQL cannot import it, so this is the one
+  -- remaining copy — changing the scale means changing both, plus
+  -- `ACCEPTANCE_APPROVAL_THRESHOLD`, which is expressed in scale units.
   CONSTRAINT ck_information_asset_cia_range CHECK (
     confidentiality BETWEEN 1 AND 5
     AND integrity BETWEEN 1 AND 5

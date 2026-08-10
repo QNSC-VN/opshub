@@ -25,7 +25,15 @@
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `incident.read` + `incident.manage` — the responder. */
@@ -76,35 +84,11 @@ interface OverdueRow {
   notificationDueAt: string;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
-
 async function report(
   session: Session = security,
   over: Record<string, unknown> = {},
 ): Promise<IncidentRow> {
-  const res = await req(session, 'POST', '/incidents/report', {
+  const res = await apiRequest(app, session, 'POST', '/incidents/report', {
     reference: nextRef(),
     title: 'Phishing email reported by staff',
     description: 'A member of staff received a credential-harvesting email and clicked the link.',
@@ -114,7 +98,7 @@ async function report(
     ...over,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<IncidentRow>(res.body);
+  return unwrap<IncidentRow>(res.body);
 }
 
 /** Report and walk to the requested status, asserting each step. */
@@ -125,9 +109,9 @@ async function walkTo(
   let incident = await report(security, over);
 
   const step = async (url: string, payload: Record<string, unknown>) => {
-    const res = await req(security, 'POST', `/incidents/${incident.id}${url}`, payload);
+    const res = await apiRequest(app, security, 'POST', `/incidents/${incident.id}${url}`, payload);
     expect(res.status, `${url}: ${JSON.stringify(res.body)}`).toBe(200);
-    incident = data<IncidentRow>(res.body);
+    incident = unwrap<IncidentRow>(res.body);
   };
 
   await step('/triage', { assignedTo: FIXTURE.SECURITY.id });
@@ -164,7 +148,7 @@ describe('reporting', () => {
     const reference = nextRef();
     expect(
       (
-        await req(security, 'POST', '/incidents/report', {
+        await apiRequest(app, security, 'POST', '/incidents/report', {
           reference,
           title: 'First',
           description: 'The first incident with this reference.',
@@ -175,7 +159,7 @@ describe('reporting', () => {
       ).status,
     ).toBe(201);
 
-    const dup = await req(security, 'POST', '/incidents/report', {
+    const dup = await apiRequest(app, security, 'POST', '/incidents/report', {
       reference,
       title: 'Second',
       description: 'The same reference again, which must be refused.',
@@ -185,7 +169,7 @@ describe('reporting', () => {
     });
     expect(dup.status).toBe(409);
 
-    const future = await req(security, 'POST', '/incidents/report', {
+    const future = await apiRequest(app, security, 'POST', '/incidents/report', {
       reference: nextRef(),
       title: 'From the future',
       description: 'Detected an hour from now, which cannot be true.',
@@ -201,8 +185,8 @@ describe('reporting', () => {
     const detectedAt = hoursAgo(6);
     const incident = await report(security, { detectedAt });
 
-    const timeline = data<EventRow[]>(
-      (await req(security, 'GET', `/incidents/${incident.id}/timeline`)).body,
+    const timeline = unwrap<EventRow[]>(
+      (await apiRequest(app, security, 'GET', `/incidents/${incident.id}/timeline`)).body,
     );
     expect(timeline).toHaveLength(1);
     // Not "when the form was filled": the gap between detection and reporting is the first thing a
@@ -239,19 +223,25 @@ describe('the state machine', () => {
       ['/resolve', { rootCause: CAUSE }],
       ['/close', { lessonsLearned: LESSON }],
     ] as const) {
-      const res = await req(security, 'POST', `/incidents/${reported.id}${url}`, payload);
+      const res = await apiRequest(
+        app,
+        security,
+        'POST',
+        `/incidents/${reported.id}${url}`,
+        payload,
+      );
       expect(res.status, url).toBe(412);
       expect(errorCode(res.body), url).toBe('INCIDENT_NOT_IN_STATE');
     }
 
     const triaged = await walkTo('triaged');
-    const early = await req(security, 'POST', `/incidents/${triaged.id}/resolve`, {
+    const early = await apiRequest(app, security, 'POST', `/incidents/${triaged.id}/resolve`, {
       rootCause: CAUSE,
     });
     expect(early.status).toBe(412);
 
     const contained = await walkTo('contained');
-    const tooSoon = await req(security, 'POST', `/incidents/${contained.id}/close`, {
+    const tooSoon = await apiRequest(app, security, 'POST', `/incidents/${contained.id}/close`, {
       lessonsLearned: LESSON,
     });
     expect(tooSoon.status).toBe(412);
@@ -260,9 +250,11 @@ describe('the state machine', () => {
   it('requires a responder to triage', async () => {
     const incident = await report();
 
-    expect((await req(security, 'POST', `/incidents/${incident.id}/triage`, {})).status).toBe(422);
+    expect(
+      (await apiRequest(app, security, 'POST', `/incidents/${incident.id}/triage`, {})).status,
+    ).toBe(422);
     // `assigned_to` carries no cross-schema FK, so an unknown id must be refused here.
-    const nobody = await req(security, 'POST', `/incidents/${incident.id}/triage`, {
+    const nobody = await apiRequest(app, security, 'POST', `/incidents/${incident.id}/triage`, {
       assignedTo: '00000000-0000-7000-8000-0000000000fe',
     });
     expect(nobody.status).toBe(404);
@@ -271,7 +263,7 @@ describe('the state machine', () => {
   it('refuses handling timestamps that run backwards', async () => {
     const triaged = await walkTo('triaged', { detectedAt: hoursAgo(3) });
 
-    const early = await req(security, 'POST', `/incidents/${triaged.id}/contain`, {
+    const early = await apiRequest(app, security, 'POST', `/incidents/${triaged.id}/contain`, {
       containedAt: hoursAgo(10),
     });
     expect(early.status).toBe(412);
@@ -281,23 +273,28 @@ describe('the state machine', () => {
   it('requires a cause to resolve and a lesson to close', async () => {
     const contained = await walkTo('contained');
 
-    expect((await req(security, 'POST', `/incidents/${contained.id}/resolve`, {})).status).toBe(
-      422,
-    );
     expect(
-      (await req(security, 'POST', `/incidents/${contained.id}/resolve`, { rootCause: 'dunno' }))
-        .status,
+      (await apiRequest(app, security, 'POST', `/incidents/${contained.id}/resolve`, {})).status,
+    ).toBe(422);
+    expect(
+      (
+        await apiRequest(app, security, 'POST', `/incidents/${contained.id}/resolve`, {
+          rootCause: 'dunno',
+        })
+      ).status,
     ).toBe(422);
 
-    const resolved = await req(security, 'POST', `/incidents/${contained.id}/resolve`, {
+    const resolved = await apiRequest(app, security, 'POST', `/incidents/${contained.id}/resolve`, {
       rootCause: CAUSE,
     });
     expect(resolved.status).toBe(200);
 
-    expect((await req(security, 'POST', `/incidents/${contained.id}/close`, {})).status).toBe(422);
+    expect(
+      (await apiRequest(app, security, 'POST', `/incidents/${contained.id}/close`, {})).status,
+    ).toBe(422);
     expect(
       (
-        await req(security, 'POST', `/incidents/${contained.id}/close`, {
+        await apiRequest(app, security, 'POST', `/incidents/${contained.id}/close`, {
           lessonsLearned: 'none',
         })
       ).status,
@@ -306,16 +303,16 @@ describe('the state machine', () => {
 
   it('dismisses early and refuses to dismiss after containment', async () => {
     const early = await report();
-    const dismissed = await req(security, 'POST', `/incidents/${early.id}/dismiss`, {
+    const dismissed = await apiRequest(app, security, 'POST', `/incidents/${early.id}/dismiss`, {
       reason: 'It was a scheduled penetration test nobody had announced.',
     });
     expect(dismissed.status).toBe(200);
-    expect(data<IncidentRow>(dismissed.body).status).toBe('false_positive');
+    expect(unwrap<IncidentRow>(dismissed.body).status).toBe('false_positive');
     // Terminal: no handling timestamps were invented on the way.
-    expect(data<IncidentRow>(dismissed.body).containedAt).toBeNull();
+    expect(unwrap<IncidentRow>(dismissed.body).containedAt).toBeNull();
 
     const contained = await walkTo('contained');
-    const late = await req(security, 'POST', `/incidents/${contained.id}/dismiss`, {
+    const late = await apiRequest(app, security, 'POST', `/incidents/${contained.id}/dismiss`, {
       reason: 'Trying to dismiss something already contained.',
     });
     // Once contained it demonstrably WAS an incident.
@@ -326,13 +323,15 @@ describe('the state machine', () => {
   it('refuses edits once finished, but still accepts timeline entries', async () => {
     const closed = await walkTo('closed');
 
-    const edit = await req(security, 'PATCH', `/incidents/${closed.id}`, { severity: 'low' });
+    const edit = await apiRequest(app, security, 'PATCH', `/incidents/${closed.id}`, {
+      severity: 'low',
+    });
     expect(edit.status).toBe(412);
     expect(errorCode(edit.body)).toBe('INCIDENT_NOT_IN_STATE');
 
     // A post-incident review adds to the record after closure; refusing that would push the
     // analysis somewhere the audit trail cannot see.
-    const note = await req(security, 'POST', `/incidents/${closed.id}/timeline`, {
+    const note = await apiRequest(app, security, 'POST', `/incidents/${closed.id}/timeline`, {
       type: 'note',
       detail: 'Post-incident review completed; actions tracked as risk treatments.',
     });
@@ -344,8 +343,8 @@ describe('the timeline', () => {
   it('records one entry per status change, chronologically', async () => {
     const closed = await walkTo('closed');
 
-    const timeline = data<EventRow[]>(
-      (await req(security, 'GET', `/incidents/${closed.id}/timeline`)).body,
+    const timeline = unwrap<EventRow[]>(
+      (await apiRequest(app, security, 'GET', `/incidents/${closed.id}/timeline`)).body,
     );
     // Report, triage, contain, resolve, close — written by the transitions, not by the caller.
     expect(timeline.filter((e) => e.type === 'status_change')).toHaveLength(5);
@@ -356,19 +355,33 @@ describe('the timeline', () => {
   it('accepts a note dated when it happened, and refuses one before detection', async () => {
     const incident = await report(security, { detectedAt: hoursAgo(4) });
 
-    const backdated = await req(security, 'POST', `/incidents/${incident.id}/timeline`, {
-      type: 'evidence',
-      detail: 'Mail gateway log extract attached to the ticket.',
-      occurredAt: hoursAgo(3),
-    });
+    const backdated = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/incidents/${incident.id}/timeline`,
+      {
+        type: 'evidence',
+        detail: 'Mail gateway log extract attached to the ticket.',
+        occurredAt: hoursAgo(3),
+      },
+    );
     expect(backdated.status).toBe(201);
-    expect(new Date(data<EventRow>(backdated.body).occurredAt).getTime()).toBeLessThan(Date.now());
+    expect(new Date(unwrap<EventRow>(backdated.body).occurredAt).getTime()).toBeLessThan(
+      Date.now(),
+    );
 
-    const impossible = await req(security, 'POST', `/incidents/${incident.id}/timeline`, {
-      type: 'note',
-      detail: 'Recorded against a time before the incident was detected.',
-      occurredAt: hoursAgo(10),
-    });
+    const impossible = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/incidents/${incident.id}/timeline`,
+      {
+        type: 'note',
+        detail: 'Recorded against a time before the incident was detected.',
+        occurredAt: hoursAgo(10),
+      },
+    );
     expect(impossible.status).toBe(412);
     expect(errorCode(impossible.body)).toBe('INCIDENT_TIMELINE_ORDER');
   });
@@ -377,17 +390,23 @@ describe('the timeline', () => {
     // Append-only is a property of the API surface, not just of the service: a timeline somebody can
     // revise afterwards is not evidence.
     const incident = await report();
-    const created = await req(security, 'POST', `/incidents/${incident.id}/timeline`, {
+    const created = await apiRequest(app, security, 'POST', `/incidents/${incident.id}/timeline`, {
       type: 'note',
       detail: 'An entry that must not be editable afterwards.',
     });
     expect(created.status).toBe(201);
-    const eventId = data<EventRow>(created.body).id;
+    const eventId = unwrap<EventRow>(created.body).id;
 
     for (const method of ['PATCH', 'PUT', 'DELETE'] as const) {
-      const res = await req(security, method, `/incidents/${incident.id}/timeline/${eventId}`, {
-        detail: 'Rewritten',
-      });
+      const res = await apiRequest(
+        app,
+        security,
+        method,
+        `/incidents/${incident.id}/timeline/${eventId}`,
+        {
+          detail: 'Rewritten',
+        },
+      );
       // 404 or 405 — either way there is no handler. What matters is that nothing succeeds.
       expect([404, 405], `${method} returned ${res.status}`).toContain(res.status);
     }
@@ -410,8 +429,8 @@ describe('the 72-hour breach clock', () => {
     const due = new Date(breach.notificationDueAt!).getTime();
     expect(due - new Date(breach.detectedAt).getTime()).toBe(72 * HOUR);
 
-    const overdue = data<OverdueRow[]>(
-      (await req(security, 'GET', '/incidents/breaches/overdue')).body,
+    const overdue = unwrap<OverdueRow[]>(
+      (await apiRequest(app, security, 'GET', '/incidents/breaches/overdue')).body,
     );
     const mine = overdue.find((o) => o.id === breach.id);
     expect(mine, 'the breach should be listed as overdue').toBeDefined();
@@ -419,18 +438,24 @@ describe('the 72-hour breach clock', () => {
     expect(mine!.hoursOverdue).toBeGreaterThanOrEqual(7);
     expect(mine!.hoursOverdue).toBeLessThanOrEqual(9);
 
-    const notified = await req(security, 'POST', `/incidents/${breach.id}/regulator-notified`, {});
+    const notified = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/incidents/${breach.id}/regulator-notified`,
+      {},
+    );
     expect(notified.status).toBe(200);
-    expect(data<IncidentRow>(notified.body).regulatorNotifiedAt).not.toBeNull();
+    expect(unwrap<IncidentRow>(notified.body).regulatorNotifiedAt).not.toBeNull();
 
-    const after = data<OverdueRow[]>(
-      (await req(security, 'GET', '/incidents/breaches/overdue')).body,
+    const after = unwrap<OverdueRow[]>(
+      (await apiRequest(app, security, 'GET', '/incidents/breaches/overdue')).body,
     );
     expect(after.map((o) => o.id)).not.toContain(breach.id);
 
     // And it is on the timeline, because that is what a reviewer reads.
-    const timeline = data<EventRow[]>(
-      (await req(security, 'GET', `/incidents/${breach.id}/timeline`)).body,
+    const timeline = unwrap<EventRow[]>(
+      (await apiRequest(app, security, 'GET', `/incidents/${breach.id}/timeline`)).body,
     );
     expect(timeline.some((e) => e.type === 'notification')).toBe(true);
   });
@@ -441,8 +466,8 @@ describe('the 72-hour breach clock', () => {
       personalDataBreach: true,
     });
 
-    const overdue = data<OverdueRow[]>(
-      (await req(security, 'GET', '/incidents/breaches/overdue')).body,
+    const overdue = unwrap<OverdueRow[]>(
+      (await apiRequest(app, security, 'GET', '/incidents/breaches/overdue')).body,
     );
     expect(overdue.map((o) => o.id)).not.toContain(fresh.id);
   });
@@ -450,15 +475,23 @@ describe('the 72-hour breach clock', () => {
   it('refuses to notify twice, or to notify a non-breach', async () => {
     const breach = await report(security, { detectedAt: hoursAgo(80), personalDataBreach: true });
     expect(
-      (await req(security, 'POST', `/incidents/${breach.id}/regulator-notified`, {})).status,
+      (await apiRequest(app, security, 'POST', `/incidents/${breach.id}/regulator-notified`, {}))
+        .status,
     ).toBe(200);
-    const twice = await req(security, 'POST', `/incidents/${breach.id}/regulator-notified`, {});
+    const twice = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/incidents/${breach.id}/regulator-notified`,
+      {},
+    );
     // The notification date is what the obligation turns on, so overwriting it would erase whether
     // the 72 hours were met.
     expect(twice.status).toBe(409);
 
     const ordinary = await report();
-    const notABreach = await req(
+    const notABreach = await apiRequest(
+      app,
       security,
       'POST',
       `/incidents/${ordinary.id}/regulator-notified`,
@@ -480,8 +513,8 @@ describe('the register view', () => {
     const critical = await report(security, { severity: 'critical', detectedAt: hoursAgo(1) });
     const low = await report(security, { severity: 'low', detectedAt: hoursAgo(1) });
 
-    const queue = data<IncidentRow[]>(
-      (await req(security, 'GET', '/incidents?openOnly=true&limit=100')).body,
+    const queue = unwrap<IncidentRow[]>(
+      (await apiRequest(app, security, 'GET', '/incidents?openOnly=true&limit=100')).body,
     );
     const positions = [
       queue.findIndex((i) => i.id === critical.id),
@@ -494,8 +527,8 @@ describe('the register view', () => {
 
     const closed = await walkTo('closed');
     expect(
-      data<IncidentRow[]>(
-        (await req(security, 'GET', '/incidents?openOnly=true&limit=100')).body,
+      unwrap<IncidentRow[]>(
+        (await apiRequest(app, security, 'GET', '/incidents?openOnly=true&limit=100')).body,
       ).map((i) => i.id),
     ).not.toContain(closed.id);
   });
@@ -504,13 +537,13 @@ describe('the register view', () => {
     const incident = await report();
 
     const unlinked = () =>
-      req(security, 'GET', '/incidents/unlinked-to-risk').then((r) =>
-        data<IncidentRow[]>(r.body).map((i) => i.id),
+      apiRequest(app, security, 'GET', '/incidents/unlinked-to-risk').then((r) =>
+        unwrap<IncidentRow[]>(r.body).map((i) => i.id),
       );
     expect(await unlinked()).toContain(incident.id);
 
     // Link it to a risk — the register's feedback loop closing.
-    const risk = await req(security, 'POST', '/risks', {
+    const risk = await apiRequest(app, security, 'POST', '/risks', {
       reference: `E2E-INC-R-${RUN}-${++seq}`,
       title: 'Phishing leading to credential compromise',
       description: 'Staff may click credential-harvesting links.',
@@ -520,8 +553,8 @@ describe('the register view', () => {
     });
     expect(risk.status).toBe(201);
 
-    const linked = await req(security, 'PATCH', `/incidents/${incident.id}`, {
-      riskId: data<{ id: string }>(risk.body).id,
+    const linked = await apiRequest(app, security, 'PATCH', `/incidents/${incident.id}`, {
+      riskId: unwrap<{ id: string }>(risk.body).id,
     });
     expect(linked.status, JSON.stringify(linked.body)).toBe(200);
 
@@ -533,21 +566,23 @@ describe('authorization', () => {
   it('lets an incident.read holder read but not handle', async () => {
     const incident = await report();
 
-    expect((await req(auditor, 'GET', '/incidents')).status).toBe(200);
-    expect((await req(auditor, 'GET', `/incidents/${incident.id}`)).status).toBe(200);
-    expect((await req(auditor, 'GET', `/incidents/${incident.id}/timeline`)).status).toBe(200);
-    expect((await req(auditor, 'GET', '/incidents/breaches/overdue')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/incidents')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', `/incidents/${incident.id}`)).status).toBe(200);
+    expect(
+      (await apiRequest(app, auditor, 'GET', `/incidents/${incident.id}/timeline`)).status,
+    ).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/incidents/breaches/overdue')).status).toBe(200);
 
     expect(
       (
-        await req(auditor, 'POST', `/incidents/${incident.id}/triage`, {
+        await apiRequest(app, auditor, 'POST', `/incidents/${incident.id}/triage`, {
           assignedTo: FIXTURE.SECURITY.id,
         })
       ).status,
     ).toBe(403);
     expect(
       (
-        await req(auditor, 'POST', `/incidents/${incident.id}/timeline`, {
+        await apiRequest(app, auditor, 'POST', `/incidents/${incident.id}/timeline`, {
           type: 'note',
           detail: 'An auditor may read the timeline but not write to it.',
         })
@@ -559,17 +594,23 @@ describe('authorization', () => {
     const incident = await report(employee);
 
     // They reported it and still cannot read the register — reporting is the only door open.
-    expect((await req(employee, 'GET', '/incidents')).status).toBe(403);
-    expect((await req(employee, 'GET', `/incidents/${incident.id}`)).status).toBe(403);
-    expect((await req(employee, 'GET', `/incidents/${incident.id}/timeline`)).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/incidents')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', `/incidents/${incident.id}`)).status).toBe(403);
+    expect(
+      (await apiRequest(app, employee, 'GET', `/incidents/${incident.id}/timeline`)).status,
+    ).toBe(403);
   });
 });
 
 describe('unknown ids', () => {
   it('404s rather than answering emptily', async () => {
     const missing = '00000000-0000-7000-8000-0000000000ff';
-    expect((await req(security, 'GET', `/incidents/${missing}`)).status).toBe(404);
-    expect((await req(security, 'GET', `/incidents/${missing}/timeline`)).status).toBe(404);
-    expect((await req(security, 'POST', `/incidents/${missing}/contain`, {})).status).toBe(404);
+    expect((await apiRequest(app, security, 'GET', `/incidents/${missing}`)).status).toBe(404);
+    expect((await apiRequest(app, security, 'GET', `/incidents/${missing}/timeline`)).status).toBe(
+      404,
+    );
+    expect(
+      (await apiRequest(app, security, 'POST', `/incidents/${missing}/contain`, {})).status,
+    ).toBe(404);
   });
 });

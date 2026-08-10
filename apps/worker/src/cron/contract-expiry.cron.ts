@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ExclusiveJob } from '@platform';
 import { ContractsService } from '@modules/contracts';
+import { MS_PER_HOUR } from '@shared-kernel';
 
 /**
  * How far ahead HR is warned. 30 days is the default notice period on a contract, so a reminder any
@@ -10,7 +11,7 @@ import { ContractsService } from '@modules/contracts';
 const REMINDER_WINDOW_DAYS = 30;
 
 /** Under the daily interval, so a crashed pod cannot block tomorrow's sweep. */
-const LOCK_TTL_MS = 23 * 60 * 60_000;
+const LOCK_TTL_MS = 23 * MS_PER_HOUR;
 
 /**
  * ContractExpiryCron — moves contracts past their end date to `expired`, and warns about the ones

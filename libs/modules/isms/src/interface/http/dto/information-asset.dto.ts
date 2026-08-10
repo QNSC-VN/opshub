@@ -1,13 +1,14 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
+import { RATING_MAX, RATING_MIN } from '../../../domain/rating';
 import { informationAssetTypeEnum, informationClassificationEnum } from '@db/schema/enums';
 
 const classification = z.enum(informationClassificationEnum.enumValues);
 const assetType = z.enum(informationAssetTypeEnum.enumValues);
 
-/** The CIA scale, shared with the risk register's likelihood and impact. */
-const rating = z.number().int().min(1).max(5);
+/** The CIA scale, shared with the risk register's likelihood and impact — see `domain/rating.ts`. */
+const rating = z.number().int().min(RATING_MIN).max(RATING_MAX);
 
 /**
  * 10 characters minimum, matching `ck_asset_classification_history_reason`.
@@ -38,11 +39,7 @@ export const RegisterInformationAssetSchema = z.object({
   personalData: z.boolean().optional(),
   location: z.string().max(200).nullable().optional(),
   retentionMonths: z.number().int().positive().nullable().optional(),
-  reviewDueOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
-    .nullable()
-    .optional(),
+  reviewDueOn: z.string().date().nullable().optional(),
 });
 export class RegisterInformationAssetDto extends createZodDto(RegisterInformationAssetSchema) {}
 
@@ -70,11 +67,7 @@ export class ReclassifyDto extends createZodDto(ReclassifySchema) {}
 
 export const MarkAssetReviewedSchema = z.object({
   /** When the next review is due. Null clears it. */
-  reviewDueOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
-    .nullable()
-    .optional(),
+  reviewDueOn: z.string().date().nullable().optional(),
 });
 export class MarkAssetReviewedDto extends createZodDto(MarkAssetReviewedSchema) {}
 
@@ -91,10 +84,7 @@ export const ListInformationAssetsQuerySchema = z
     /** The personal-data holdings, which is the register a data-protection question starts from. */
     personalDataOnly: z.coerce.boolean().optional(),
     /** Due for review on or before this date. Today's date gives the overdue report. */
-    reviewDueOnOrBefore: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
-      .optional(),
+    reviewDueOnOrBefore: z.string().date().optional(),
     includeRetired: z.coerce.boolean().optional(),
     search: z.string().max(200).optional(),
   })

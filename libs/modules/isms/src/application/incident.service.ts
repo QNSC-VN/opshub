@@ -5,11 +5,16 @@ import {
   InjectDrizzle,
   NotFoundException,
   PreconditionFailedException,
-  type DbExecutor,
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
-import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import {
+  AUDIT_ACTION,
+  type AuditAction,
+  AUDIT_RESOURCE,
+  AuditService,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { INCIDENT_REPOSITORY, type IIncidentRepository } from '../domain/ports/incident.repository';
 import { isTerminalIncidentStatus } from '../infrastructure/persistence/incident.drizzle-repository';
 import type {
@@ -70,11 +75,16 @@ const ALLOWED_TRANSITIONS: Record<IncidentStatus, readonly IncidentStatus[]> = {
  */
 @Injectable()
 export class IncidentService {
+  private readonly trail: ResourceAuditTrail;
+
   constructor(
     @Inject(INCIDENT_REPOSITORY) private readonly repo: IIncidentRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly audit: AuditService,
-  ) {}
+  ) {
+    // Resource type named ONCE — see `AuditService.forResource`.
+    this.trail = audit.forResource(AUDIT_RESOURCE.INCIDENT);
+  }
 
   // ── Reads ────────────────────────────────────────────────────────────────────
 
@@ -127,7 +137,7 @@ export class IncidentService {
         },
         tx,
       );
-      await this.record(AUDIT_ACTION.INCIDENT_REPORTED, incident.id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INCIDENT_REPORTED, incident.id, actor, tx, {
         after: {
           reference: incident.reference,
           severity: incident.severity,
@@ -168,7 +178,7 @@ export class IncidentService {
 
     return this.db.transaction(async (tx) => {
       const after = await this.repo.update(id, input, tx);
-      await this.record(AUDIT_ACTION.INCIDENT_UPDATED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INCIDENT_UPDATED, id, actor, tx, {
         before: { severity: before.severity, personalDataBreach: before.personalDataBreach },
         after: { severity: after!.severity, personalDataBreach: after!.personalDataBreach },
       });
@@ -291,7 +301,7 @@ export class IncidentService {
         { ...input, recordedBy: actor.sub, occurredAt },
         tx,
       );
-      await this.record(AUDIT_ACTION.INCIDENT_EVENT_RECORDED, incidentId, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INCIDENT_EVENT_RECORDED, incidentId, actor, tx, {
         after: { type: event.type, occurredAt: event.occurredAt },
       });
       return event;
@@ -342,7 +352,7 @@ export class IncidentService {
         },
         tx,
       );
-      await this.record(AUDIT_ACTION.INCIDENT_REGULATOR_NOTIFIED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.INCIDENT_REGULATOR_NOTIFIED, id, actor, tx, {
         after: { regulatorNotifiedAt: at },
       });
       return notified;
@@ -371,7 +381,7 @@ export class IncidentService {
     id: string,
     to: IncidentStatus,
     actor: Actor,
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
+    action: AuditAction,
     extra: {
       detail: string;
       occurredAt?: Date;
@@ -415,7 +425,7 @@ export class IncidentService {
         },
         tx,
       );
-      await this.record(action, id, actor, tx, {
+      await this.trail.record(action, id, actor, tx, {
         before: { status: incident.status },
         after: { status: to },
       });
@@ -455,25 +465,5 @@ export class IncidentService {
   /** A supplied timestamp, or now. Responders record most steps as they happen. */
   private stampOrNow(value: string | undefined): Date {
     return value ? new Date(value) : new Date();
-  }
-
-  private async record(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
-    incidentId: string,
-    actor: Actor,
-    tx: DbExecutor,
-    changes: { before?: object | null; after?: object | null },
-  ): Promise<void> {
-    await this.audit.record(
-      {
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action,
-        resourceType: AUDIT_RESOURCE.INCIDENT,
-        resourceId: incidentId,
-        changes,
-      },
-      tx,
-    );
   }
 }

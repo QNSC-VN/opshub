@@ -32,7 +32,15 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ContractsService } from '@modules/contracts';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `contract.read`, `contract.manage` AND `contract.compensation.read`. */
@@ -60,37 +68,12 @@ interface ContractRow {
   compensation: { baseSalary: string; salaryCurrency: string; salaryPeriod: string } | null;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  // `as unknown` rather than `JSON.parse`'s `any`: callers narrow through `data<T>()`.
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
-
 /** A drafted contract for `employeeId`, defaulting to a signed fixed-term with pay. */
 async function draft(
   employeeId: string,
   over: Record<string, unknown> = {},
 ): Promise<{ status: number; body: unknown }> {
-  return req(hr, 'POST', '/contracts', {
+  return apiRequest(app, hr, 'POST', '/contracts', {
     employeeId,
     reference: nextRef(),
     contractType: 'fixed_term',
@@ -108,12 +91,12 @@ async function activeContract(
 ): Promise<ContractRow> {
   const drafted = await draft(employeeId, over);
   expect(drafted.status, JSON.stringify(drafted.body)).toBe(201);
-  const id = data<ContractRow>(drafted.body).id;
-  const activated = await req(hr, 'POST', `/contracts/${id}/activate`, {
+  const id = unwrap<ContractRow>(drafted.body).id;
+  const activated = await apiRequest(app, hr, 'POST', `/contracts/${id}/activate`, {
     signedAt: '2039-12-01T00:00:00.000Z',
   });
   expect(activated.status, JSON.stringify(activated.body)).toBe(200);
-  return data<ContractRow>(activated.body);
+  return unwrap<ContractRow>(activated.body);
 }
 
 /**
@@ -125,9 +108,14 @@ async function activeContract(
  * draft of this helper did exactly that and the failure surfaced as a renewal that looked broken.
  */
 async function clearActive(employeeId: string): Promise<void> {
-  const { body } = await req(hr, 'GET', `/contracts?employeeId=${employeeId}&status=active`);
-  for (const row of data<ContractRow[]>(body)) {
-    const res = await req(hr, 'POST', `/contracts/${row.id}/terminate`, {
+  const { body } = await apiRequest(
+    app,
+    hr,
+    'GET',
+    `/contracts?employeeId=${employeeId}&status=active`,
+  );
+  for (const row of unwrap<ContractRow[]>(body)) {
+    const res = await apiRequest(app, hr, 'POST', `/contracts/${row.id}/terminate`, {
       terminatedOn: row.startDate,
       terminationReason: 'e2e cleanup',
     });
@@ -208,16 +196,20 @@ describe('drafting', () => {
 
 describe('editing', () => {
   it('allows a draft to change and refuses the same change once active', async () => {
-    const drafted = data<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
-    const edited = await req(hr, 'PATCH', `/contracts/${drafted.id}`, { noticePeriodDays: 60 });
+    const drafted = unwrap<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
+    const edited = await apiRequest(app, hr, 'PATCH', `/contracts/${drafted.id}`, {
+      noticePeriodDays: 60,
+    });
     expect(edited.status).toBe(200);
 
-    const activated = await req(hr, 'POST', `/contracts/${drafted.id}/activate`, {
+    const activated = await apiRequest(app, hr, 'POST', `/contracts/${drafted.id}/activate`, {
       signedAt: '2039-12-01T00:00:00.000Z',
     });
     expect(activated.status).toBe(200);
 
-    const refused = await req(hr, 'PATCH', `/contracts/${drafted.id}`, { noticePeriodDays: 90 });
+    const refused = await apiRequest(app, hr, 'PATCH', `/contracts/${drafted.id}`, {
+      noticePeriodDays: 90,
+    });
     expect(refused.status).toBe(412);
     expect(errorCode(refused.body)).toBe('CONTRACT_NOT_DRAFT');
 
@@ -227,18 +219,20 @@ describe('editing', () => {
   it('validates the merged terms, not just the patch', async () => {
     // Changing only the type on a fixed-term row would leave an end date behind and hit
     // `ck_contract_type_end_date` as a 500.
-    const drafted = data<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
+    const drafted = unwrap<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
 
-    const half = await req(hr, 'PATCH', `/contracts/${drafted.id}`, { contractType: 'permanent' });
+    const half = await apiRequest(app, hr, 'PATCH', `/contracts/${drafted.id}`, {
+      contractType: 'permanent',
+    });
     expect(half.status).toBe(412);
     expect(errorCode(half.body)).toBe('CONTRACT_INVALID_TERM');
 
-    const whole = await req(hr, 'PATCH', `/contracts/${drafted.id}`, {
+    const whole = await apiRequest(app, hr, 'PATCH', `/contracts/${drafted.id}`, {
       contractType: 'permanent',
       endDate: null,
     });
     expect(whole.status).toBe(200);
-    expect(data<ContractRow>(whole.body)).toMatchObject({
+    expect(unwrap<ContractRow>(whole.body)).toMatchObject({
       contractType: 'permanent',
       endDate: null,
     });
@@ -247,26 +241,26 @@ describe('editing', () => {
 
 describe('activation', () => {
   it('refuses an unsigned draft, then accepts a signature supplied with the activation', async () => {
-    const drafted = data<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
+    const drafted = unwrap<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
 
-    const unsigned = await req(hr, 'POST', `/contracts/${drafted.id}/activate`, {});
+    const unsigned = await apiRequest(app, hr, 'POST', `/contracts/${drafted.id}/activate`, {});
     expect(unsigned.status).toBe(412);
     expect(errorCode(unsigned.body)).toBe('CONTRACT_NOT_SIGNED');
 
-    const signed = await req(hr, 'POST', `/contracts/${drafted.id}/activate`, {
+    const signed = await apiRequest(app, hr, 'POST', `/contracts/${drafted.id}/activate`, {
       signedAt: '2039-12-24T00:00:00.000Z',
     });
     expect(signed.status).toBe(200);
-    expect(data<ContractRow>(signed.body).status).toBe('active');
+    expect(unwrap<ContractRow>(signed.body).status).toBe('active');
 
     await clearActive(FIXTURE.NO_PERMISSIONS.id);
   });
 
   it('allows only ONE active contract per employee', async () => {
     const first = await activeContract(FIXTURE.NO_PERMISSIONS.id);
-    const second = data<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
+    const second = unwrap<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
 
-    const refused = await req(hr, 'POST', `/contracts/${second.id}/activate`, {
+    const refused = await apiRequest(app, hr, 'POST', `/contracts/${second.id}/activate`, {
       signedAt: '2039-12-01T00:00:00.000Z',
     });
     // Refused in the service so the caller gets a code; `uq_employee_active_contract` is what makes
@@ -274,9 +268,15 @@ describe('activation', () => {
     expect(refused.status).toBe(409);
     expect(errorCode(refused.body)).toBe('CONTRACT_ALREADY_ACTIVE');
 
-    const active = data<ContractRow[]>(
-      (await req(hr, 'GET', `/contracts?employeeId=${FIXTURE.NO_PERMISSIONS.id}&status=active`))
-        .body,
+    const active = unwrap<ContractRow[]>(
+      (
+        await apiRequest(
+          app,
+          hr,
+          'GET',
+          `/contracts?employeeId=${FIXTURE.NO_PERMISSIONS.id}&status=active`,
+        )
+      ).body,
     );
     expect(active).toHaveLength(1);
     expect(active[0].id).toBe(first.id);
@@ -291,10 +291,11 @@ describe('activation', () => {
     });
     expect(stale.status).toBe(201);
 
-    const refused = await req(
+    const refused = await apiRequest(
+      app,
       hr,
       'POST',
-      `/contracts/${data<ContractRow>(stale.body).id}/activate`,
+      `/contracts/${unwrap<ContractRow>(stale.body).id}/activate`,
       {
         signedAt: '2019-12-01T00:00:00.000Z',
       },
@@ -307,27 +308,35 @@ describe('activation', () => {
 describe('renewal', () => {
   it('expires the outgoing contract, activates the incoming one, and links them', async () => {
     const outgoing = await activeContract(FIXTURE.NO_PERMISSIONS.id);
-    const incoming = data<ContractRow>(
+    const incoming = unwrap<ContractRow>(
       (await draft(FIXTURE.NO_PERMISSIONS.id, { startDate: '2041-01-01', endDate: '2041-12-31' }))
         .body,
     );
 
-    const renewed = await req(hr, 'POST', `/contracts/${outgoing.id}/renew`, {
+    const renewed = await apiRequest(app, hr, 'POST', `/contracts/${outgoing.id}/renew`, {
       incomingContractId: incoming.id,
       signedAt: '2040-12-01T00:00:00.000Z',
     });
     expect(renewed.status, JSON.stringify(renewed.body)).toBe(200);
-    expect(data<ContractRow>(renewed.body).status).toBe('active');
+    expect(unwrap<ContractRow>(renewed.body).status).toBe('active');
 
-    const old = data<ContractRow>((await req(hr, 'GET', `/contracts/${outgoing.id}`)).body);
+    const old = unwrap<ContractRow>(
+      (await apiRequest(app, hr, 'GET', `/contracts/${outgoing.id}`)).body,
+    );
     expect(old.status).toBe('expired');
     // The forward link is written last, so it can only point at a contract that did activate.
     expect(old.supersededById).toBe(incoming.id);
 
     // Never two live agreements, never none.
-    const active = data<ContractRow[]>(
-      (await req(hr, 'GET', `/contracts?employeeId=${FIXTURE.NO_PERMISSIONS.id}&status=active`))
-        .body,
+    const active = unwrap<ContractRow[]>(
+      (
+        await apiRequest(
+          app,
+          hr,
+          'GET',
+          `/contracts?employeeId=${FIXTURE.NO_PERMISSIONS.id}&status=active`,
+        )
+      ).body,
     );
     expect(active).toHaveLength(1);
     expect(active[0].id).toBe(incoming.id);
@@ -338,18 +347,18 @@ describe('renewal', () => {
   it('refuses a renewal for a different employee, and one starting earlier', async () => {
     const outgoing = await activeContract(FIXTURE.NO_PERMISSIONS.id);
 
-    const otherPerson = data<ContractRow>((await draft(FIXTURE.MANAGER.id)).body);
-    const crossed = await req(hr, 'POST', `/contracts/${outgoing.id}/renew`, {
+    const otherPerson = unwrap<ContractRow>((await draft(FIXTURE.MANAGER.id)).body);
+    const crossed = await apiRequest(app, hr, 'POST', `/contracts/${outgoing.id}/renew`, {
       incomingContractId: otherPerson.id,
       signedAt: '2039-12-01T00:00:00.000Z',
     });
     expect(crossed.status).toBe(412);
 
-    const earlier = data<ContractRow>(
+    const earlier = unwrap<ContractRow>(
       (await draft(FIXTURE.NO_PERMISSIONS.id, { startDate: '2039-01-01', endDate: '2039-12-31' }))
         .body,
     );
-    const backwards = await req(hr, 'POST', `/contracts/${outgoing.id}/renew`, {
+    const backwards = await apiRequest(app, hr, 'POST', `/contracts/${outgoing.id}/renew`, {
       incomingContractId: earlier.id,
       signedAt: '2038-12-01T00:00:00.000Z',
     });
@@ -357,17 +366,19 @@ describe('renewal', () => {
     expect(errorCode(backwards.body)).toBe('CONTRACT_INVALID_WINDOW');
 
     // Nothing half-happened: the original is still the live contract.
-    const still = data<ContractRow>((await req(hr, 'GET', `/contracts/${outgoing.id}`)).body);
+    const still = unwrap<ContractRow>(
+      (await apiRequest(app, hr, 'GET', `/contracts/${outgoing.id}`)).body,
+    );
     expect(still.status).toBe('active');
 
     await clearActive(FIXTURE.NO_PERMISSIONS.id);
   });
 
   it('refuses to renew a contract that is not active', async () => {
-    const drafted = data<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
-    const other = data<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
+    const drafted = unwrap<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
+    const other = unwrap<ContractRow>((await draft(FIXTURE.NO_PERMISSIONS.id)).body);
 
-    const refused = await req(hr, 'POST', `/contracts/${drafted.id}/renew`, {
+    const refused = await apiRequest(app, hr, 'POST', `/contracts/${drafted.id}/renew`, {
       incomingContractId: other.id,
       signedAt: '2039-12-01T00:00:00.000Z',
     });
@@ -380,27 +391,27 @@ describe('termination', () => {
   it('requires a reason and a date on or after the start', async () => {
     const active = await activeContract(FIXTURE.NO_PERMISSIONS.id);
 
-    const noReason = await req(hr, 'POST', `/contracts/${active.id}/terminate`, {
+    const noReason = await apiRequest(app, hr, 'POST', `/contracts/${active.id}/terminate`, {
       terminatedOn: '2040-06-01',
     });
     expect(noReason.status).toBe(422);
 
-    const early = await req(hr, 'POST', `/contracts/${active.id}/terminate`, {
+    const early = await apiRequest(app, hr, 'POST', `/contracts/${active.id}/terminate`, {
       terminatedOn: '2039-01-01',
       terminationReason: 'resigned',
     });
     expect(early.status).toBe(412);
     expect(errorCode(early.body)).toBe('CONTRACT_INVALID_WINDOW');
 
-    const ok = await req(hr, 'POST', `/contracts/${active.id}/terminate`, {
+    const ok = await apiRequest(app, hr, 'POST', `/contracts/${active.id}/terminate`, {
       terminatedOn: '2040-06-01',
       terminationReason: 'resigned',
     });
     expect(ok.status).toBe(200);
-    expect(data<ContractRow>(ok.body).status).toBe('terminated');
+    expect(unwrap<ContractRow>(ok.body).status).toBe('terminated');
 
     // Terminating twice would rewrite the date; the guarded transition refuses.
-    const twice = await req(hr, 'POST', `/contracts/${active.id}/terminate`, {
+    const twice = await apiRequest(app, hr, 'POST', `/contracts/${active.id}/terminate`, {
       terminatedOn: '2040-09-01',
       terminationReason: 'again',
     });
@@ -411,15 +422,17 @@ describe('termination', () => {
 
 describe('pay visibility', () => {
   it('shows the figure to HR and hides it from a contract.read holder', async () => {
-    const drafted = data<ContractRow>((await draft(FIXTURE.MANAGER.id)).body);
+    const drafted = unwrap<ContractRow>((await draft(FIXTURE.MANAGER.id)).body);
 
-    const asHr = data<ContractRow>((await req(hr, 'GET', `/contracts/${drafted.id}`)).body);
+    const asHr = unwrap<ContractRow>(
+      (await apiRequest(app, hr, 'GET', `/contracts/${drafted.id}`)).body,
+    );
     expect(asHr.compensation).toMatchObject({ baseSalary: '4500.00', salaryCurrency: 'USD' });
 
     // The auditor holds `contract.read` and NOT `contract.compensation.read`: they can confirm the
     // contract exists and is signed without learning what it pays.
-    const asAuditor = data<ContractRow>(
-      (await req(auditor, 'GET', `/contracts/${drafted.id}`)).body,
+    const asAuditor = unwrap<ContractRow>(
+      (await apiRequest(app, auditor, 'GET', `/contracts/${drafted.id}`)).body,
     );
     expect(asAuditor.reference).toBe(asHr.reference);
     expect(asAuditor.compensation).toBeNull();
@@ -427,14 +440,14 @@ describe('pay visibility', () => {
 
   it('redacts pay in the LIST as well as the single read', async () => {
     // A per-row mapper is easy to apply on one path and forget on the other.
-    const listed = data<ContractRow[]>(
-      (await req(auditor, 'GET', `/contracts?employeeId=${FIXTURE.MANAGER.id}`)).body,
+    const listed = unwrap<ContractRow[]>(
+      (await apiRequest(app, auditor, 'GET', `/contracts?employeeId=${FIXTURE.MANAGER.id}`)).body,
     );
     expect(listed.length).toBeGreaterThan(0);
     expect(listed.every((c) => c.compensation === null)).toBe(true);
 
-    const asHr = data<ContractRow[]>(
-      (await req(hr, 'GET', `/contracts?employeeId=${FIXTURE.MANAGER.id}`)).body,
+    const asHr = unwrap<ContractRow[]>(
+      (await apiRequest(app, hr, 'GET', `/contracts?employeeId=${FIXTURE.MANAGER.id}`)).body,
     );
     expect(asHr.some((c) => c.compensation !== null)).toBe(true);
   });
@@ -442,7 +455,9 @@ describe('pay visibility', () => {
   it('lets an employee see their OWN pay with no permission at all', async () => {
     await draft(FIXTURE.NO_PERMISSIONS.id);
 
-    const mine = data<ContractRow[]>((await req(employee, 'GET', '/contracts/me')).body);
+    const mine = unwrap<ContractRow[]>(
+      (await apiRequest(app, employee, 'GET', '/contracts/me')).body,
+    );
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((c) => c.employeeId === FIXTURE.NO_PERMISSIONS.id)).toBe(true);
     // Their salary is theirs — a scope rule, not a permission.
@@ -450,15 +465,16 @@ describe('pay visibility', () => {
   });
 
   it('refuses the collection and another employee history to a caller holding nothing', async () => {
-    expect((await req(employee, 'GET', '/contracts')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/contracts')).status).toBe(403);
     expect(
-      (await req(employee, 'GET', `/contracts/employees/${FIXTURE.MANAGER.id}/history`)).status,
+      (await apiRequest(app, employee, 'GET', `/contracts/employees/${FIXTURE.MANAGER.id}/history`))
+        .status,
     ).toBe(403);
   });
 
   it('refuses management to a read-only holder', async () => {
     expect((await draft(FIXTURE.MANAGER.id)).status).toBe(201);
-    const asAuditor = await req(auditor, 'POST', '/contracts', {
+    const asAuditor = await apiRequest(app, auditor, 'POST', '/contracts', {
       employeeId: FIXTURE.MANAGER.id,
       reference: nextRef(),
       contractType: 'permanent',
@@ -486,11 +502,15 @@ describe('the expiry sweep', () => {
     const first = await service.expireDueContracts('2040-06-01');
     expect(first).toBeGreaterThanOrEqual(1);
 
-    const swept = data<ContractRow>((await req(hr, 'GET', `/contracts/${ending.id}`)).body);
+    const swept = unwrap<ContractRow>(
+      (await apiRequest(app, hr, 'GET', `/contracts/${ending.id}`)).body,
+    );
     expect(swept.status).toBe('expired');
 
     // The other contract has not reached its end date, so the sweep must not have moved it.
-    const other = data<ContractRow>((await req(hr, 'GET', `/contracts/${untouched.id}`)).body);
+    const other = unwrap<ContractRow>(
+      (await apiRequest(app, hr, 'GET', `/contracts/${untouched.id}`)).body,
+    );
     expect(other.status).toBe('active');
 
     // Idempotent: the transition is guarded on `active`, so a second pass finds nothing to do.
@@ -519,7 +539,9 @@ describe('the expiry sweep', () => {
 describe('unknown ids', () => {
   it('404s rather than answering emptily', async () => {
     const missing = '00000000-0000-7000-8000-0000000000ff';
-    expect((await req(hr, 'GET', `/contracts/${missing}`)).status).toBe(404);
-    expect((await req(hr, 'GET', `/contracts/employees/${missing}/history`)).status).toBe(404);
+    expect((await apiRequest(app, hr, 'GET', `/contracts/${missing}`)).status).toBe(404);
+    expect(
+      (await apiRequest(app, hr, 'GET', `/contracts/employees/${missing}/history`)).status,
+    ).toBe(404);
   });
 });

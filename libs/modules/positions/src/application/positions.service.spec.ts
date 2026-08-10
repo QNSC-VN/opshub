@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, PreconditionFailedException, type DrizzleDB } from '@platform';
 import { PositionsService } from './positions.service';
 import type { EmployeePosition, Position } from '../domain/positions.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 
@@ -82,7 +83,7 @@ function makeService(repoOver: Record<string, unknown> = {}) {
   // its object — which is what `@typescript-eslint/unbound-method` objects to.
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
 
   const service = new PositionsService(repo, db, audit as never);
   return { service, repo, db, transaction, audit, TX };

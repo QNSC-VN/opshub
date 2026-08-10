@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
+import { RATING_MAX, RATING_MIN } from '../../../domain/rating';
 import {
   riskStatusEnum,
   riskTreatmentDecisionEnum,
@@ -14,10 +15,11 @@ const treatmentStatus = z.enum(riskTreatmentStatusEnum.enumValues);
 /**
  * A 5x5 matrix, matching `ck_risk_inherent_range`.
  *
- * The bound is in ONE place per layer and both read 1..5: a 7 in either column would silently change
- * what every threshold in the register means, including `ACCEPTANCE_APPROVAL_THRESHOLD`.
+ * The bounds come from `domain/rating.ts`, which is the single source shared with the information
+ * asset register: a 7 in either column would silently change what every threshold in the register
+ * means, including `ACCEPTANCE_APPROVAL_THRESHOLD`.
  */
-const factor = z.number().int().min(1).max(5);
+const factor = z.number().int().min(RATING_MIN).max(RATING_MAX);
 
 export const ScoreSchema = z.object({ likelihood: factor, impact: factor });
 

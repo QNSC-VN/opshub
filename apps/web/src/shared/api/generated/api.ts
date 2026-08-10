@@ -4112,6 +4112,7 @@ export interface components {
       createdAt: string;
     };
     CreateTimesheetDto: {
+      /** Format: date */
       workDate: string;
       minutesWorked: number;
       note?: string;
@@ -4142,7 +4143,9 @@ export interface components {
     CreateLeaveDto: {
       /** @enum {string} */
       leaveType: 'annual' | 'sick' | 'unpaid' | 'parental' | 'other';
+      /** Format: date */
       startDate: string;
+      /** Format: date */
       endDate: string;
       reason?: string;
     };
@@ -4158,6 +4161,7 @@ export interface components {
       createdAt: string;
     };
     CreateOvertimeDto: {
+      /** Format: date */
       workDate: string;
       hours: number;
       reason: string;
@@ -4183,6 +4187,7 @@ export interface components {
     SubmitOnboardingDto: {
       /** Format: uuid */
       employeeId: string;
+      /** Format: date */
       startDate: string;
       department?: string;
       jobTitle?: string;

@@ -40,12 +40,13 @@ import {
   TriageIncidentDto,
   UpdateIncidentDto,
 } from './dto/incident.dto';
+import { MS_PER_HOUR } from '@shared-kernel';
 
 /** `detectedAt + 72h`, or null when this is not a personal-data breach. */
 function notificationDueAt(incident: Incident): string | null {
   if (!incident.personalDataBreach) return null;
   return new Date(
-    incident.detectedAt.getTime() + BREACH_NOTIFICATION_HOURS * 3_600_000,
+    incident.detectedAt.getTime() + BREACH_NOTIFICATION_HOURS * MS_PER_HOUR,
   ).toISOString();
 }
 

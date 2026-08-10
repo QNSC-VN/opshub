@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { DelegationService, ExclusiveJob } from '@platform';
-import { MS_PER_DAY } from '@shared-kernel';
+import { MS_PER_DAY, MS_PER_HOUR } from '@shared-kernel';
 
 /** Expired delegations are retained for this many days for audit purposes before purging. */
 const DELEGATION_RETENTION_DAYS = 7;
@@ -26,7 +26,7 @@ export class DelegationExpiryCron {
     private readonly exclusive: ExclusiveJob,
   ) {}
 
-  @Interval(60 * 60_000) // hourly
+  @Interval(MS_PER_HOUR)
   async tick(): Promise<void> {
     await this.exclusive.run('delegation-expiry', LOCK_TTL_MS, async () => {
       // Retain expired delegations for DELEGATION_RETENTION_DAYS after expiry, then purge

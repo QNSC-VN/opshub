@@ -15,9 +15,10 @@ import {
   LeaveSummaryResponseDto,
   OvertimeSummaryResponseDto,
 } from './dto/reports.dto';
+import { MS_PER_DAY } from '@shared-kernel';
 
 /** 30 days in milliseconds */
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * MS_PER_DAY;
 
 function resolveDateRange(from?: string, to?: string): { from: Date; to: Date } {
   const toDate = to ? new Date(to) : new Date();
@@ -37,16 +38,30 @@ export class ReportsController {
   @Get('requests/summary')
   @ApiOperation({
     summary: 'Request counts by type and status',
-    description: 'Returns total request counts grouped by type and status. Useful for dashboards and status breakdowns.',
+    description:
+      'Returns total request counts grouped by type and status. Useful for dashboards and status breakdowns.',
   })
-  @ApiQuery({ name: 'from', required: false, type: String, description: 'ISO-8601 start. Defaults to 30 days ago.' })
-  @ApiQuery({ name: 'to', required: false, type: String, description: 'ISO-8601 end. Defaults to now.' })
-  @ApiQuery({ name: 'type', required: false, type: String, description: 'Filter to a specific request type.' })
+  @ApiQuery({
+    name: 'from',
+    required: false,
+    type: String,
+    description: 'ISO-8601 start. Defaults to 30 days ago.',
+  })
+  @ApiQuery({
+    name: 'to',
+    required: false,
+    type: String,
+    description: 'ISO-8601 end. Defaults to now.',
+  })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    type: String,
+    description: 'Filter to a specific request type.',
+  })
   @ApiResponse({ status: 200, type: RequestSummaryResponseDto })
   @ApiCommonErrors(401, 403)
-  async getRequestSummary(
-    @Query() query: DateRangeQueryDto,
-  ): Promise<RequestSummaryResponseDto> {
+  async getRequestSummary(@Query() query: DateRangeQueryDto): Promise<RequestSummaryResponseDto> {
     const { from, to } = resolveDateRange(query.from, query.to);
     const rows = await this.reportsService.getRequestSummary({ from, to, type: query.type });
     return { from: from.toISOString(), to: to.toISOString(), rows };
@@ -63,9 +78,7 @@ export class ReportsController {
   @ApiQuery({ name: 'type', required: false, type: String })
   @ApiResponse({ status: 200, type: CycleTimeResponseDto })
   @ApiCommonErrors(401, 403)
-  async getRequestCycleTime(
-    @Query() query: DateRangeQueryDto,
-  ): Promise<CycleTimeResponseDto> {
+  async getRequestCycleTime(@Query() query: DateRangeQueryDto): Promise<CycleTimeResponseDto> {
     const { from, to } = resolveDateRange(query.from, query.to);
     const rows = await this.reportsService.getRequestCycleTime({ from, to, type: query.type });
     return { from: from.toISOString(), to: to.toISOString(), rows };
@@ -114,9 +127,7 @@ export class ReportsController {
   @ApiQuery({ name: 'type', required: false, type: String })
   @ApiResponse({ status: 200, type: ThroughputResponseDto })
   @ApiCommonErrors(401, 403)
-  async getRequestThroughput(
-    @Query() query: DateRangeQueryDto,
-  ): Promise<ThroughputResponseDto> {
+  async getRequestThroughput(@Query() query: DateRangeQueryDto): Promise<ThroughputResponseDto> {
     const { from, to } = resolveDateRange(query.from, query.to);
     const points = await this.reportsService.getRequestThroughput({ from, to, type: query.type });
     return { from: from.toISOString(), to: to.toISOString(), points };
@@ -168,9 +179,7 @@ export class ReportsController {
   @ApiQuery({ name: 'to', required: false, type: String })
   @ApiResponse({ status: 200, type: LeaveSummaryResponseDto })
   @ApiCommonErrors(401, 403)
-  async getLeaveSummary(
-    @Query() query: DateRangeOnlyQueryDto,
-  ): Promise<LeaveSummaryResponseDto> {
+  async getLeaveSummary(@Query() query: DateRangeOnlyQueryDto): Promise<LeaveSummaryResponseDto> {
     const { from, to } = resolveDateRange(query.from, query.to);
     const rows = await this.reportsService.getLeaveSummary({ from, to });
     return { from: from.toISOString(), to: to.toISOString(), rows };

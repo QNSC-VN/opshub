@@ -25,7 +25,15 @@
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `risk.read` + `risk.manage`, and NOT `risk.accept` — the assessor. */
@@ -72,33 +80,9 @@ interface AcceptResponse {
   requestId: string | null;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
-
 /** A risk with the given inherent factors, owned by the security fixture. */
 async function identify(likelihood: number, impact: number): Promise<RiskRow> {
-  const res = await req(security, 'POST', '/risks', {
+  const res = await apiRequest(app, security, 'POST', '/risks', {
     reference: nextRef(),
     title: 'Unpatched perimeter device',
     description: 'A device on the network edge is missing vendor security updates.',
@@ -107,7 +91,7 @@ async function identify(likelihood: number, impact: number): Promise<RiskRow> {
     inherent: { likelihood, impact },
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<RiskRow>(res.body);
+  return unwrap<RiskRow>(res.body);
 }
 
 /** Identify and assess, so the risk carries a residual score of `rl × ri`. */
@@ -117,12 +101,12 @@ async function assessed(
   decision = 'mitigate',
 ): Promise<RiskRow> {
   const risk = await identify(inherent[0], inherent[1]);
-  const res = await req(security, 'POST', `/risks/${risk.id}/assess`, {
+  const res = await apiRequest(app, security, 'POST', `/risks/${risk.id}/assess`, {
     decision,
     residual: { likelihood: residual[0], impact: residual[1] },
   });
   expect(res.status, JSON.stringify(res.body)).toBe(200);
-  return data<RiskRow>(res.body);
+  return unwrap<RiskRow>(res.body);
 }
 
 beforeAll(async () => {
@@ -144,7 +128,7 @@ describe('scoring', () => {
 
     // The API surface has no score field: sending one is ignored rather than honoured, so a row can
     // never disagree with its own factors.
-    const withScore = await req(security, 'POST', '/risks', {
+    const withScore = await apiRequest(app, security, 'POST', '/risks', {
       reference: nextRef(),
       title: 'Score smuggling',
       description: 'Attempts to set the score directly.',
@@ -154,7 +138,7 @@ describe('scoring', () => {
       inherentScore: 25,
     });
     expect(withScore.status).toBe(201);
-    expect(data<RiskRow>(withScore.body).inherentScore).toBe(1);
+    expect(unwrap<RiskRow>(withScore.body).inherentScore).toBe(1);
   });
 
   it('rejects a factor outside 1..5', async () => {
@@ -163,7 +147,7 @@ describe('scoring', () => {
       { likelihood: 6, impact: 3 },
       { likelihood: 3, impact: 9 },
     ]) {
-      const res = await req(security, 'POST', '/risks', {
+      const res = await apiRequest(app, security, 'POST', '/risks', {
         reference: nextRef(),
         title: 'Out of range',
         description: 'A factor outside the 5x5 matrix.',
@@ -177,7 +161,7 @@ describe('scoring', () => {
 
   it('refuses a duplicate reference, and an owner who does not exist', async () => {
     const reference = nextRef();
-    const first = await req(security, 'POST', '/risks', {
+    const first = await apiRequest(app, security, 'POST', '/risks', {
       reference,
       title: 'First',
       description: 'The first risk with this reference.',
@@ -187,7 +171,7 @@ describe('scoring', () => {
     });
     expect(first.status).toBe(201);
 
-    const dup = await req(security, 'POST', '/risks', {
+    const dup = await apiRequest(app, security, 'POST', '/risks', {
       reference,
       title: 'Second',
       description: 'The same reference again.',
@@ -199,7 +183,7 @@ describe('scoring', () => {
 
     // `owner_id` carries no cross-schema FK, so without the controller's check a typo would become a
     // risk owned by nobody.
-    const nobody = await req(security, 'POST', '/risks', {
+    const nobody = await apiRequest(app, security, 'POST', '/risks', {
       reference: nextRef(),
       title: 'Ownerless',
       description: 'An owner id that does not resolve.',
@@ -222,7 +206,7 @@ describe('assessment', () => {
   it('refuses a residual worse than the inherent score, and allows one equal to it', async () => {
     const risk = await identify(2, 2);
 
-    const worse = await req(security, 'POST', `/risks/${risk.id}/assess`, {
+    const worse = await apiRequest(app, security, 'POST', `/risks/${risk.id}/assess`, {
       decision: 'mitigate',
       residual: { likelihood: 3, impact: 3 },
     });
@@ -230,18 +214,18 @@ describe('assessment', () => {
     expect(errorCode(worse.body)).toBe('RISK_INVALID_SCORE');
 
     // Equal is legitimate: `transfer` and `accept` leave the score where it is.
-    const equal = await req(security, 'POST', `/risks/${risk.id}/assess`, {
+    const equal = await apiRequest(app, security, 'POST', `/risks/${risk.id}/assess`, {
       decision: 'transfer',
       residual: { likelihood: 2, impact: 2 },
     });
     expect(equal.status).toBe(200);
-    expect(data<RiskRow>(equal.body).residualScore).toBe(4);
+    expect(unwrap<RiskRow>(equal.body).residualScore).toBe(4);
   });
 
   it('refuses to lower the inherent score below a recorded residual', async () => {
     const risk = await assessed([4, 4], [3, 3]);
 
-    const lowered = await req(security, 'PATCH', `/risks/${risk.id}`, {
+    const lowered = await apiRequest(app, security, 'PATCH', `/risks/${risk.id}`, {
       inherent: { likelihood: 2, impact: 2 },
     });
     expect(lowered.status).toBe(412);
@@ -253,55 +237,58 @@ describe('treatment', () => {
   it('refuses to mark treated while an action is open, and allows it once done', async () => {
     const risk = await assessed([4, 4], [2, 2]);
 
-    const added = await req(security, 'POST', `/risks/${risk.id}/treatments`, {
+    const added = await apiRequest(app, security, 'POST', `/risks/${risk.id}/treatments`, {
       description: 'Patch the device and confirm the version.',
       ownerId: FIXTURE.SECURITY.id,
       dueOn: '2027-01-31',
     });
     expect(added.status).toBe(201);
-    const treatment = data<TreatmentRow>(added.body);
+    const treatment = unwrap<TreatmentRow>(added.body);
     expect(treatment.status).toBe('planned');
 
-    const early = await req(security, 'POST', `/risks/${risk.id}/treated`, {});
+    const early = await apiRequest(app, security, 'POST', `/risks/${risk.id}/treated`, {});
     expect(early.status).toBe(412);
     expect(errorCode(early.body)).toBe('RISK_TREATMENT_OUTSTANDING');
 
-    const done = await req(security, 'PATCH', `/risks/treatments/${treatment.id}`, {
+    const done = await apiRequest(app, security, 'PATCH', `/risks/treatments/${treatment.id}`, {
       status: 'done',
     });
     expect(done.status).toBe(200);
     // `ck_treatment_done_evidence` pairs `done` with a date, and the service fills today's rather
     // than making the caller send it twice.
-    expect(data<TreatmentRow>(done.body).completedOn).not.toBeNull();
+    expect(unwrap<TreatmentRow>(done.body).completedOn).not.toBeNull();
 
-    const treated = await req(security, 'POST', `/risks/${risk.id}/treated`, {
+    const treated = await apiRequest(app, security, 'POST', `/risks/${risk.id}/treated`, {
       residual: { likelihood: 1, impact: 2 },
     });
     expect(treated.status, JSON.stringify(treated.body)).toBe(200);
-    expect(data<RiskRow>(treated.body)).toMatchObject({ status: 'treated', residualScore: 2 });
+    expect(unwrap<RiskRow>(treated.body)).toMatchObject({ status: 'treated', residualScore: 2 });
   });
 
   it('does not count a CANCELLED action as outstanding', async () => {
     const risk = await assessed([3, 3], [2, 2]);
-    const added = await req(security, 'POST', `/risks/${risk.id}/treatments`, {
+    const added = await apiRequest(app, security, 'POST', `/risks/${risk.id}/treatments`, {
       description: 'An approach that was abandoned.',
       ownerId: FIXTURE.SECURITY.id,
     });
-    const treatment = data<TreatmentRow>(added.body);
+    const treatment = unwrap<TreatmentRow>(added.body);
 
     expect(
-      (await req(security, 'PATCH', `/risks/treatments/${treatment.id}`, { status: 'cancelled' }))
-        .status,
+      (
+        await apiRequest(app, security, 'PATCH', `/risks/treatments/${treatment.id}`, {
+          status: 'cancelled',
+        })
+      ).status,
     ).toBe(200);
 
     // Abandoned work is not outstanding work.
-    const treated = await req(security, 'POST', `/risks/${risk.id}/treated`, {});
+    const treated = await apiRequest(app, security, 'POST', `/risks/${risk.id}/treated`, {});
     expect(treated.status, JSON.stringify(treated.body)).toBe(200);
   });
 
   it('refuses to mark a risk treated before it has been assessed', async () => {
     const risk = await identify(3, 3);
-    const res = await req(security, 'POST', `/risks/${risk.id}/treated`, {});
+    const res = await apiRequest(app, security, 'POST', `/risks/${risk.id}/treated`, {});
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('RISK_NOT_IN_STATE');
   });
@@ -312,11 +299,11 @@ describe('acceptance below the threshold', () => {
     // Residual 9 — under 12.
     const risk = await assessed([4, 4], [3, 3]);
 
-    const accepted = await req(security, 'POST', `/risks/${risk.id}/accept`, {
+    const accepted = await apiRequest(app, security, 'POST', `/risks/${risk.id}/accept`, {
       justification: 'The device is being decommissioned next quarter and is firewalled meanwhile.',
     });
     expect(accepted.status, JSON.stringify(accepted.body)).toBe(200);
-    const result = data<AcceptResponse>(accepted.body);
+    const result = unwrap<AcceptResponse>(accepted.body);
 
     expect(result.requestId).toBeNull();
     expect(result.risk.status).toBe('accepted');
@@ -330,7 +317,7 @@ describe('acceptance below the threshold', () => {
 
   it('refuses to accept a risk with no residual score, or to accept twice', async () => {
     const unassessed = await identify(3, 3);
-    const early = await req(security, 'POST', `/risks/${unassessed.id}/accept`, {
+    const early = await apiRequest(app, security, 'POST', `/risks/${unassessed.id}/accept`, {
       justification: 'Accepting before assessing should not be possible.',
     });
     expect(early.status).toBe(412);
@@ -339,12 +326,12 @@ describe('acceptance below the threshold', () => {
     const risk = await assessed([3, 3], [2, 2]);
     expect(
       (
-        await req(security, 'POST', `/risks/${risk.id}/accept`, {
+        await apiRequest(app, security, 'POST', `/risks/${risk.id}/accept`, {
           justification: 'Accepted once, with a reason long enough to be meaningful.',
         })
       ).status,
     ).toBe(200);
-    const twice = await req(security, 'POST', `/risks/${risk.id}/accept`, {
+    const twice = await apiRequest(app, security, 'POST', `/risks/${risk.id}/accept`, {
       justification: 'Accepting a second time should be refused.',
     });
     expect(twice.status).toBe(412);
@@ -352,7 +339,9 @@ describe('acceptance below the threshold', () => {
 
   it('requires a justification of substance', async () => {
     const risk = await assessed([3, 3], [2, 2]);
-    const thin = await req(security, 'POST', `/risks/${risk.id}/accept`, { justification: 'ok' });
+    const thin = await apiRequest(app, security, 'POST', `/risks/${risk.id}/accept`, {
+      justification: 'ok',
+    });
     expect(thin.status).toBe(422);
   });
 });
@@ -363,30 +352,46 @@ describe('acceptance at or above the threshold', () => {
     const risk = await assessed([5, 5], [4, 3]);
     expect(risk.residualScore).toBe(THRESHOLD);
 
-    const requested = await req(security, 'POST', `/risks/${risk.id}/accept`, {
+    const requested = await apiRequest(app, security, 'POST', `/risks/${risk.id}/accept`, {
       justification: 'Compensating controls hold until the platform rebuild completes in Q3.',
     });
     expect(requested.status, JSON.stringify(requested.body)).toBe(200);
-    const result = data<AcceptResponse>(requested.body);
+    const result = unwrap<AcceptResponse>(requested.body);
 
     expect(result.requestId).not.toBeNull();
     // Nothing is accepted until somebody approves it.
     expect(result.risk.status).toBe('assessed');
     expect(result.risk.acceptedBy).toBeNull();
 
-    const stillOpen = data<RiskRow>((await req(security, 'GET', `/risks/${risk.id}`)).body);
+    const stillOpen = unwrap<RiskRow>(
+      (await apiRequest(app, security, 'GET', `/risks/${risk.id}`)).body,
+    );
     expect(stillOpen.status).toBe('assessed');
 
     // The ASSESSOR may not approve their own acceptance: `allowSelfApproval` is false, and they do
     // not hold `risk.accept` either. Both directions matter, so assert the refusal before the
     // approval that works.
-    const selfApproval = await req(security, 'POST', `/requests/${result.requestId!}/approve`, {});
+    const selfApproval = await apiRequest(
+      app,
+      security,
+      'POST',
+      `/requests/${result.requestId!}/approve`,
+      {},
+    );
     expect(selfApproval.status).toBe(403);
 
-    const approved = await req(admin, 'POST', `/requests/${result.requestId!}/approve`, {});
+    const approved = await apiRequest(
+      app,
+      admin,
+      'POST',
+      `/requests/${result.requestId!}/approve`,
+      {},
+    );
     expect(approved.status, JSON.stringify(approved.body)).toBe(200);
 
-    const after = data<RiskRow>((await req(security, 'GET', `/risks/${risk.id}`)).body);
+    const after = unwrap<RiskRow>(
+      (await apiRequest(app, security, 'GET', `/risks/${risk.id}`)).body,
+    );
     expect(after.status).toBe('accepted');
     // The APPROVER is recorded as accepting it — they are the one carrying the exposure.
     expect(after.acceptedBy).toBe(FIXTURE.ADMIN.id);
@@ -397,22 +402,30 @@ describe('acceptance at or above the threshold', () => {
 
   it('leaves the risk where it was when the acceptance is rejected', async () => {
     const risk = await assessed([5, 5], [5, 4]); // residual 20
-    const requested = data<AcceptResponse>(
+    const requested = unwrap<AcceptResponse>(
       (
-        await req(security, 'POST', `/risks/${risk.id}/accept`, {
+        await apiRequest(app, security, 'POST', `/risks/${risk.id}/accept`, {
           justification: 'Requesting acceptance of a high residual for illustration.',
         })
       ).body,
     );
     expect(requested.requestId).not.toBeNull();
 
-    const rejected = await req(admin, 'POST', `/requests/${requested.requestId!}/reject`, {
-      note: 'Treat it — this exposure is not one to carry.',
-    });
+    const rejected = await apiRequest(
+      app,
+      admin,
+      'POST',
+      `/requests/${requested.requestId!}/reject`,
+      {
+        note: 'Treat it — this exposure is not one to carry.',
+      },
+    );
     expect(rejected.status, JSON.stringify(rejected.body)).toBe(200);
 
     // Never moved at submission, so a refusal leaves it assessed and still open.
-    const after = data<RiskRow>((await req(security, 'GET', `/risks/${risk.id}`)).body);
+    const after = unwrap<RiskRow>(
+      (await apiRequest(app, security, 'GET', `/risks/${risk.id}`)).body,
+    );
     expect(after.status).toBe('assessed');
     expect(after.acceptedBy).toBeNull();
   });
@@ -422,21 +435,28 @@ describe('closure', () => {
   it('requires a note, and refuses every later change', async () => {
     const risk = await assessed([3, 3], [2, 2]);
 
-    expect((await req(security, 'POST', `/risks/${risk.id}/close`, {})).status).toBe(422);
+    expect((await apiRequest(app, security, 'POST', `/risks/${risk.id}/close`, {})).status).toBe(
+      422,
+    );
 
-    const closed = await req(security, 'POST', `/risks/${risk.id}/close`, {
+    const closed = await apiRequest(app, security, 'POST', `/risks/${risk.id}/close`, {
       note: 'The service was decommissioned, so the risk no longer applies.',
     });
     expect(closed.status).toBe(200);
-    expect(data<RiskRow>(closed.body)).toMatchObject({ status: 'closed' });
-    expect(data<RiskRow>(closed.body).closureNote).toContain('decommissioned');
+    expect(unwrap<RiskRow>(closed.body)).toMatchObject({ status: 'closed' });
+    expect(unwrap<RiskRow>(closed.body).closureNote).toContain('decommissioned');
 
     // A closed risk is history: no edits, no second closure.
-    expect((await req(security, 'PATCH', `/risks/${risk.id}`, { title: 'Rewritten' })).status).toBe(
-      412,
-    );
     expect(
-      (await req(security, 'POST', `/risks/${risk.id}/close`, { note: 'Closing again.' })).status,
+      (await apiRequest(app, security, 'PATCH', `/risks/${risk.id}`, { title: 'Rewritten' }))
+        .status,
+    ).toBe(412);
+    expect(
+      (
+        await apiRequest(app, security, 'POST', `/risks/${risk.id}/close`, {
+          note: 'Closing again.',
+        })
+      ).status,
     ).toBe(412);
   });
 });
@@ -446,7 +466,9 @@ describe('the register view', () => {
     const low = await identify(1, 2); // 2
     const high = await identify(5, 5); // 25
 
-    const listed = data<RiskRow[]>((await req(security, 'GET', '/risks?limit=100')).body);
+    const listed = unwrap<RiskRow[]>(
+      (await apiRequest(app, security, 'GET', '/risks?limit=100')).body,
+    );
     const positions = [
       listed.findIndex((r) => r.id === high.id),
       listed.findIndex((r) => r.id === low.id),
@@ -456,8 +478,8 @@ describe('the register view', () => {
     // Worst first — the register's whole purpose.
     expect(positions[0]).toBeLessThan(positions[1]);
 
-    const serious = data<RiskRow[]>(
-      (await req(security, 'GET', '/risks?minInherentScore=20&limit=100')).body,
+    const serious = unwrap<RiskRow[]>(
+      (await apiRequest(app, security, 'GET', '/risks?minInherentScore=20&limit=100')).body,
     );
     expect(serious.map((r) => r.id)).toContain(high.id);
     expect(serious.map((r) => r.id)).not.toContain(low.id);
@@ -466,19 +488,23 @@ describe('the register view', () => {
   it('gives the review queue for OPEN risks only', async () => {
     const due = await identify(3, 3);
     expect(
-      (await req(security, 'PATCH', `/risks/${due.id}`, { reviewDueOn: '2026-01-01' })).status,
+      (await apiRequest(app, security, 'PATCH', `/risks/${due.id}`, { reviewDueOn: '2026-01-01' }))
+        .status,
     ).toBe(200);
 
     const queue = () =>
-      req(security, 'GET', '/risks?reviewDueOnOrBefore=2026-06-01&limit=100').then((r) =>
-        data<RiskRow[]>(r.body).map((x) => x.id),
+      apiRequest(app, security, 'GET', '/risks?reviewDueOnOrBefore=2026-06-01&limit=100').then(
+        (r) => unwrap<RiskRow[]>(r.body).map((x) => x.id),
       );
 
     expect(await queue()).toContain(due.id);
 
     expect(
-      (await req(security, 'POST', `/risks/${due.id}/close`, { note: 'No longer applicable.' }))
-        .status,
+      (
+        await apiRequest(app, security, 'POST', `/risks/${due.id}/close`, {
+          note: 'No longer applicable.',
+        })
+      ).status,
     ).toBe(200);
 
     // A closed risk has no review — it would otherwise sit in the queue forever.
@@ -490,13 +516,15 @@ describe('authorization', () => {
   it('lets a risk.read holder read but not manage', async () => {
     const risk = await identify(3, 3);
 
-    expect((await req(auditor, 'GET', '/risks')).status).toBe(200);
-    expect((await req(auditor, 'GET', `/risks/${risk.id}`)).status).toBe(200);
-    expect((await req(auditor, 'GET', `/risks/${risk.id}/treatments`)).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/risks')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', `/risks/${risk.id}`)).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', `/risks/${risk.id}/treatments`)).status).toBe(
+      200,
+    );
 
     expect(
       (
-        await req(auditor, 'POST', '/risks', {
+        await apiRequest(app, auditor, 'POST', '/risks', {
           reference: nextRef(),
           title: 'Not allowed',
           description: 'An auditor may not write to the register.',
@@ -508,7 +536,7 @@ describe('authorization', () => {
     ).toBe(403);
     expect(
       (
-        await req(auditor, 'POST', `/risks/${risk.id}/assess`, {
+        await apiRequest(app, auditor, 'POST', `/risks/${risk.id}/assess`, {
           decision: 'mitigate',
           residual: { likelihood: 1, impact: 1 },
         })
@@ -517,19 +545,22 @@ describe('authorization', () => {
   });
 
   it('refuses the register entirely to a caller holding nothing', async () => {
-    expect((await req(employee, 'GET', '/risks')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/risks')).status).toBe(403);
     const risk = await identify(2, 2);
-    expect((await req(employee, 'GET', `/risks/${risk.id}`)).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', `/risks/${risk.id}`)).status).toBe(403);
   });
 });
 
 describe('unknown ids', () => {
   it('404s rather than answering emptily', async () => {
     const missing = '00000000-0000-7000-8000-0000000000ff';
-    expect((await req(security, 'GET', `/risks/${missing}`)).status).toBe(404);
-    expect((await req(security, 'GET', `/risks/${missing}/treatments`)).status).toBe(404);
+    expect((await apiRequest(app, security, 'GET', `/risks/${missing}`)).status).toBe(404);
+    expect((await apiRequest(app, security, 'GET', `/risks/${missing}/treatments`)).status).toBe(
+      404,
+    );
     expect(
-      (await req(security, 'PATCH', `/risks/treatments/${missing}`, { status: 'done' })).status,
+      (await apiRequest(app, security, 'PATCH', `/risks/treatments/${missing}`, { status: 'done' }))
+        .status,
     ).toBe(404);
   });
 });

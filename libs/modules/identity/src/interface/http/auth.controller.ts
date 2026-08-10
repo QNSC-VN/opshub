@@ -24,6 +24,7 @@ import { BFF_SESSION_COOKIE } from '@platform';
 // augmentation is absent from the worker's program and `nest build worker` fails with
 // TS2339. Type-only: no runtime import is emitted.
 import type {} from '@fastify/csrf-protection';
+import { SEC_PER_DAY } from '@shared-kernel';
 
 const REFRESH_COOKIE = 'refresh_token';
 const CSRF_COOKIE = 'csrf_token';
@@ -38,7 +39,7 @@ export class AuthController {
     private readonly config: AppConfigService,
     private readonly authz: AuthzService,
   ) {
-    this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * 24 * 60 * 60;
+    this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * SEC_PER_DAY;
   }
 
   /**

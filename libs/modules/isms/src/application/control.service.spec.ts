@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, type DrizzleDB } from '@platform';
 import { ControlService } from './control.service';
 import type { Control, SetSoaEntryInput, SoaEntry } from '../domain/control.types';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 
 const ACTOR = { sub: 'actor-1', email: 'actor@opshub.local' };
 
@@ -98,7 +99,7 @@ function makeService(over: Record<string, unknown> = {}, riskOver: Record<string
   const TX = { tx: true };
   const transaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX));
   const db = { transaction } as unknown as DrizzleDB;
-  const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  const audit = createFakeAudit();
 
   const service = new ControlService(repo, risks as never, db, audit as never);
   return { service, repo, risks, transaction, audit, TX };

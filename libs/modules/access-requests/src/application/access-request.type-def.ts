@@ -7,7 +7,7 @@ import {
   type ApprovalStepDef,
   NotificationSchedulerService,
 } from '@platform';
-import { newId, REQUEST_TYPE } from '@shared-kernel';
+import { MS_PER_HOUR, REQUEST_TYPE, newId } from '@shared-kernel';
 import { accessRequests, accessGrants } from '../../../../../db/schema';
 
 export interface AccessRequestPayload extends Record<string, unknown> {
@@ -28,9 +28,7 @@ export interface AccessRequestPayload extends Record<string, unknown> {
  * `onReject` / `onExpire` sync the domain-table status for backwards-compat queries.
  */
 @Injectable()
-export class AccessRequestTypeDef
-  implements RequestTypeDef<AccessRequestPayload>, OnModuleInit
-{
+export class AccessRequestTypeDef implements RequestTypeDef<AccessRequestPayload>, OnModuleInit {
   readonly type = REQUEST_TYPE.ACCESS_REQUEST;
   /**
    * Fallback for single-step mode (backward compat). When `approvalSteps` is
@@ -97,7 +95,7 @@ export class AccessRequestTypeDef
     tx: DbExecutor,
   ): Promise<void> {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + payload.durationHours * 3_600_000);
+    const expiresAt = new Date(now.getTime() + payload.durationHours * MS_PER_HOUR);
 
     await tx
       .update(accessRequests)
@@ -108,7 +106,7 @@ export class AccessRequestTypeDef
       id: newId(),
       requestId: payload.accessRequestId,
       granteeId: payload.requesterId,
-      accessType: payload.accessType as typeof accessGrants.$inferInsert['accessType'],
+      accessType: payload.accessType as (typeof accessGrants.$inferInsert)['accessType'],
       target: payload.target,
       grantedAt: now,
       expiresAt,

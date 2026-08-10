@@ -1,11 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { MS_PER_DAY } from '@shared-kernel';
+import { MS_PER_DAY, MS_PER_HOUR } from '@shared-kernel';
 import { AppConfigService, ExclusiveJob } from '@platform';
 import { AUDIT_REPOSITORY, type IAuditRepository } from '../domain/ports/audit.repository';
 
 /** 23 h — under the daily schedule, so a crashed pod cannot block tomorrow's purge. */
-const LOCK_TTL_MS = 23 * 60 * 60_000;
+const LOCK_TTL_MS = 23 * MS_PER_HOUR;
 
 /**
  * Nightly job that purges audit records beyond the retention window.

@@ -37,7 +37,15 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { vendorCriticalityEnum } from '../../db/schema/enums';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `vendor.read` + `vendor.manage`, but NOT `vendor.approve`. */
@@ -112,30 +120,6 @@ interface SpendRow {
   vendorId: string | null;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
-
 /**
  * Register a vendor.
  *
@@ -147,7 +131,7 @@ async function register(
   over: Record<string, unknown> = {},
   session: Session = security,
 ): Promise<VendorRow> {
-  const res = await req(session, 'POST', '/vendors', {
+  const res = await apiRequest(app, session, 'POST', '/vendors', {
     reference: nextRef(),
     name: 'Acme Payroll',
     services: 'Runs monthly payroll and holds salary and bank details for all staff.',
@@ -156,34 +140,34 @@ async function register(
     ...over,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<VendorRow>(res.body);
+  return unwrap<VendorRow>(res.body);
 }
 
 async function assess(
   vendorId: string,
   over: Record<string, unknown> = {},
 ): Promise<AssessmentRow> {
-  const res = await req(security, 'POST', `/vendors/${vendorId}/assessments`, {
+  const res = await apiRequest(app, security, 'POST', `/vendors/${vendorId}/assessments`, {
     outcome: 'pass',
     scope: SCOPE,
     ...over,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<AssessmentRow>(res.body);
+  return unwrap<AssessmentRow>(res.body);
 }
 
 /** A registered, assessed, live vendor — the state most tests need as a starting point. */
 async function liveVendor(over: Record<string, unknown> = {}): Promise<VendorRow> {
   const vendor = await register(over);
   await assess(vendor.id);
-  const activated = await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+  const activated = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
   expect(activated.status, JSON.stringify(activated.body)).toBe(200);
-  return data<VendorRow>(activated.body);
+  return unwrap<VendorRow>(activated.body);
 }
 
 /** A risk to link, borrowed from the register the vendor module joins to. */
 async function createRisk(): Promise<string> {
-  const res = await req(security, 'POST', '/risks', {
+  const res = await apiRequest(app, security, 'POST', '/risks', {
     reference: `E2E-VRSK-${RUN}-${++seq}`,
     title: 'Supplier outage stops payroll',
     description: 'A prolonged outage at the payroll provider would delay salary payments.',
@@ -192,7 +176,7 @@ async function createRisk(): Promise<string> {
     inherent: { likelihood: 3, impact: 4 },
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
-  return data<{ id: string }>(res.body).id;
+  return unwrap<{ id: string }>(res.body).id;
 }
 
 beforeAll(async () => {
@@ -211,15 +195,15 @@ describe('criticality tiers', () => {
   it('has a tier row for every value the enum allows', async () => {
     // The FK guarantees a vendor has a tier; it does NOT guarantee the reverse. A tier in the enum
     // with no row here cannot be used, and the failure would appear as a foreign-key 500.
-    const res = await req(security, 'GET', '/vendors/criticality-levels');
+    const res = await apiRequest(app, security, 'GET', '/vendors/criticality-levels');
     expect(res.status).toBe(200);
-    const levels = data<LevelRow[]>(res.body);
+    const levels = unwrap<LevelRow[]>(res.body);
     expect(new Set(levels.map((l) => l.code))).toEqual(new Set(vendorCriticalityEnum.enumValues));
   });
 
   it('ranks them uniquely and gives every tier a positive cadence', async () => {
-    const levels = data<LevelRow[]>(
-      (await req(security, 'GET', '/vendors/criticality-levels')).body,
+    const levels = unwrap<LevelRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/criticality-levels')).body,
     );
     const ranks = levels.map((l) => l.rank);
     expect(new Set(ranks).size).toBe(ranks.length);
@@ -242,7 +226,7 @@ describe('registering', () => {
 
   it('refuses a duplicate reference', async () => {
     const vendor = await register();
-    const res = await req(security, 'POST', '/vendors', {
+    const res = await apiRequest(app, security, 'POST', '/vendors', {
       reference: vendor.reference,
       name: 'Someone else',
       services: 'Provides a different service to us entirely.',
@@ -254,7 +238,7 @@ describe('registering', () => {
   });
 
   it('refuses an owner who does not exist', async () => {
-    const res = await req(security, 'POST', '/vendors', {
+    const res = await apiRequest(app, security, 'POST', '/vendors', {
       reference: nextRef(),
       name: 'Orphan',
       services: 'Provides a service nobody is accountable for.',
@@ -265,7 +249,7 @@ describe('registering', () => {
   });
 
   it('refuses a contract window that runs backwards with a code, not a 500', async () => {
-    const res = await req(security, 'POST', '/vendors', {
+    const res = await apiRequest(app, security, 'POST', '/vendors', {
       reference: nextRef(),
       name: 'Backwards',
       services: 'Provides a service to us on an impossible schedule.',
@@ -282,7 +266,7 @@ describe('registering', () => {
 describe('the go-live gate', () => {
   it('refuses a supplier nobody has assessed', async () => {
     const vendor = await register();
-    const res = await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+    const res = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('VENDOR_ASSESSMENT_REQUIRED');
   });
@@ -293,7 +277,7 @@ describe('the go-live gate', () => {
     await assess(vendor.id, { outcome: 'pass' });
     await assess(vendor.id, { outcome: 'fail', findings: FINDINGS });
 
-    const res = await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+    const res = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('VENDOR_ASSESSMENT_REQUIRED');
   });
@@ -301,9 +285,9 @@ describe('the go-live gate', () => {
   it('accepts a conditional pass', async () => {
     const vendor = await register();
     await assess(vendor.id, { outcome: 'pass_with_conditions', conditions: CONDITIONS });
-    const res = await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+    const res = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(data<VendorRow>(res.body).status).toBe('active');
+    expect(unwrap<VendorRow>(res.body).status).toBe('active');
   });
 
   it('refuses approval to an identity holding only manage', async () => {
@@ -311,38 +295,42 @@ describe('the go-live gate', () => {
     // power to make the organisation depend on a supplier.
     const vendor = await register();
     await assess(vendor.id);
-    const res = await req(security, 'POST', `/vendors/${vendor.id}/activate`);
+    const res = await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/activate`);
     expect(res.status).toBe(403);
   });
 
   it('lets the same identity suspend, because stopping is not the risky direction', async () => {
     const vendor = await liveVendor();
-    const res = await req(security, 'POST', `/vendors/${vendor.id}/suspend`, { reason: WHY });
+    const res = await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/suspend`, {
+      reason: WHY,
+    });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(data<VendorRow>(res.body).status).toBe('suspended');
+    expect(unwrap<VendorRow>(res.body).status).toBe('suspended');
   });
 
   it('holds reinstatement to the same bar as approval', async () => {
     const vendor = await liveVendor();
-    await req(security, 'POST', `/vendors/${vendor.id}/suspend`, { reason: WHY });
+    await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/suspend`, { reason: WHY });
     // A failure recorded while suspended must block the way back.
     await assess(vendor.id, { outcome: 'fail', findings: FINDINGS });
 
-    const res = await req(admin, 'POST', `/vendors/${vendor.id}/reinstate`);
+    const res = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/reinstate`);
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('VENDOR_ASSESSMENT_REQUIRED');
 
     // Fixed, reassessed, and back.
     await assess(vendor.id, { outcome: 'pass' });
-    const second = await req(admin, 'POST', `/vendors/${vendor.id}/reinstate`);
+    const second = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/reinstate`);
     expect(second.status, JSON.stringify(second.body)).toBe(200);
-    expect(data<VendorRow>(second.body).status).toBe('active');
+    expect(unwrap<VendorRow>(second.body).status).toBe('active');
   });
 
   it('refuses to skip a state', async () => {
     // `prospective` cannot become `suspended` — there is nothing to suspend yet.
     const vendor = await register();
-    const res = await req(security, 'POST', `/vendors/${vendor.id}/suspend`, { reason: WHY });
+    const res = await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/suspend`, {
+      reason: WHY,
+    });
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('VENDOR_NOT_IN_STATE');
   });
@@ -359,7 +347,7 @@ describe('data processors', () => {
   it('cannot go live without one', async () => {
     const vendor = await register({ dataProcessor: true });
     await assess(vendor.id);
-    const res = await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+    const res = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
     expect(res.status).toBe(412);
     expect(errorCode(res.body)).toBe('VENDOR_AGREEMENT_REQUIRED');
   });
@@ -370,7 +358,7 @@ describe('data processors', () => {
       dataProcessingAgreementId: '00000000-0000-7000-8000-0000000d0a01',
     });
     await assess(vendor.id);
-    const res = await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+    const res = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
   });
 
@@ -379,7 +367,7 @@ describe('data processors', () => {
       dataProcessor: true,
       dataProcessingAgreementId: '00000000-0000-7000-8000-0000000d0a02',
     });
-    const res = await req(security, 'PATCH', `/vendors/${vendor.id}`, {
+    const res = await apiRequest(app, security, 'PATCH', `/vendors/${vendor.id}`, {
       dataProcessingAgreementId: null,
     });
     expect(res.status).toBe(412);
@@ -392,8 +380,8 @@ describe('data processors', () => {
       dataProcessingAgreementId: '00000000-0000-7000-8000-0000000d0a03',
     });
     const plain = await register({ dataProcessor: false });
-    const rows = data<VendorListRow[]>(
-      (await req(security, 'GET', '/vendors?processorsOnly=true&limit=100')).body,
+    const rows = unwrap<VendorListRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors?processorsOnly=true&limit=100')).body,
     );
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(processor.id);
@@ -408,7 +396,9 @@ describe('assessments and the cadence', () => {
     const vendor = await register({ criticality: 'critical' });
     await assess(vendor.id, { assessedAt: '2026-03-15T09:00:00.000Z' });
 
-    const after = data<VendorRow>((await req(security, 'GET', `/vendors/${vendor.id}`)).body);
+    const after = unwrap<VendorRow>(
+      (await apiRequest(app, security, 'GET', `/vendors/${vendor.id}`)).body,
+    );
     expect(after.reviewDueOn).toBe('2026-09-15');
   });
 
@@ -417,7 +407,9 @@ describe('assessments and the cadence', () => {
     const vendor = await register({ criticality: 'low' });
     await assess(vendor.id, { assessedAt: '2026-03-15T09:00:00.000Z' });
 
-    const after = data<VendorRow>((await req(security, 'GET', `/vendors/${vendor.id}`)).body);
+    const after = unwrap<VendorRow>(
+      (await apiRequest(app, security, 'GET', `/vendors/${vendor.id}`)).body,
+    );
     expect(after.reviewDueOn).toBe('2029-03-15');
   });
 
@@ -426,7 +418,7 @@ describe('assessments and the cadence', () => {
     // this is a validation failure rather than a silent no-op — which matters, because a no-op would
     // look like it worked.
     const vendor = await register();
-    const res = await req(security, 'PATCH', `/vendors/${vendor.id}`, {
+    const res = await apiRequest(app, security, 'PATCH', `/vendors/${vendor.id}`, {
       reviewDueOn: '2099-01-01',
     });
     expect(res.status).toBe(422);
@@ -434,7 +426,7 @@ describe('assessments and the cadence', () => {
 
   it('refuses a conditional pass with no conditions', async () => {
     const vendor = await register();
-    const res = await req(security, 'POST', `/vendors/${vendor.id}/assessments`, {
+    const res = await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/assessments`, {
       outcome: 'pass_with_conditions',
       scope: SCOPE,
     });
@@ -446,7 +438,7 @@ describe('assessments and the cadence', () => {
 
   it('refuses a failure with no findings', async () => {
     const vendor = await register();
-    const res = await req(security, 'POST', `/vendors/${vendor.id}/assessments`, {
+    const res = await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/assessments`, {
       outcome: 'fail',
       scope: SCOPE,
     });
@@ -459,8 +451,8 @@ describe('assessments and the cadence', () => {
     await assess(vendor.id, { assessedAt: '2026-01-01T00:00:00.000Z' });
     await assess(vendor.id, { assessedAt: '2026-06-01T00:00:00.000Z' });
 
-    const history = data<AssessmentRow[]>(
-      (await req(security, 'GET', `/vendors/${vendor.id}/assessments`)).body,
+    const history = unwrap<AssessmentRow[]>(
+      (await apiRequest(app, security, 'GET', `/vendors/${vendor.id}/assessments`)).body,
     );
     expect(history).toHaveLength(2);
     expect(history[0].assessedAt.startsWith('2026-06-01')).toBe(true);
@@ -471,11 +463,11 @@ describe('assessments and the cadence', () => {
 describe('termination', () => {
   it('records the date and reason, and is terminal', async () => {
     const vendor = await liveVendor();
-    const terminated = await req(security, 'POST', `/vendors/${vendor.id}/terminate`, {
+    const terminated = await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/terminate`, {
       reason: WHY,
     });
     expect(terminated.status, JSON.stringify(terminated.body)).toBe(200);
-    const row = data<VendorRow>(terminated.body);
+    const row = unwrap<VendorRow>(terminated.body);
     expect(row.status).toBe('terminated');
     expect(row.terminatedAt).not.toBeNull();
     expect(row.terminationReason).toBe(WHY);
@@ -485,29 +477,35 @@ describe('termination', () => {
       ['PATCH', `/vendors/${vendor.id}`, { name: 'Renamed after termination' }],
       ['POST', `/vendors/${vendor.id}/assessments`, { outcome: 'pass', scope: SCOPE }],
     ] as const) {
-      const res = await req(security, method, url, payload);
+      const res = await apiRequest(app, security, method, url, payload);
       expect(res.status, `${method} ${url}`).toBe(412);
       expect(errorCode(res.body)).toBe('VENDOR_TERMINATED');
     }
 
     // And there is no way back.
-    const reinstated = await req(admin, 'POST', `/vendors/${vendor.id}/reinstate`);
+    const reinstated = await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/reinstate`);
     expect(reinstated.status).toBe(412);
     expect(errorCode(reinstated.body)).toBe('VENDOR_NOT_IN_STATE');
   });
 
   it('excludes terminated suppliers from the register unless asked for', async () => {
     const vendor = await liveVendor();
-    await req(security, 'POST', `/vendors/${vendor.id}/terminate`, { reason: WHY });
+    await apiRequest(app, security, 'POST', `/vendors/${vendor.id}/terminate`, { reason: WHY });
 
-    const current = data<VendorListRow[]>(
-      (await req(security, 'GET', `/vendors?search=${vendor.reference}`)).body,
+    const current = unwrap<VendorListRow[]>(
+      (await apiRequest(app, security, 'GET', `/vendors?search=${vendor.reference}`)).body,
     );
     expect(current.map((r) => r.id)).not.toContain(vendor.id);
 
-    const including = data<VendorListRow[]>(
-      (await req(security, 'GET', `/vendors?search=${vendor.reference}&includeTerminated=true`))
-        .body,
+    const including = unwrap<VendorListRow[]>(
+      (
+        await apiRequest(
+          app,
+          security,
+          'GET',
+          `/vendors?search=${vendor.reference}&includeTerminated=true`,
+        )
+      ).body,
     );
     expect(including.map((r) => r.id)).toContain(vendor.id);
   });
@@ -519,11 +517,13 @@ describe('reports', () => {
     // upon and the last look is stale, which is the finding the report exists for.
     const vendor = await register();
     await assess(vendor.id);
-    await req(admin, 'POST', `/vendors/${vendor.id}/activate`);
+    await apiRequest(app, admin, 'POST', `/vendors/${vendor.id}/activate`);
     // Backdate far enough that the 6-month critical cadence has certainly passed.
     await assess(vendor.id, { assessedAt: '2020-01-01T00:00:00.000Z' });
 
-    const gaps = data<GapRow[]>((await req(security, 'GET', '/vendors/reports/review-gaps')).body);
+    const gaps = unwrap<GapRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/review-gaps')).body,
+    );
     const mine = gaps.find((g) => g.id === vendor.id);
     expect(mine, 'an assessment from 2020 must be overdue').toBeDefined();
     expect(mine!.daysOverdue).toBeGreaterThan(0);
@@ -532,41 +532,45 @@ describe('reports', () => {
 
   it('leaves a freshly assessed supplier off the review-gap report', async () => {
     const vendor = await liveVendor();
-    const gaps = data<GapRow[]>((await req(security, 'GET', '/vendors/reports/review-gaps')).body);
+    const gaps = unwrap<GapRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/review-gaps')).body,
+    );
     expect(gaps.map((g) => g.id)).not.toContain(vendor.id);
   });
 
   it('leaves prospective suppliers off it too', async () => {
     // Not yet relied upon, so not yet a gap in anything.
     const vendor = await register();
-    const gaps = data<GapRow[]>((await req(security, 'GET', '/vendors/reports/review-gaps')).body);
+    const gaps = unwrap<GapRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/review-gaps')).body,
+    );
     expect(gaps.map((g) => g.id)).not.toContain(vendor.id);
   });
 
   it('reports a critical supplier with no risk, and drops it once one is linked', async () => {
     const vendor = await liveVendor({ criticality: 'critical' });
 
-    const before = data<VendorRow[]>(
-      (await req(security, 'GET', '/vendors/reports/critical-without-risk')).body,
+    const before = unwrap<VendorRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/critical-without-risk')).body,
     );
     expect(before.map((v) => v.id)).toContain(vendor.id);
 
     const riskId = await createRisk();
-    const link = await req(security, 'PUT', `/vendors/${vendor.id}/risks/${riskId}`);
+    const link = await apiRequest(app, security, 'PUT', `/vendors/${vendor.id}/risks/${riskId}`);
     expect(link.status, JSON.stringify(link.body)).toBe(204);
 
-    const after = data<VendorRow[]>(
-      (await req(security, 'GET', '/vendors/reports/critical-without-risk')).body,
+    const after = unwrap<VendorRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/critical-without-risk')).body,
     );
     expect(after.map((v) => v.id)).not.toContain(vendor.id);
 
     // The link reads back from the vendor, and the register row counts it.
-    const risks = data<{ id: string }[]>(
-      (await req(security, 'GET', `/vendors/${vendor.id}/risks`)).body,
+    const risks = unwrap<{ id: string }[]>(
+      (await apiRequest(app, security, 'GET', `/vendors/${vendor.id}/risks`)).body,
     );
     expect(risks.map((r) => r.id)).toContain(riskId);
-    const row = data<VendorListRow[]>(
-      (await req(security, 'GET', `/vendors?search=${vendor.reference}`)).body,
+    const row = unwrap<VendorListRow[]>(
+      (await apiRequest(app, security, 'GET', `/vendors?search=${vendor.reference}`)).body,
     )[0];
     expect(row.riskCount).toBe(1);
   });
@@ -576,21 +580,21 @@ describe('reports', () => {
     const riskId = await createRisk();
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(
-        (await req(security, 'PUT', `/vendors/${vendor.id}/risks/${riskId}`)).status,
+        (await apiRequest(app, security, 'PUT', `/vendors/${vendor.id}/risks/${riskId}`)).status,
         `attempt ${attempt + 1}`,
       ).toBe(204);
     }
-    expect((await req(security, 'DELETE', `/vendors/${vendor.id}/risks/${riskId}`)).status).toBe(
-      204,
-    );
-    expect((await req(security, 'DELETE', `/vendors/${vendor.id}/risks/${riskId}`)).status).toBe(
-      404,
-    );
+    expect(
+      (await apiRequest(app, security, 'DELETE', `/vendors/${vendor.id}/risks/${riskId}`)).status,
+    ).toBe(204);
+    expect(
+      (await apiRequest(app, security, 'DELETE', `/vendors/${vendor.id}/risks/${riskId}`)).status,
+    ).toBe(404);
   });
 
   it('reports licence spend going to an unlinked or unassessed supplier', async () => {
     // An unlinked licence: the register knows nothing about who this money goes to.
-    const created = await req(admin, 'POST', '/licenses', {
+    const created = await apiRequest(app, admin, 'POST', '/licenses', {
       name: `E2E Payroll SaaS ${RUN}`,
       vendor: 'Acme Payroll',
       licenseType: 'subscription',
@@ -599,10 +603,10 @@ describe('reports', () => {
       renewalDate: '2027-01-31',
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
-    const licenseId = data<{ id: string }>(created.body).id;
+    const licenseId = unwrap<{ id: string }>(created.body).id;
 
-    const unlinked = data<SpendRow[]>(
-      (await req(security, 'GET', '/vendors/reports/unassessed-spend')).body,
+    const unlinked = unwrap<SpendRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/unassessed-spend')).body,
     );
     expect(
       unlinked.find((s) => s.licenseId === licenseId),
@@ -613,16 +617,16 @@ describe('reports', () => {
     // Linking it to a vendor nobody has assessed does NOT clear the flag — that is the second shape
     // of the same gap, and the report exists to say so.
     const unassessed = await register();
-    await req(admin, 'PATCH', `/licenses/${licenseId}`, { vendorId: unassessed.id });
-    const stillFlagged = data<SpendRow[]>(
-      (await req(security, 'GET', '/vendors/reports/unassessed-spend')).body,
+    await apiRequest(app, admin, 'PATCH', `/licenses/${licenseId}`, { vendorId: unassessed.id });
+    const stillFlagged = unwrap<SpendRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/unassessed-spend')).body,
     );
     expect(stillFlagged.find((s) => s.licenseId === licenseId)).toBeDefined();
 
     // Assessing them clears it.
     await assess(unassessed.id);
-    const cleared = data<SpendRow[]>(
-      (await req(security, 'GET', '/vendors/reports/unassessed-spend')).body,
+    const cleared = unwrap<SpendRow[]>(
+      (await apiRequest(app, security, 'GET', '/vendors/reports/unassessed-spend')).body,
     );
     expect(cleared.find((s) => s.licenseId === licenseId)).toBeUndefined();
   });
@@ -630,16 +634,16 @@ describe('reports', () => {
 
 describe('listing', () => {
   it('lists most critical first', async () => {
-    const res = await req(security, 'GET', '/vendors?limit=100');
+    const res = await apiRequest(app, security, 'GET', '/vendors?limit=100');
     expect(res.status).toBe(200);
-    const ranks = data<VendorListRow[]>(res.body).map((r) => r.criticalityRank);
+    const ranks = unwrap<VendorListRow[]>(res.body).map((r) => r.criticalityRank);
     expect([...ranks].sort((a, b) => b - a)).toEqual(ranks);
   });
 
   it('carries the tier cadence and the latest assessment on each row', async () => {
     const vendor = await liveVendor({ criticality: 'high' });
-    const row = data<VendorListRow[]>(
-      (await req(security, 'GET', `/vendors?search=${vendor.reference}`)).body,
+    const row = unwrap<VendorListRow[]>(
+      (await apiRequest(app, security, 'GET', `/vendors?search=${vendor.reference}`)).body,
     )[0];
     expect(row.reviewIntervalMonths).toBe(12);
     expect(row.requiresIndependentEvidence).toBe(true);
@@ -650,10 +654,12 @@ describe('listing', () => {
 
 describe('permissions', () => {
   it('lets a read-only identity read but not register or assess', async () => {
-    expect((await req(auditor, 'GET', '/vendors')).status).toBe(200);
-    expect((await req(auditor, 'GET', '/vendors/reports/review-gaps')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/vendors')).status).toBe(200);
+    expect((await apiRequest(app, auditor, 'GET', '/vendors/reports/review-gaps')).status).toBe(
+      200,
+    );
 
-    const registered = await req(auditor, 'POST', '/vendors', {
+    const registered = await apiRequest(app, auditor, 'POST', '/vendors', {
       reference: nextRef(),
       name: 'Auditor should not write this',
       services: 'Provides a service the auditor may not register.',
@@ -663,7 +669,7 @@ describe('permissions', () => {
     expect(registered.status).toBe(403);
 
     const vendor = await register();
-    const assessed = await req(auditor, 'POST', `/vendors/${vendor.id}/assessments`, {
+    const assessed = await apiRequest(app, auditor, 'POST', `/vendors/${vendor.id}/assessments`, {
       outcome: 'pass',
       scope: SCOPE,
     });
@@ -671,7 +677,9 @@ describe('permissions', () => {
   });
 
   it('refuses an identity holding no codes at all', async () => {
-    expect((await req(employee, 'GET', '/vendors')).status).toBe(403);
-    expect((await req(employee, 'GET', '/vendors/criticality-levels')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/vendors')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/vendors/criticality-levels')).status).toBe(
+      403,
+    );
   });
 });

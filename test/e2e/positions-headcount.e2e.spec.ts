@@ -32,7 +32,15 @@
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { FIXTURE, bearer, createTestApp, login, type Session } from './support/harness';
+import {
+  FIXTURE,
+  apiRequest,
+  createTestApp,
+  errorCode,
+  login,
+  unwrap,
+  type Session,
+} from './support/harness';
 
 let app: NestFastifyApplication;
 /** Holds `position.read` AND `position.manage`. */
@@ -65,50 +73,29 @@ interface AssignmentRow {
   endReason: string | null;
 }
 
-async function req(
-  session: Session,
-  method: 'GET' | 'POST' | 'PATCH',
-  url: string,
-  payload?: Record<string, unknown>,
-) {
-  const res = await app.inject({
-    method,
-    url: `/v1${url}`,
-    headers: bearer(session),
-    ...(payload === undefined ? {} : { payload }),
-  });
-  // `as unknown`, not left as `JSON.parse`'s `any`: every caller goes through `data<T>()` or
-  // `errorCode()`, so the shape is asserted in one place per usage rather than inferred as `any`
-  // and silently spread through the whole file.
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
-}
-
 /** `data` for wrapped responses, the payload itself otherwise. */
-function data<T>(body: unknown): T {
-  const b = body as { data?: T };
-  return (b.data ?? body) as T;
-}
-
-function errorCode(body: unknown): string | undefined {
-  return (body as { error?: { code?: string } }).error?.code;
-}
 
 async function createPosition(headcount: number): Promise<PositionRow> {
-  const { status, body } = await req(hr, 'POST', '/positions', {
+  const { status, body } = await apiRequest(app, hr, 'POST', '/positions', {
     code: nextCode(),
     title: 'E2E Engineer',
     department: DEPARTMENT,
     headcount,
   });
   expect(status).toBe(201);
-  return data<PositionRow>(body);
+  return unwrap<PositionRow>(body);
 }
 
 /** The row for one position out of the department listing, with its occupancy counts. */
 async function occupancyOf(positionId: string): Promise<PositionRow> {
-  const { status, body } = await req(hr, 'GET', `/positions?department=${DEPARTMENT}&limit=100`);
+  const { status, body } = await apiRequest(
+    app,
+    hr,
+    'GET',
+    `/positions?department=${DEPARTMENT}&limit=100`,
+  );
   expect(status).toBe(200);
-  const row = data<PositionRow[]>(body).find((p) => p.id === positionId);
+  const row = unwrap<PositionRow[]>(body).find((p) => p.id === positionId);
   if (!row) throw new Error(`position ${positionId} missing from the ${DEPARTMENT} listing`);
   return row;
 }
@@ -118,13 +105,21 @@ async function assign(
   employeeId: string,
   effectiveFrom: string,
 ): Promise<{ status: number; body: unknown }> {
-  return req(hr, 'POST', `/positions/${positionId}/assignments`, { employeeId, effectiveFrom });
+  return apiRequest(app, hr, 'POST', `/positions/${positionId}/assignments`, {
+    employeeId,
+    effectiveFrom,
+  });
 }
 
 async function historyOf(employeeId: string): Promise<AssignmentRow[]> {
-  const { status, body } = await req(hr, 'GET', `/positions/employees/${employeeId}/history`);
+  const { status, body } = await apiRequest(
+    app,
+    hr,
+    'GET',
+    `/positions/employees/${employeeId}/history`,
+  );
   expect(status).toBe(200);
-  return data<AssignmentRow[]>(body);
+  return unwrap<AssignmentRow[]>(body);
 }
 
 beforeAll(async () => {
@@ -141,14 +136,14 @@ afterAll(async () => {
 describe('the position catalogue', () => {
   it('refuses a duplicate code', async () => {
     const code = nextCode();
-    const first = await req(hr, 'POST', '/positions', {
+    const first = await apiRequest(app, hr, 'POST', '/positions', {
       code,
       title: 'First',
       department: DEPARTMENT,
     });
     expect(first.status).toBe(201);
 
-    const second = await req(hr, 'POST', '/positions', {
+    const second = await apiRequest(app, hr, 'POST', '/positions', {
       code,
       title: 'Second',
       department: DEPARTMENT,
@@ -159,7 +154,7 @@ describe('the position catalogue', () => {
   it('rejects a headcount below 1', async () => {
     // `ck_position_headcount_positive` in the database, the DTO here: a position permitting nobody
     // is a CLOSED position, which is what `status` is for.
-    const { status } = await req(hr, 'POST', '/positions', {
+    const { status } = await apiRequest(app, hr, 'POST', '/positions', {
       code: nextCode(),
       title: 'Zero',
       department: DEPARTMENT,
@@ -176,13 +171,19 @@ describe('occupancy', () => {
 
     const created = await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2030-01-01');
     expect(created.status).toBe(201);
-    const assignment = data<AssignmentRow>(created.body);
+    const assignment = unwrap<AssignmentRow>(created.body);
     expect(await occupancyOf(position.id)).toMatchObject({ filled: 1, vacancies: 1 });
 
-    const ended = await req(hr, 'PATCH', `/positions/assignments/${assignment.id}/end`, {
-      effectiveTo: '2030-06-30',
-      endReason: 'resigned',
-    });
+    const ended = await apiRequest(
+      app,
+      hr,
+      'PATCH',
+      `/positions/assignments/${assignment.id}/end`,
+      {
+        effectiveTo: '2030-06-30',
+        endReason: 'resigned',
+      },
+    );
     expect(ended.status).toBe(200);
 
     // The row is still there — history is never deleted — but it no longer occupies a seat.
@@ -199,13 +200,14 @@ describe('occupancy', () => {
     const open = await createPosition(1);
     expect((await assign(full.id, FIXTURE.NO_PERMISSIONS.id, '2031-01-01')).status).toBe(201);
 
-    const { status, body } = await req(
+    const { status, body } = await apiRequest(
+      app,
       hr,
       'GET',
       `/positions?department=${DEPARTMENT}&vacantOnly=true&limit=100`,
     );
     expect(status).toBe(200);
-    const ids = data<PositionRow[]>(body).map((p) => p.id);
+    const ids = unwrap<PositionRow[]>(body).map((p) => p.id);
     expect(ids).toContain(open.id);
     expect(ids).not.toContain(full.id);
   });
@@ -220,7 +222,9 @@ describe('approved headcount', () => {
     expect(refused.status).toBe(412);
     expect(errorCode(refused.body)).toBe('POSITION_HEADCOUNT_EXCEEDED');
 
-    const raised = await req(hr, 'PATCH', `/positions/${position.id}`, { headcount: 2 });
+    const raised = await apiRequest(app, hr, 'PATCH', `/positions/${position.id}`, {
+      headcount: 2,
+    });
     expect(raised.status).toBe(200);
 
     expect((await assign(position.id, FIXTURE.MANAGER.id, '2032-01-01')).status).toBe(201);
@@ -234,7 +238,7 @@ describe('approved headcount', () => {
     expect((await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2033-01-01')).status).toBe(201);
     expect((await assign(position.id, FIXTURE.MANAGER.id, '2033-01-01')).status).toBe(201);
 
-    const cut = await req(hr, 'PATCH', `/positions/${position.id}`, { headcount: 1 });
+    const cut = await apiRequest(app, hr, 'PATCH', `/positions/${position.id}`, { headcount: 1 });
     expect(cut.status).toBe(200);
 
     // Over-occupied, reported as zero vacancies rather than a negative number.
@@ -255,7 +259,7 @@ describe('transfer', () => {
     const from = await createPosition(1);
     const to = await createPosition(1);
 
-    const first = data<AssignmentRow>(
+    const first = unwrap<AssignmentRow>(
       (await assign(from.id, FIXTURE.NO_PERMISSIONS.id, '2034-01-01')).body,
     );
     const second = await assign(to.id, FIXTURE.NO_PERMISSIONS.id, '2034-07-01');
@@ -267,7 +271,7 @@ describe('transfer', () => {
       effectiveTo: '2034-07-01',
       endReason: 'transfer',
     });
-    expect(history.find((a) => a.id === data<AssignmentRow>(second.body).id)).toMatchObject({
+    expect(history.find((a) => a.id === unwrap<AssignmentRow>(second.body).id)).toMatchObject({
       effectiveTo: null,
     });
     // The invariant `uq_employee_current_position` exists to hold: exactly one open row.
@@ -289,7 +293,7 @@ describe('transfer', () => {
 
   it('refuses re-assigning someone to the position they already hold', async () => {
     const position = await createPosition(2);
-    const first = data<AssignmentRow>(
+    const first = unwrap<AssignmentRow>(
       (await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2036-01-01')).body,
     );
 
@@ -326,26 +330,38 @@ describe('transfer', () => {
 describe('ending an assignment', () => {
   it('refuses an end date before it began, and refuses to close it twice', async () => {
     const position = await createPosition(1);
-    const assignment = data<AssignmentRow>(
+    const assignment = unwrap<AssignmentRow>(
       (await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2038-06-01')).body,
     );
 
-    const early = await req(hr, 'PATCH', `/positions/assignments/${assignment.id}/end`, {
-      effectiveTo: '2038-01-01',
-    });
+    const early = await apiRequest(
+      app,
+      hr,
+      'PATCH',
+      `/positions/assignments/${assignment.id}/end`,
+      {
+        effectiveTo: '2038-01-01',
+      },
+    );
     expect(early.status).toBe(412);
     expect(errorCode(early.body)).toBe('POSITION_INVALID_WINDOW');
 
-    const ok = await req(hr, 'PATCH', `/positions/assignments/${assignment.id}/end`, {
+    const ok = await apiRequest(app, hr, 'PATCH', `/positions/assignments/${assignment.id}/end`, {
       effectiveTo: '2038-09-01',
     });
     expect(ok.status).toBe(200);
 
     // Closing a closed assignment would otherwise silently rewrite its end date, which is why the
     // repository's WHERE clause is open-only rather than a read-then-write check.
-    const twice = await req(hr, 'PATCH', `/positions/assignments/${assignment.id}/end`, {
-      effectiveTo: '2038-12-01',
-    });
+    const twice = await apiRequest(
+      app,
+      hr,
+      'PATCH',
+      `/positions/assignments/${assignment.id}/end`,
+      {
+        effectiveTo: '2038-12-01',
+      },
+    );
     expect(twice.status).toBe(404);
     const row = (await historyOf(FIXTURE.NO_PERMISSIONS.id)).find((a) => a.id === assignment.id);
     expect(row).toMatchObject({ effectiveTo: '2038-09-01' });
@@ -357,7 +373,9 @@ describe('a frozen position', () => {
     const position = await createPosition(2);
     expect((await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2039-01-01')).status).toBe(201);
 
-    const frozen = await req(hr, 'PATCH', `/positions/${position.id}`, { status: 'frozen' });
+    const frozen = await apiRequest(app, hr, 'PATCH', `/positions/${position.id}`, {
+      status: 'frozen',
+    });
     expect(frozen.status).toBe(200);
 
     const refused = await assign(position.id, FIXTURE.MANAGER.id, '2039-02-01');
@@ -372,23 +390,26 @@ describe('authorization', () => {
   it('lets a position.read holder read but not manage', async () => {
     const position = await createPosition(1);
 
-    expect((await req(manager, 'GET', `/positions/${position.id}`)).status).toBe(200);
-    expect((await req(manager, 'GET', `/positions/${position.id}/assignments`)).status).toBe(200);
+    expect((await apiRequest(app, manager, 'GET', `/positions/${position.id}`)).status).toBe(200);
+    expect(
+      (await apiRequest(app, manager, 'GET', `/positions/${position.id}/assignments`)).status,
+    ).toBe(200);
 
     // `position.manage` is separate from `position.read` because approving a headcount or moving
     // somebody between roles changes the org structure, which reading it does not.
-    const create = await req(manager, 'POST', '/positions', {
+    const create = await apiRequest(app, manager, 'POST', '/positions', {
       code: nextCode(),
       title: 'Nope',
       department: DEPARTMENT,
     });
     expect(create.status).toBe(403);
     expect(
-      (await req(manager, 'PATCH', `/positions/${position.id}`, { headcount: 5 })).status,
+      (await apiRequest(app, manager, 'PATCH', `/positions/${position.id}`, { headcount: 5 }))
+        .status,
     ).toBe(403);
     expect(
       (
-        await req(manager, 'POST', `/positions/${position.id}/assignments`, {
+        await apiRequest(app, manager, 'POST', `/positions/${position.id}/assignments`, {
           employeeId: FIXTURE.MANAGER.id,
           effectiveFrom: '2040-01-01',
         })
@@ -397,18 +418,19 @@ describe('authorization', () => {
   });
 
   it('refuses the catalogue to a caller holding no permissions', async () => {
-    expect((await req(employee, 'GET', '/positions')).status).toBe(403);
+    expect((await apiRequest(app, employee, 'GET', '/positions')).status).toBe(403);
     expect(
-      (await req(employee, 'GET', `/positions/employees/${FIXTURE.MANAGER.id}/history`)).status,
+      (await apiRequest(app, employee, 'GET', `/positions/employees/${FIXTURE.MANAGER.id}/history`))
+        .status,
     ).toBe(403);
   });
 
   it('lets any employee read their OWN position history', async () => {
     // Self-scoped: knowing your own role and when it changed is not privileged information about
     // anyone else, so it needs no permission code.
-    const { status, body } = await req(employee, 'GET', '/positions/me');
+    const { status, body } = await apiRequest(app, employee, 'GET', '/positions/me');
     expect(status).toBe(200);
-    const mine = data<AssignmentRow[]>(body);
+    const mine = unwrap<AssignmentRow[]>(body);
     expect(mine.every((a) => a.employeeId === FIXTURE.NO_PERMISSIONS.id)).toBe(true);
   });
 });
@@ -417,9 +439,13 @@ describe('unknown ids', () => {
   it('404s rather than returning an empty history', async () => {
     const missing = '00000000-0000-7000-8000-0000000000ff';
     // An empty array would read as "nobody has ever held it", which is a different fact.
-    expect((await req(hr, 'GET', `/positions/${missing}`)).status).toBe(404);
-    expect((await req(hr, 'GET', `/positions/${missing}/assignments`)).status).toBe(404);
-    expect((await req(hr, 'GET', `/positions/employees/${missing}/history`)).status).toBe(404);
+    expect((await apiRequest(app, hr, 'GET', `/positions/${missing}`)).status).toBe(404);
+    expect((await apiRequest(app, hr, 'GET', `/positions/${missing}/assignments`)).status).toBe(
+      404,
+    );
+    expect(
+      (await apiRequest(app, hr, 'GET', `/positions/employees/${missing}/history`)).status,
+    ).toBe(404);
   });
 
   it('refuses an assignment for an employee who does not exist', async () => {

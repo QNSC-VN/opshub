@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NotFoundException, ErrorCodes, RequestEngine } from '@platform';
-import { REQUEST_TYPE, type Actor } from '@shared-kernel';
+import { MS_PER_HOUR, REQUEST_TYPE, type Actor } from '@shared-kernel';
 import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
 import { CATALOG_REPOSITORY, type ICatalogRepository } from '../domain/ports/catalog.repository';
 import type {
@@ -81,7 +81,7 @@ export class CatalogService {
       { catalogItemId: item.id, catalogItemName: item.name, reason },
       actor,
       {
-        ...(item.slaHours && { expiresAt: new Date(Date.now() + item.slaHours * 3600 * 1000) }),
+        ...(item.slaHours && { expiresAt: new Date(Date.now() + item.slaHours * MS_PER_HOUR) }),
       },
     );
 

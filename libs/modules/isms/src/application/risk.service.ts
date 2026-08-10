@@ -9,8 +9,13 @@ import {
   type DbExecutor,
   type DrizzleDB,
 } from '@platform';
-import { REQUEST_TYPE, type Actor } from '@shared-kernel';
-import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
+import { REQUEST_TYPE, today, type Actor } from '@shared-kernel';
+import {
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  AuditService,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { RISK_REPOSITORY, type IRiskRepository } from '../domain/ports/risk.repository';
 import type {
   AddTreatmentInput,
@@ -24,11 +29,6 @@ import type {
   UpdateTreatmentInput,
 } from '../domain/risk.types';
 import type { RiskAcceptancePayload } from './risk-acceptance.type-def';
-
-/** `YYYY-MM-DD` in UTC, matching every other date in the codebase. */
-export function today(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
 
 /**
  * The residual score at or above which acceptance needs sign-off rather than a note.
@@ -62,12 +62,17 @@ export const ACCEPTANCE_APPROVAL_THRESHOLD = 12;
  */
 @Injectable()
 export class RiskService {
+  private readonly trail: ResourceAuditTrail;
+
   constructor(
     @Inject(RISK_REPOSITORY) private readonly repo: IRiskRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly audit: AuditService,
     private readonly engine: RequestEngine,
-  ) {}
+  ) {
+    // Resource type named ONCE — see `AuditService.forResource`.
+    this.trail = audit.forResource(AUDIT_RESOURCE.RISK);
+  }
 
   // ── Reads ────────────────────────────────────────────────────────────────────
 
@@ -98,7 +103,7 @@ export class RiskService {
 
     return this.db.transaction(async (tx) => {
       const risk = await this.repo.create(input, tx);
-      await this.record(AUDIT_ACTION.RISK_IDENTIFIED, risk.id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.RISK_IDENTIFIED, risk.id, actor, tx, {
         after: {
           reference: risk.reference,
           title: risk.title,
@@ -136,7 +141,7 @@ export class RiskService {
 
     return this.db.transaction(async (tx) => {
       const after = await this.repo.update(id, input, tx);
-      await this.record(AUDIT_ACTION.RISK_UPDATED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.RISK_UPDATED, id, actor, tx, {
         before: { inherentScore: before.inherentScore, ownerId: before.ownerId },
         after: { inherentScore: after!.inherentScore, ownerId: after!.ownerId },
       });
@@ -178,7 +183,7 @@ export class RiskService {
           `Risk ${risk.reference} changed while being assessed`,
         );
       }
-      await this.record(AUDIT_ACTION.RISK_ASSESSED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.RISK_ASSESSED, id, actor, tx, {
         before: { status: risk.status },
         after: {
           status: 'assessed',
@@ -302,7 +307,7 @@ export class RiskService {
           `Risk ${risk.reference} changed while being marked treated`,
         );
       }
-      await this.record(AUDIT_ACTION.RISK_TREATED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.RISK_TREATED, id, actor, tx, {
         before: { status: 'assessed' },
         after: { status: 'treated', residualScore: treated.residualScore },
       });
@@ -353,7 +358,7 @@ export class RiskService {
       const request = await this.engine.submit(REQUEST_TYPE.RISK_ACCEPTANCE, payload, actor);
 
       await this.db.transaction(async (tx) => {
-        await this.record(AUDIT_ACTION.RISK_ACCEPTANCE_REQUESTED, id, actor, tx, {
+        await this.trail.record(AUDIT_ACTION.RISK_ACCEPTANCE_REQUESTED, id, actor, tx, {
           after: { requestId: request.id, residualScore },
         });
       });
@@ -411,7 +416,7 @@ export class RiskService {
           `Risk ${risk.reference} changed while being accepted`,
         );
       }
-      await this.record(AUDIT_ACTION.RISK_ACCEPTED, risk.id, actor, executor, {
+      await this.trail.record(AUDIT_ACTION.RISK_ACCEPTED, risk.id, actor, executor, {
         before: { status: risk.status },
         after: {
           status: 'accepted',
@@ -452,7 +457,7 @@ export class RiskService {
           `Risk ${risk.reference} changed while being closed`,
         );
       }
-      await this.record(AUDIT_ACTION.RISK_CLOSED, id, actor, tx, {
+      await this.trail.record(AUDIT_ACTION.RISK_CLOSED, id, actor, tx, {
         before: { status: risk.status },
         after: { status: 'closed', closureNote: note },
       });
@@ -481,25 +486,5 @@ export class RiskService {
           `score (${inherent}) — treatment reduces risk, it does not add to it`,
       );
     }
-  }
-
-  private async record(
-    action: (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION],
-    riskId: string,
-    actor: Actor,
-    tx: DbExecutor,
-    changes: { before?: object | null; after?: object | null },
-  ): Promise<void> {
-    await this.audit.record(
-      {
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action,
-        resourceType: AUDIT_RESOURCE.RISK,
-        resourceId: riskId,
-        changes,
-      },
-      tx,
-    );
   }
 }
