@@ -95,6 +95,15 @@ export const PERMISSION = {
    * against — deciding a control is out of scope is a scope decision, not a risk assessment.
    */
   CONTROL_MANAGE: 'control.manage',
+  /** View the incident register and its timelines. */
+  INCIDENT_READ: 'incident.read',
+  /**
+   * Report, triage, contain, resolve and close incidents; record timeline entries.
+   *
+   * Reporting one needs no permission — anybody who notices something must be able to raise it, and
+   * `POST /incidents/report` is self-service for exactly that reason. This code governs HANDLING.
+   */
+  INCIDENT_MANAGE: 'incident.manage',
 
   // ── assets ─────────────────────────────────────────────────────────────────
   ASSET_READ: 'asset.read',
@@ -205,6 +214,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.RISK_ACCEPT]: 'Approve accepting a residual risk',
   [PERMISSION.CONTROL_READ]: 'View controls and the Statement of Applicability',
   [PERMISSION.CONTROL_MANAGE]: 'Maintain controls and the Statement of Applicability',
+  [PERMISSION.INCIDENT_READ]: 'View security incidents and their timelines',
+  [PERMISSION.INCIDENT_MANAGE]: 'Triage, contain, resolve and close security incidents',
   [PERMISSION.EMPLOYEE_OFFBOARD]: 'Trigger offboarding and revoke all access',
   [PERMISSION.ASSET_READ]: 'View hardware asset inventory',
   [PERMISSION.ASSET_WRITE]: 'Create and update asset records',
@@ -354,6 +365,8 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.RISK_MANAGE,
     PERMISSION.CONTROL_READ,
     PERMISSION.CONTROL_MANAGE,
+    PERMISSION.INCIDENT_READ,
+    PERMISSION.INCIDENT_MANAGE,
     PERMISSION.ACCESS_REQUEST_READ,
     PERMISSION.ACCESS_REQUEST_APPROVE,
     PERMISSION.ACCESS_REQUEST_SECURITY_APPROVE,
@@ -430,6 +443,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.TRAINING_READ,
     PERMISSION.RISK_READ,
     PERMISSION.CONTROL_READ,
+    PERMISSION.INCIDENT_READ,
     PERMISSION.REQUEST_READ,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.REPORTS_READ,

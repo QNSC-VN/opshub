@@ -151,6 +151,17 @@ export const AUDIT_ACTION = {
   RISK_CONTROL_LINKED: 'risk_control.linked',
   RISK_CONTROL_UNLINKED: 'risk_control.unlinked',
 
+  // ── ISMS incidents ──
+  INCIDENT_REPORTED: 'incident.reported',
+  INCIDENT_TRIAGED: 'incident.triaged',
+  INCIDENT_CONTAINED: 'incident.contained',
+  INCIDENT_RESOLVED: 'incident.resolved',
+  INCIDENT_CLOSED: 'incident.closed',
+  INCIDENT_DISMISSED: 'incident.dismissed',
+  INCIDENT_UPDATED: 'incident.updated',
+  INCIDENT_EVENT_RECORDED: 'incident_event.recorded',
+  INCIDENT_REGULATOR_NOTIFIED: 'incident.regulator_notified',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',
@@ -225,6 +236,7 @@ export const AUDIT_RESOURCE = {
   RISK_TREATMENT: 'risk_treatment',
   CONTROL: 'control',
   SOA_ENTRY: 'soa_entry',
+  INCIDENT: 'incident',
   TIMESHEET: 'timesheet',
   SHIFT_LOG: 'shift_log',
   OVERTIME_ENTRY: 'overtime_entry',

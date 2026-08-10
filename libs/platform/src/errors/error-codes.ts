@@ -135,6 +135,14 @@ export const ErrorCodes = {
   SOA_INCONSISTENT: 'SOA_INCONSISTENT',
   /** The control is retired, so it cannot be newly included in the SoA or linked to a risk. */
   CONTROL_RETIRED: 'CONTROL_RETIRED',
+  /** The transition is not legal from the incident's current status. */
+  INCIDENT_NOT_IN_STATE: 'INCIDENT_NOT_IN_STATE',
+  /** A handling timestamp runs backwards — `ck_incident_timeline_order` in words. */
+  INCIDENT_TIMELINE_ORDER: 'INCIDENT_TIMELINE_ORDER',
+  /** Resolving needs a root cause; closing needs lessons learned. */
+  INCIDENT_EVIDENCE_MISSING: 'INCIDENT_EVIDENCE_MISSING',
+  /** Only a personal-data breach has a regulator to notify. */
+  INCIDENT_NOT_A_BREACH: 'INCIDENT_NOT_A_BREACH',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

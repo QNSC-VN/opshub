@@ -118,6 +118,10 @@ export const FIXTURE_TABLES = [
   // The risk↔control link and the SoA. `risk_controls` cascades from risks, but `soa_entries` and
   // `controls` do not — and `uq_control_reference` is global, so a leftover control makes the next
   // run's catalogue insert a 409 nobody wrote.
+  // Incidents and their timeline. Events cascade from incidents; both listed for intent, and
+  // `uq_incident_reference` is global so a leftover makes the next run's report a 409.
+  'isms.incident_events',
+  'isms.incidents',
   'isms.risk_controls',
   'isms.soa_entries',
   'isms.controls',
