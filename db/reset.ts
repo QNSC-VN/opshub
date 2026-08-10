@@ -163,6 +163,10 @@ export const FIXTURE_TABLES = [
   // Internal audits. `uq_internal_audit_reference` is global, so a leftover makes the next run's
   // first plan a 409. The roster cascades from the audit; the findings reference it with SET NULL and
   // are truncated in the same statement anyway.
+  // Management reviews. `uq_management_review_reference` is global, so a leftover makes the next run's
+  // first schedule a 409. Actions cascade from the review; listed for intent.
+  'qms.management_review_actions',
+  'qms.management_reviews',
   'qms.internal_audit_auditors',
   'qms.internal_audits',
   'qms.capas',

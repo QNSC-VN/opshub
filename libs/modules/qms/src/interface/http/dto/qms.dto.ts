@@ -4,6 +4,9 @@ import { PaginationQuerySchema } from '@shared-kernel';
 import {
   auditRoleEnum,
   capaRootCauseMethodEnum,
+  managementReviewActionCategoryEnum,
+  managementReviewActionStatusEnum,
+  managementReviewStatusEnum,
   capaStatusEnum,
   internalAuditStatusEnum,
   nonconformanceSeverityEnum,
@@ -379,4 +382,176 @@ export class UnlinkedFindingResponseDto {
   processArea!: string;
   detectedAt!: string;
   raisedBy!: string;
+}
+
+// ── Management reviews ────────────────────────────────────────────────────────
+
+const reviewStatus = z.enum(managementReviewStatusEnum.enumValues);
+const actionCategory = z.enum(managementReviewActionCategoryEnum.enumValues);
+const actionStatus = z.enum(managementReviewActionStatusEnum.enumValues);
+
+export const ScheduleReviewSchema = z.object({
+  reference: reference('MR-2026-H1'),
+  title: z.string().min(5).max(200),
+  /** The period under review — "H1 2026". Free text; §9.3.1 leaves the interval to the organisation. */
+  period: z.string().min(2).max(120),
+  chairId: z.string().uuid(),
+  scheduledFor: z.string().date().nullable().optional(),
+});
+export class ScheduleReviewDto extends createZodDto(ScheduleReviewSchema) {}
+
+/**
+ * `inputs` IS NOT HERE, and that is the point.
+ *
+ * The §9.3.2 snapshot is composed by the service when the review is held — see
+ * `ManagementReviewService.hold`. A caller who could supply it could write minutes citing numbers
+ * nothing measured, which is the one thing a frozen snapshot exists to prevent. Same rule as risk
+ * scores and vendor review dates.
+ */
+export const UpdateReviewSchema = ScheduleReviewSchema.omit({ reference: true })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Supply at least one field to update');
+export class UpdateReviewDto extends createZodDto(UpdateReviewSchema) {}
+
+export const HoldReviewSchema = z.object({
+  /** The date it was held. Defaults to today; supplied when minuting after the fact. */
+  heldOn: z.string().date().optional(),
+});
+export class HoldReviewDto extends createZodDto(HoldReviewSchema) {}
+
+export const CloseReviewSchema = z.object({
+  /** What the review concluded. Required by `ck_mr_closed_pair`. */
+  conclusion: substantial,
+  /** The minutes as a controlled document — §9.3.3 wants documented outputs. */
+  minutesDocumentId: z.string().uuid(),
+});
+export class CloseReviewDto extends createZodDto(CloseReviewSchema) {}
+
+export const CancelReviewSchema = z.object({
+  /** Why it did not happen. Required by `ck_mr_cancelled_pair`. */
+  reason: substantial,
+});
+export class CancelReviewDto extends createZodDto(CancelReviewSchema) {}
+
+export const RaiseReviewActionSchema = z.object({
+  /** One of §9.3.3's three outputs. The clause is a closed list, so there is no `other`. */
+  category: actionCategory,
+  description: substantial,
+  ownerId: z.string().uuid(),
+  dueOn: z.string().date().nullable().optional(),
+});
+export class RaiseReviewActionDto extends createZodDto(RaiseReviewActionSchema) {}
+
+export const UpdateReviewActionSchema = RaiseReviewActionSchema.partial().refine(
+  (v) => Object.keys(v).length > 0,
+  'Supply at least one field to update',
+);
+export class UpdateReviewActionDto extends createZodDto(UpdateReviewActionSchema) {}
+
+export const ReviewActionOutcomeSchema = z.object({
+  /** What was done, or why it was abandoned. Required by `ck_mr_action_outcome_note`. */
+  outcomeNote: substantial,
+});
+export class ReviewActionOutcomeDto extends createZodDto(ReviewActionOutcomeSchema) {}
+
+export const ListReviewsQuerySchema = z
+  .object({
+    status: reviewStatus.optional(),
+    chairId: z.string().uuid().optional(),
+    openOnly: z.coerce.boolean().optional(),
+    scheduledOnOrBefore: z.string().date().optional(),
+    search: z.string().max(200).optional(),
+  })
+  .merge(PaginationQuerySchema);
+export class ListReviewsQueryDto extends createZodDto(ListReviewsQuerySchema) {}
+
+export const ListReviewActionsQuerySchema = z
+  .object({
+    status: actionStatus.optional(),
+    category: actionCategory.optional(),
+    ownerId: z.string().uuid().optional(),
+    managementReviewId: z.string().uuid().optional(),
+    /** Everything not completed or cancelled — the follow-up queue. */
+    openOnly: z.coerce.boolean().optional(),
+    dueOnOrBefore: z.string().date().optional(),
+  })
+  .merge(PaginationQuerySchema);
+export class ListReviewActionsQueryDto extends createZodDto(ListReviewActionsQuerySchema) {}
+
+export class ManagementReviewResponseDto {
+  id!: string;
+  reference!: string;
+  title!: string;
+  period!: string;
+  status!: string;
+  chairId!: string;
+  scheduledFor!: string | null;
+  heldOn!: string | null;
+  /** The §9.3.2 inputs, frozen when the review was held. Null until then. Never settable. */
+  inputs!: Record<string, unknown> | null;
+  conclusion!: string | null;
+  minutesDocumentId!: string | null;
+  closedAt!: string | null;
+  cancelReason!: string | null;
+  createdAt!: string;
+}
+
+export class ManagementReviewRowResponseDto extends ManagementReviewResponseDto {
+  actionCount!: number;
+  openActionCount!: number;
+}
+
+export class ReviewActionResponseDto {
+  id!: string;
+  managementReviewId!: string;
+  category!: string;
+  description!: string;
+  ownerId!: string;
+  dueOn!: string | null;
+  status!: string;
+  completedAt!: string | null;
+  outcomeNote!: string | null;
+  createdAt!: string;
+}
+
+export class ReviewActionRowResponseDto extends ReviewActionResponseDto {
+  reviewReference!: string;
+  reviewPeriod!: string;
+}
+
+export class CarriedForwardActionResponseDto {
+  id!: string;
+  reviewReference!: string;
+  category!: string;
+  description!: string;
+  ownerId!: string;
+  status!: string;
+  dueOn!: string | null;
+  /** Days past its due date, or null when it has none. */
+  daysOverdue!: number | null;
+}
+
+/**
+ * The assembled §9.3.2 inputs.
+ *
+ * COUNTS AND REFERENCES ONLY. The clause asks for information on performance and trends, which is an
+ * aggregate — returning the registers' rows here would make this endpoint a way around their own
+ * permissions.
+ */
+export class ReviewAgendaResponseDto {
+  previousActions!: CarriedForwardActionResponseDto[];
+  nonconformities!: {
+    containmentOverdue: number;
+    overdueReferences: string[];
+    recurringProcessAreas: string[];
+  };
+  audits!: { findingsNotLinkedToAnAudit: number; unlinkedReferences: string[] };
+  externalProviders!: {
+    reviewGaps: number;
+    gapReferences: string[];
+    criticalWithoutRisk: number;
+    unassessedSpendLines: number;
+  };
+  risks!: { untreated: number; untreatedReferences: string[] };
+  assembledAt!: string;
 }

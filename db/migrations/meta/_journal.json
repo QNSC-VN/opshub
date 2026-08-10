@@ -183,6 +183,13 @@
       "when": 1784123206000,
       "tag": "0025_qms_internal_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784209606000,
+      "tag": "0026_qms_management_review",
+      "breakpoints": true
     }
   ]
 }

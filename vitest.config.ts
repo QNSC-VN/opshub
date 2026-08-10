@@ -91,10 +91,10 @@ export default defineConfig({
       // until the floors moved up, then refused the delete until they moved down — which is
       // why the number can be trusted to track reality rather than intent.
       thresholds: {
-        lines: 31,
+        lines: 34,
         functions: 22,
         branches: 26,
-        statements: 31,
+        statements: 34,
       },
     },
   },

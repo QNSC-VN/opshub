@@ -60,6 +60,9 @@ const ROOT = join(__dirname, '..');
  *                          `code vendor_criticality PRIMARY KEY`). Same shape as the classification
  *                          levels above, and `rank` is UNIQUE there too.
  *   - `nonconformanceSeverities.code` PRIMARY KEY (db/schema/qms.ts and migration 0024).
+ *   - `managementReviews.reference` uniqueIndex('uq_management_review_reference')
+ *                          (db/schema/qms.ts, migration 0026). Unconditional, like `roles.key`: the
+ *                          index is on the column alone, so any ordering ending on it is total.
  *   - `internalAuditAuditors.auditorId` part of PRIMARY KEY (internal_audit_id, auditor_id)
  *                          (db/schema/qms.ts, migration 0025). CONDITIONAL in the same way
  *                          `attachments.fileId` is, and for the same reason: unique only WITHIN one
@@ -92,6 +95,7 @@ const UNIQUE_NON_ID_COLUMNS = [
   'vendorCriticalityLevels.code',
   'nonconformanceSeverities.code',
   'internalAuditAuditors.auditorId',
+  'managementReviews.reference',
 ] as const;
 
 interface Ordering {

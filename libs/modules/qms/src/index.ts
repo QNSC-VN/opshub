@@ -2,6 +2,8 @@ export * from './qms.module';
 export * from './application/nonconformance.service';
 export * from './application/capa.service';
 export * from './application/internal-audit.service';
+export * from './application/management-review.service';
 export * from './domain/qms.types';
 export * from './domain/internal-audit.types';
+export * from './domain/management-review.types';
 export * from './domain/ports/qms.repository';

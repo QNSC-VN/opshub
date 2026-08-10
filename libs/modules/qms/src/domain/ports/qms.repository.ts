@@ -25,6 +25,19 @@ import type {
   UnlinkedFinding,
   UpdateAuditInput,
 } from '../internal-audit.types';
+import type {
+  ActionFilters,
+  CarriedForwardAction,
+  ManagementReview,
+  ManagementReviewAction,
+  ManagementReviewRow,
+  RaiseActionInput,
+  ReviewActionRow,
+  ReviewFilters,
+  ScheduleReviewInput,
+  UpdateActionInput,
+  UpdateReviewInput,
+} from '../management-review.types';
 
 export const NONCONFORMANCE_REPOSITORY = Symbol('NONCONFORMANCE_REPOSITORY');
 export const CAPA_REPOSITORY = Symbol('CAPA_REPOSITORY');
@@ -171,4 +184,74 @@ export interface IInternalAuditRepository {
   listFindings(internalAuditId: string): Promise<AuditFinding[]>;
   /** `internal_audit` findings that name no audit — the traceability gap. */
   unlinkedFindings(limit: number): Promise<UnlinkedFinding[]>;
+}
+
+export const MANAGEMENT_REVIEW_REPOSITORY = Symbol('MANAGEMENT_REVIEW_REPOSITORY');
+
+export interface IManagementReviewRepository {
+  create(input: ScheduleReviewInput, tx?: DbExecutor): Promise<ManagementReview>;
+  findById(id: string, tx?: DbExecutor): Promise<ManagementReview | null>;
+  findByReference(reference: string): Promise<ManagementReview | null>;
+  list(
+    filters: ReviewFilters,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: ManagementReviewRow[]; total: number }>;
+  update(id: string, input: UpdateReviewInput, tx?: DbExecutor): Promise<ManagementReview | null>;
+
+  /** Move the review's status, guarding the FROM state — same reasoning as every other register. */
+  transition(
+    id: string,
+    from: ManagementReview['status'],
+    to: ManagementReview['status'],
+    extra: Partial<
+      Pick<
+        ManagementReview,
+        'heldOn' | 'inputs' | 'conclusion' | 'minutesDocumentId' | 'closedAt' | 'cancelReason'
+      >
+    >,
+    tx?: DbExecutor,
+  ): Promise<ManagementReview | null>;
+
+  /**
+   * An earlier review still `scheduled`, if any.
+   *
+   * §9.3.2(a) — the status of actions from PREVIOUS reviews — only means something if "previous" is
+   * settled, so a review cannot be held while one scheduled before it is still outstanding.
+   * "Earlier" is by `scheduled_for`, with `reference` breaking a tie so the answer is deterministic.
+   */
+  earlierOutstanding(review: ManagementReview): Promise<ManagementReview | null>;
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  addAction(
+    managementReviewId: string,
+    input: RaiseActionInput,
+    tx?: DbExecutor,
+  ): Promise<ManagementReviewAction>;
+  findActionById(id: string, tx?: DbExecutor): Promise<ManagementReviewAction | null>;
+  listActions(
+    filters: ActionFilters,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: ReviewActionRow[]; total: number }>;
+  updateAction(
+    id: string,
+    input: UpdateActionInput,
+    tx?: DbExecutor,
+  ): Promise<ManagementReviewAction | null>;
+  transitionAction(
+    id: string,
+    from: ManagementReviewAction['status'],
+    to: ManagementReviewAction['status'],
+    extra: Partial<Pick<ManagementReviewAction, 'completedAt' | 'outcomeNote'>>,
+    tx?: DbExecutor,
+  ): Promise<ManagementReviewAction | null>;
+
+  /**
+   * Open actions raised by reviews OTHER than this one — the §9.3.2(a) input.
+   *
+   * Excludes the review's own actions: at the moment a review is held its own actions are outputs it
+   * has just produced, not history it is reviewing.
+   */
+  carriedForward(excludeReviewId: string | null, limit: number): Promise<CarriedForwardAction[]>;
 }
