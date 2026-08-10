@@ -271,3 +271,39 @@ export const riskTreatmentStatusEnum = pgEnum('risk_treatment_status', [
   'done',
   'cancelled',
 ]);
+
+/**
+ * ISO 27002:2022 groups controls into four THEMES, replacing the 14 clauses of the 2013 edition.
+ *
+ * Stored as an enum rather than free text because the four are fixed by the standard and every SoA
+ * export groups by them; a typo'd theme silently splits a section of the report in two.
+ */
+export const controlThemeEnum = pgEnum('control_theme', [
+  'organizational',
+  'people',
+  'physical',
+  'technological',
+]);
+
+/**
+ * Where a control came from.
+ *
+ * `annex_a` controls are the standard's; `custom` ones are the organisation's own additions, which
+ * ISO 27001 explicitly permits — the SoA has to state that Annex A was compared against, not that
+ * nothing else exists.
+ */
+export const controlSourceEnum = pgEnum('control_source', ['annex_a', 'custom']);
+
+/**
+ * How far a control has actually been put in place.
+ *
+ * `not_applicable` is a status rather than a separate flag so the two cannot disagree: it is paired
+ * with `applicable = false` by `ck_soa_applicability`, which means "excluded but implemented" is
+ * unrepresentable.
+ */
+export const controlImplementationStatusEnum = pgEnum('control_implementation_status', [
+  'not_applicable',
+  'not_implemented',
+  'partially_implemented',
+  'implemented',
+]);

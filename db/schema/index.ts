@@ -15,6 +15,7 @@ export * from './positions';
 export * from './contracts';
 export * from './training';
 export * from './isms';
+export * from './isms-controls';
 export * from './audit';
 export * from './messaging';
 export * from './notifications';

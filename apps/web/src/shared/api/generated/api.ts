@@ -2718,6 +2718,230 @@ export interface paths {
     patch: operations['RiskController_updateTreatment'];
     trace?: never;
   };
+  '/v1/controls/soa': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The Statement of Applicability
+     * @description One row per control that has been DECIDED about. Controls with no entry are absent by design — that state is what `undecided` in the coverage summary counts.
+     */
+    get: operations['ControlController_listSoa'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls/soa/coverage': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * SoA coverage — the number an audit opens with
+     * @description `undecided` counts controls with no entry at all. Retired controls are excluded: they are not part of the statement anybody is working from.
+     */
+    get: operations['ControlController_coverage'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls/soa/untreated-risks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Open risks that no control treats
+     * @description Worst first. The gap the risk↔control link exists to expose.
+     */
+    get: operations['ControlController_untreated'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls/soa/{controlId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The decision about one control
+     * @description 404 when no decision has been recorded yet — which is a real state, not an error.
+     */
+    get: operations['ControlController_getEntry'];
+    /**
+     * Record the decision about one control
+     * @description PUT, not PATCH: applicability, justification and status are ONE statement, and changing them independently is how an entry ends up excluded with a rationale arguing for inclusion. An excluded control must carry status `not_applicable` (`SOA_INCONSISTENT`).
+     */
+    put: operations['ControlController_setEntry'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls/soa/{controlId}/reviewed': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record that the entry has been reviewed
+     * @description Stamps `lastReviewedAt`. Supply `reviewDueOn` to schedule the next one.
+     */
+    post: operations['ControlController_markReviewed'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The control catalogue
+     * @description Retired controls are hidden unless `includeRetired` is set.
+     */
+    get: operations['ControlController_list'];
+    put?: never;
+    /**
+     * Add a control
+     * @description For an organisation-specific control, set `source: custom` — ISO 27001 permits additions beyond Annex A, and the SoA has to state that Annex A was compared against.
+     */
+    post: operations['ControlController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a control */
+    get: operations['ControlController_getById'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Change a control */
+    patch: operations['ControlController_update'];
+    trace?: never;
+  };
+  '/v1/controls/{id}/retire': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retire a control
+     * @description It stays in the catalogue — an SoA entry from a past audit references it — but accepts no new decision and no new risk link.
+     */
+    post: operations['ControlController_retire'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/controls/{id}/risks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Risks this control treats */
+    get: operations['ControlController_risksForControl'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/risks/{id}/controls': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Controls treating this risk
+     * @description `status` is the control's SoA status, or null when no decision exists yet.
+     */
+    get: operations['RiskControlController_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/risks/{id}/controls/{controlId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Assign a control to treat this risk
+     * @description Idempotent — the pair is the natural key, so linking twice is still one link.
+     */
+    put: operations['RiskControlController_link'];
+    post?: never;
+    /** Stop treating this risk with that control */
+    delete: operations['RiskControlController_unlink'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/ai/chat': {
     parameters: {
       query?: never;
@@ -4004,6 +4228,106 @@ export interface components {
       /** @enum {string} */
       status?: 'planned' | 'in_progress' | 'done' | 'cancelled';
       completedOn?: string | null;
+    };
+    SoaRowResponseDto: {
+      controlReference: string;
+      controlTitle: string;
+      controlTheme: string;
+      id: string;
+      controlId: string;
+      applicable: boolean;
+      justification: string;
+      status: string;
+      implementationNote: string | null;
+      evidenceDocumentId: string | null;
+      ownerId: string | null;
+      lastReviewedAt: string | null;
+      reviewDueOn: string | null;
+    };
+    SoaCoverageResponseDto: {
+      totalControls: number;
+      /** @description Controls with NO entry — the state only an absent row can express. */
+      undecided: number;
+      applicable: number;
+      excluded: number;
+      implemented: number;
+      partiallyImplemented: number;
+      notImplemented: number;
+    };
+    UntreatedRiskResponseDto: {
+      riskId: string;
+      reference: string;
+      title: string;
+      status: string;
+      inherentScore: number | null;
+      residualScore: number | null;
+    };
+    SoaEntryResponseDto: {
+      id: string;
+      controlId: string;
+      applicable: boolean;
+      justification: string;
+      status: string;
+      implementationNote: string | null;
+      evidenceDocumentId: string | null;
+      ownerId: string | null;
+      lastReviewedAt: string | null;
+      reviewDueOn: string | null;
+    };
+    SetSoaEntryDto: {
+      applicable: boolean;
+      justification: string;
+      /** @enum {string} */
+      status: 'not_applicable' | 'not_implemented' | 'partially_implemented' | 'implemented';
+      implementationNote?: string | null;
+      evidenceDocumentId?: string | null;
+      ownerId?: string | null;
+      reviewDueOn?: string | null;
+    };
+    MarkReviewedDto: {
+      reviewDueOn?: string | null;
+    };
+    ControlResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      description: string | null;
+      theme: string;
+      source: string;
+      retiredAt: string | null;
+      createdAt: string;
+    };
+    CreateControlDto: {
+      reference: string;
+      title: string;
+      description?: string | null;
+      /** @enum {string} */
+      theme: 'organizational' | 'people' | 'physical' | 'technological';
+      /** @enum {string} */
+      source?: 'annex_a' | 'custom';
+    };
+    UpdateControlDto: {
+      title?: string;
+      description?: string | null;
+      /** @enum {string} */
+      theme?: 'organizational' | 'people' | 'physical' | 'technological';
+    };
+    LinkedRiskResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+    };
+    LinkedControlResponseDto: {
+      id: string;
+      reference: string;
+      title: string;
+      description: string | null;
+      theme: string;
+      source: string;
+      retiredAt: string | null;
+      createdAt: string;
+      /** @description The SoA status, or null when no decision has been recorded for this control yet. */
+      status: string | null;
     };
     ChatRequestDto: {
       messages: {
@@ -12250,6 +12574,693 @@ export interface operations {
       };
       /** @description Unprocessable — business rule violation */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_listSoa: {
+    parameters: {
+      query?: {
+        applicable?: boolean;
+        status?: 'not_applicable' | 'not_implemented' | 'partially_implemented' | 'implemented';
+        ownerId?: string;
+        theme?: 'organizational' | 'people' | 'physical' | 'technological';
+        reviewDueOnOrBefore?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['SoaRowResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_coverage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SoaCoverageResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_untreated: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UntreatedRiskResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_getEntry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        controlId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SoaEntryResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_setEntry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        controlId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetSoaEntryDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SoaEntryResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_markReviewed: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        controlId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MarkReviewedDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SoaEntryResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_list: {
+    parameters: {
+      query?: {
+        theme?: 'organizational' | 'people' | 'physical' | 'technological';
+        source?: 'annex_a' | 'custom';
+        includeRetired?: boolean;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            data?: components['schemas']['ControlResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateControlDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ControlResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict — duplicate record or state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_getById: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ControlResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateControlDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ControlResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unprocessable — business rule violation */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_retire: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ControlResponseDto'];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ControlController_risksForControl: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LinkedRiskResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RiskControlController_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LinkedControlResponseDto'][];
+        };
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RiskControlController_link: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        controlId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RiskControlController_unlink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        controlId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized — missing or invalid authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden — insufficient permissions */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

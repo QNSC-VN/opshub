@@ -131,6 +131,10 @@ export const ErrorCodes = {
   RISK_NOT_IN_STATE: 'RISK_NOT_IN_STATE',
   /** Treatment actions are still open, so the risk cannot be declared treated. */
   RISK_TREATMENT_OUTSTANDING: 'RISK_TREATMENT_OUTSTANDING',
+  /** Applicability and implementation status disagree — `ck_soa_applicability` in words. */
+  SOA_INCONSISTENT: 'SOA_INCONSISTENT',
+  /** The control is retired, so it cannot be newly included in the SoA or linked to a risk. */
+  CONTROL_RETIRED: 'CONTROL_RETIRED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
