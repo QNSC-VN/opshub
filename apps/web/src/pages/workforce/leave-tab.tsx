@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
   DataTable,
@@ -65,7 +66,7 @@ function RequestLeaveModal({ open, onClose, onSuccess }: FormModalProps) {
     });
     setLoading(false);
     if (error) {
-      toast.error('Failed to submit leave request');
+      toast.error(apiErrorMessage(error, 'Failed to submit leave request.'));
       return;
     }
     toast.success('Leave request submitted');
@@ -157,7 +158,7 @@ export function LeaveTab() {
       body: { approve },
     });
     if (error) {
-      toast.error(`Failed to ${approve ? 'approve' : 'reject'} leave`);
+      toast.error(apiErrorMessage(error, `Failed to ${approve ? 'approve' : 'reject'} leave.`));
       return;
     }
     toast.success(`Leave ${approve ? 'approved' : 'rejected'}`);
@@ -169,7 +170,7 @@ export function LeaveTab() {
       params: { path: { id } },
     });
     if (error) {
-      toast.error('Failed to cancel leave request');
+      toast.error(apiErrorMessage(error, 'Failed to cancel leave request.'));
       return;
     }
     toast.success('Leave request cancelled');

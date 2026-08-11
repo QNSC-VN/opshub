@@ -69,6 +69,49 @@ export function formatDate(value: string | Date | null | undefined): string {
 }
 
 /**
+ * Today, as the `YYYY-MM-DD` a `date` column takes.
+ *
+ * In the READER'S timezone, which is the right frame for a date they are about to state as a fact —
+ * "terminated on", "signed on", "effective from". `toISOString()` would answer in UTC and hand somebody
+ * in Vancouver yesterday's date as the default for a form they are filling in this morning.
+ *
+ * Six places built this expression by hand before it lived here, and one of them was already wrong.
+ */
+export function todayIso(): string {
+  return isoDate(new Date());
+}
+
+/** A calendar date `days` from today, in the reader's timezone. Negative goes backwards. */
+export function isoDaysFromNow(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return isoDate(date);
+}
+
+/**
+ * A `YYYY-MM-DD` from a date input, as the ISO instant an API expects for a `timestamptz` field.
+ *
+ * MIDDAY, not midnight. Several APIs record a human event — a signature, an acknowledgement — as an
+ * instant, while the person filling the form only knows the DAY. Midnight is the tempting conversion and
+ * it is the one that goes wrong: `new Date('2026-08-11')` is midnight UTC, which reads back as the 10th
+ * for anybody west of Greenwich, so a contract signed on the 11th shows as signed on the 10th. Local
+ * midday survives being read in any timezone within twelve hours of the writer's.
+ *
+ * Returns an empty string for an empty input, so a caller can send `undefined` for "not stated".
+ */
+export function isoInstantFromDate(date: string): string {
+  if (!date) return '';
+  const instant = new Date(`${date}T12:00:00`);
+  return Number.isNaN(instant.getTime()) ? '' : instant.toISOString();
+}
+
+function isoDate(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
  * A timestamp for display: `4 Mar 2026, 14:32`.
  *
  * In the reader's own timezone, deliberately — unlike a calendar date, an instant is a moment that

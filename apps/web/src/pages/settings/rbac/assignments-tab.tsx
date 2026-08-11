@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Trash2, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Badge,
   Button,
@@ -143,7 +144,7 @@ export function AssignmentsTab() {
     setRevoking(false);
     setPendingRevokeId(null);
     if (error) {
-      toast.error('Failed to revoke assignment');
+      toast.error(apiErrorMessage(error, 'Failed to revoke assignment.'));
       return;
     }
     toast.success('Assignment revoked');

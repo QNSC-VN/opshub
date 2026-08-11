@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
   DataTable,
@@ -49,7 +50,7 @@ function LogOvertimeModal({ open, onClose, onSuccess }: FormModalProps) {
     });
     setLoading(false);
     if (error) {
-      toast.error('Failed to log overtime');
+      toast.error(apiErrorMessage(error, 'Failed to log overtime.'));
       return;
     }
     toast.success('Overtime logged');
@@ -129,7 +130,7 @@ export function OvertimeTab() {
       body: { approve },
     });
     if (error) {
-      toast.error(`Failed to ${approve ? 'approve' : 'reject'} overtime`);
+      toast.error(apiErrorMessage(error, `Failed to ${approve ? 'approve' : 'reject'} overtime.`));
       return;
     }
     toast.success(`Overtime ${approve ? 'approved' : 'rejected'}`);

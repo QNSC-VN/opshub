@@ -1,5 +1,5 @@
-import { test, type Page } from '@playwright/test';
-import { expect, gotoInShell, settle } from './support/fixtures';
+import { test } from '@playwright/test';
+import { expectRowSomewhere, expect, gotoInShell, settle } from './support/fixtures';
 
 /**
  * Workforce leave, end to end through the real UI: file a request → it appears in the list →
@@ -49,37 +49,6 @@ function uniqueLeaveWindow(): { start: string; end: string } {
   const mondayMs = startMs + ((8 - new Date(startMs).getUTCDay()) % 7) * day;
   const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   return { start: iso(mondayMs), end: iso(mondayMs + day) };
-}
-
-/**
- * Find a row anywhere in the paged list.
- *
- * The leave list is `ORDER BY start_date DESC` and pages at 25, so a request for 2032 sits below every
- * 2037-dated row a previous run left behind and is NOT on page 1. Asserting only the first page made
- * this spec pass or fail on how far into the future its random window happened to fall — which is a
- * property of the test data, not of the feature.
- *
- * Walking the pager also proves the paging works, which is new on this screen.
- */
-async function expectRowSomewhere(page: Page, text: string): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    if (
-      await page
-        .getByText(text)
-        .first()
-        .isVisible()
-        .catch(() => false)
-    )
-      return;
-    const next = page.getByRole('button', { name: /Next/ });
-    if (!(await next.isVisible().catch(() => false)) || (await next.isDisabled())) break;
-    await next.click();
-    await page.waitForTimeout(400);
-  }
-  await expect(
-    page.getByText(text).first(),
-    `"${text}" was not on any page of the leave list`,
-  ).toBeVisible({ timeout: 5_000 });
 }
 
 test.describe('workforce leave', () => {

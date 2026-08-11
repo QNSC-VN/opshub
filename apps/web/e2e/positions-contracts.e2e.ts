@@ -1,0 +1,153 @@
+import { test } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
+import {
+  clickFirstRow,
+  csrfHeaders,
+  expect,
+  expectRowSomewhere,
+  gotoInShell,
+  selectStatusFilter,
+} from './support/fixtures';
+
+/**
+ * Positions and contracts — the first two screens for modules that had an API and no UI.
+ *
+ * Both create what they assert on: a fresh database has no positions and no contracts, and the whole
+ * point of these screens is that a position could not previously be created without a hand-written
+ * POST.
+ *
+ * The contracts test also pins the ONE property that is easy to get wrong here: `compensation` comes
+ * back null both when no pay is recorded and when the caller may not see it, and the UI must not
+ * distinguish them. Admin holds `contract.compensation.read`, so a figure it entered must come back
+ * visible — the negative direction needs a second identity and belongs in the API suite, which has one.
+ */
+
+function unique(prefix: string): string {
+  return `${prefix}-${Date.now()}`;
+}
+
+/**
+ * Create a position through the API.
+ *
+ * Used by the drawer test so it does not depend on the test above it having run — specs in a file share
+ * a database, not an order guarantee, and "the first row exists" is exactly the assumption that has
+ * failed three times in this migration.
+ */
+async function createPosition(request: APIRequestContext): Promise<string> {
+  const code = unique('PWX').toUpperCase();
+  const res = await request.post('/v1/positions', {
+    headers: await csrfHeaders(request),
+    data: { code, title: 'Playwright Seeded', department: 'Quality', headcount: 2 },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  return code;
+}
+
+test.describe('positions', () => {
+  test('creates a position, assigns nobody, and reports its vacancies', async ({ page }) => {
+    const code = unique('PW').toUpperCase();
+    await gotoInShell(page, '/positions');
+
+    // `.first()`: the header action and the empty-state action are both "New position", which is
+    // correct for a user and ambiguous for a locator.
+    await page
+      .getByRole('button', { name: /new position/i })
+      .first()
+      .click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Code').fill(code);
+    await dialog.getByLabel('Title').fill('Playwright Engineer');
+    await dialog.getByLabel('Department').fill('Quality');
+    await dialog.getByLabel('Headcount').fill('3');
+    await dialog.getByRole('button', { name: /create position/i }).click();
+    await expect(dialog).toBeHidden();
+
+    const row = page.locator('tbody tr', { hasText: code });
+    await expect(row).toBeVisible();
+    // Nobody assigned yet: 0 of 3 filled, 3 vacancies — the numbers the API computes, not the client.
+    await expect(row).toContainText('0 / 3');
+    await expect(row).toContainText('3');
+  });
+
+  test('shows the assignment list in the drawer, empty and honest', async ({ page, request }) => {
+    await createPosition(request);
+    await gotoInShell(page, '/positions');
+    await clickFirstRow(page);
+
+    const drawer = page.getByRole('dialog');
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('heading', { name: 'Assignments' })).toBeVisible();
+    // A position with nobody on it says so rather than rendering an empty table with no explanation.
+    await expect(drawer.getByText(/Nobody assigned yet|Current/)).toBeVisible();
+  });
+});
+
+test.describe('contracts', () => {
+  test('drafts a contract, shows the pay it may see, then activates it', async ({
+    page,
+    request,
+  }) => {
+    // The contract needs an employee that exists; create one rather than depending on the seed.
+    const stamp = Date.now();
+    const created = await request.post('/v1/employees', {
+      headers: await csrfHeaders(request),
+      data: {
+        email: `contract.probe.${stamp}@opshub.local`,
+        displayName: `Contract Probe ${stamp}`,
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    // Read the body ONCE. Calling `.json()` twice inside a `??` chain is how `employeeId` came out
+    // undefined and the draft silently failed validation, leaving a row that never appeared.
+    const body = (await created.json()) as { data?: { id: string }; id?: string };
+    const employeeId = body.data?.id ?? body.id!;
+
+    const reference = unique('PWC').toUpperCase();
+    await gotoInShell(page, '/contracts');
+
+    await page.getByRole('button', { name: /draft contract/i }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Employee ID').fill(employeeId);
+    await dialog.getByLabel('Reference').fill(reference);
+    await dialog.getByLabel('Start date').fill('2030-02-04');
+    await dialog.getByLabel('Base salary').fill('5000.00');
+    await dialog.getByRole('button', { name: /save draft/i }).click();
+    await expect(dialog).toBeHidden();
+
+    // Drafts are not in the default "active" filter — the list opens on what binds people.
+    await selectStatusFilter(page, 'Draft');
+
+    // Walked rather than assumed on page 1: drafts accumulate across runs and this list pages at 25.
+    await expectRowSomewhere(page, reference);
+    const row = page.locator('tbody tr', { hasText: reference });
+    // Admin holds `contract.compensation.read`, so the figure is visible rather than "Not shown".
+    await expect(row).toContainText('5000.00');
+    await expect(row).not.toContainText('Not shown');
+
+    // Activating needs a SIGNATURE DATE, and this is the assertion that found the defect: the button
+    // used to open a confirm dialog that sent an empty body, and the API answered 412
+    // `CONTRACT_NOT_SIGNED` every time — so the contract stayed a draft while the UI showed a toast
+    // blaming a rule it had not broken. The date field is pre-filled with today; submitting it as-is is
+    // the common path.
+    await row.getByRole('button', { name: 'Activate' }).click();
+    const activateDialog = page.getByRole('dialog');
+    await expect(activateDialog.getByText(/binding contract/i)).toBeVisible();
+    await expect(activateDialog.getByLabel('Signed on')).not.toHaveValue('');
+    await activateDialog.getByRole('button', { name: 'Activate' }).click();
+    await expect(activateDialog).toBeHidden();
+
+    await selectStatusFilter(page, 'Active');
+    await expectRowSomewhere(page, reference);
+  });
+
+  test('the renewal toggle narrows to contracts ending soon', async ({ page }) => {
+    await gotoInShell(page, '/contracts');
+    const toggle = page.getByRole('button', { name: /renewing in 90 days/i });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    // Either rows or the empty message — never an error, and never a stuck loading row.
+    await expect(page.getByText('Failed to load contracts.')).toHaveCount(0);
+    await expect(page.getByText('Loading…')).toHaveCount(0);
+  });
+});

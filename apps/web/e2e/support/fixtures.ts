@@ -88,6 +88,59 @@ export async function createAccessRequest(request: APIRequestContext): Promise<s
 }
 
 /**
+ * Find a row anywhere in the paged list, walking the pager.
+ *
+ * Lists page at 25 and order by a DOMAIN date rather than by creation — leave by `start_date DESC`,
+ * contracts by their own order — so a row a spec just created is not necessarily on page 1 once a few
+ * runs have accumulated. Asserting only the first page makes a spec pass or fail on how its random
+ * fixture data happens to sort, which is a property of the data and not of the feature.
+ *
+ * Walking also proves the pager works, which is new on every screen this migration touched.
+ *
+ * SETTLES BEFORE IT LOOKS, on every page. Called straight after a filter change, the loop otherwise
+ * reads the PREVIOUS result set: the row is missing because its page has not arrived yet, and the
+ * pager still belongs to the old query — so the loop can page forward off the row it is looking for
+ * and then report "not on any page" about a row sitting on page 1. Measured: the contracts journey
+ * failed three runs out of three that way, with the row present in both the API and the DOM.
+ */
+export async function expectRowSomewhere(page: Page, text: string): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await expect(page.getByText('Loading…')).toHaveCount(0, { timeout: 15_000 });
+    if (
+      await page
+        .getByText(text)
+        .first()
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
+    const next = page.getByRole('button', { name: /Next/ });
+    if (!(await next.isVisible().catch(() => false)) || (await next.isDisabled())) break;
+    await next.click();
+  }
+  await expect(
+    page.getByText(text).first(),
+    `"${text}" was not on any page of the list`,
+  ).toBeVisible({ timeout: 5_000 });
+}
+
+/**
+ * Move a list's status filter, and wait until it has actually moved.
+ *
+ * Every list screen filters by status through the same `SegmentedControl`, so the locator belongs here
+ * once. The `aria-checked` wait is not decoration: it is the cheapest proof that React has committed
+ * the state change, and therefore that the table is showing the new query's loading row rather than
+ * the previous filter's rows. Without it a following assertion can read the OLD result set.
+ */
+export async function selectStatusFilter(page: Page, label: string): Promise<void> {
+  const radio = page
+    .getByRole('radiogroup', { name: /status/i })
+    .getByRole('radio', { name: label });
+  await radio.click();
+  await expect(radio).toHaveAttribute('aria-checked', 'true');
+}
+
+/**
  * Click the first DATA row of a `DataTable`, once there is one.
  *
  * `tbody tr` also matches the table's own state rows — the loading placeholder, the error row, the empty

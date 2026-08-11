@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Moon } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
   DataTable,
@@ -62,7 +63,7 @@ function LogShiftModal({ open, onClose, onSuccess }: FormModalProps) {
     });
     setLoading(false);
     if (error) {
-      toast.error('Failed to log shift');
+      toast.error(apiErrorMessage(error, 'Failed to log shift.'));
       return;
     }
     toast.success('Shift logged');

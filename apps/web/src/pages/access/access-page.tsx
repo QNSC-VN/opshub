@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck, Plus, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   ActivityTimeline,
   Button,
@@ -276,7 +277,7 @@ export function AccessPage() {
       body: {},
     });
     if (error) {
-      toast.error('Failed to approve request');
+      toast.error(apiErrorMessage(error, 'Failed to approve request.'));
       return;
     }
     toast.success('Request approved — time-boxed grant issued');
@@ -289,7 +290,7 @@ export function AccessPage() {
       body: {},
     });
     if (error) {
-      toast.error('Failed to reject request');
+      toast.error(apiErrorMessage(error, 'Failed to reject request.'));
       return;
     }
     toast.success('Request rejected');
