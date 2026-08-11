@@ -73,6 +73,27 @@ export const PERMISSION = {
    */
   TRAINING_MANAGE: 'training.manage',
 
+  // ── EMS performance reviews ────────────────────────────────────────────────
+  /** View review cycles, other people's reviews, and the coverage report. */
+  PERFORMANCE_READ: 'performance.read',
+  /**
+   * Run the process: open and close cycles, create reviews, assign reviewers, set goals.
+   *
+   * Writing your OWN self-assessment and acknowledging your OWN review need no permission — those
+   * are self-service, gated by scope, exactly as recording your own training completion is. What
+   * needs a permission is deciding that somebody will be reviewed, and by whom.
+   */
+  PERFORMANCE_MANAGE: 'performance.manage',
+  /**
+   * Sign off a rating before the employee sees it — the calibration step.
+   *
+   * Deliberately separate from `performance.manage`: the value of calibration is that a second
+   * person looks at the rating, and a manager who could both rate and approve would make the step
+   * a formality. The request engine keeps the submitter out of their own chain; the type def also
+   * refuses the EMPLOYEE, who would otherwise be able to approve their own review with this code.
+   */
+  PERFORMANCE_APPROVE: 'performance.approve',
+
   // ── ISMS risk ──────────────────────────────────────────────────────────────
   /** View the risk register, treatment plans and the review-due report. */
   RISK_READ: 'risk.read',
@@ -309,6 +330,9 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.CONTRACT_COMPENSATION_READ]: 'See the pay figures on an employment contract',
   [PERMISSION.TRAINING_READ]: 'View training courses, requirements and records',
   [PERMISSION.TRAINING_MANAGE]: 'Manage courses and requirements; verify or revoke records',
+  [PERMISSION.PERFORMANCE_READ]: 'View performance cycles, reviews and the coverage report',
+  [PERMISSION.PERFORMANCE_MANAGE]: 'Open and close review cycles, create reviews, set goals',
+  [PERMISSION.PERFORMANCE_APPROVE]: 'Sign off a performance rating before it is shared',
   [PERMISSION.RISK_READ]: 'View the risk register and treatment plans',
   [PERMISSION.RISK_MANAGE]: 'Identify, score, treat and close risks',
   [PERMISSION.RISK_ACCEPT]: 'Approve accepting a residual risk',
@@ -524,6 +548,10 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.CONTRACT_COMPENSATION_READ,
     PERMISSION.TRAINING_READ,
     PERMISSION.TRAINING_MANAGE,
+    PERMISSION.PERFORMANCE_READ,
+    PERMISSION.PERFORMANCE_MANAGE,
+    // HR calibrates: the second pair of eyes on a rating before the employee sees it.
+    PERMISSION.PERFORMANCE_APPROVE,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -543,6 +571,10 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.EMPLOYEE_READ,
     PERMISSION.POSITION_READ,
     PERMISSION.TRAINING_READ,
+    // Read, but NOT `PERFORMANCE_APPROVE`: a manager writes the review, so approving it would make
+    // the calibration step a formality. Rating a review they were ASSIGNED needs no code — the
+    // reviewer is named on the row, which is a scope rule.
+    PERMISSION.PERFORMANCE_READ,
     PERMISSION.WORKFORCE_READ,
     PERMISSION.WORKFORCE_APPROVE,
     PERMISSION.WORKFORCE_LEAVE_REVIEW,
@@ -574,6 +606,10 @@ export const ROLE_PERMISSIONS: Record<
     // a signed contract, which does not require knowing what any of them pays.
     PERMISSION.CONTRACT_READ,
     PERMISSION.TRAINING_READ,
+    // Deliberately WITHOUT `PERFORMANCE_READ`. A performance review is a personal judgement about
+    // somebody, not compliance evidence: the competency artefact an ISO audit looks for is the
+    // TRAINING record, which the auditor does hold. If an audit ever needs review coverage without
+    // the contents, that is a separate read code for the coverage report, not this one widened.
     PERMISSION.RISK_READ,
     PERMISSION.CONTROL_READ,
     PERMISSION.INCIDENT_READ,

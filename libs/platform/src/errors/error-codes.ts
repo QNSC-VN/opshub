@@ -237,6 +237,36 @@ export const ErrorCodes = {
   MANAGEMENT_REVIEW_SETTLED: 'MANAGEMENT_REVIEW_SETTLED',
   /** The transition is not legal from the action's current status. */
   REVIEW_ACTION_NOT_IN_STATE: 'REVIEW_ACTION_NOT_IN_STATE',
+
+  // ── EMS performance reviews ────────────────────────────────────────────────
+  /** The transition is not legal from the review's current status. */
+  PERFORMANCE_REVIEW_NOT_IN_STATE: 'PERFORMANCE_REVIEW_NOT_IN_STATE',
+  /** The review is acknowledged or cancelled, so it accepts nothing further. */
+  PERFORMANCE_REVIEW_SETTLED: 'PERFORMANCE_REVIEW_SETTLED',
+  /** The cycle is not open, so it takes no new reviews. */
+  PERFORMANCE_CYCLE_NOT_OPEN: 'PERFORMANCE_CYCLE_NOT_OPEN',
+  /** A cycle cannot close while reviews are still in flight — a count across rows. */
+  PERFORMANCE_CYCLE_HAS_OPEN_REVIEWS: 'PERFORMANCE_CYCLE_HAS_OPEN_REVIEWS',
+  /** Nobody reviews themselves — `ck_review_reviewer_not_employee` in words. */
+  PERFORMANCE_SELF_REVIEW: 'PERFORMANCE_SELF_REVIEW',
+  /**
+   * The goals do not total 100% of the judgement, or one of them is unrated.
+   *
+   * A sum across rows, so no CHECK can hold it. Checked when the review is sent for approval, which
+   * is the moment the weights stop being a draft.
+   */
+  PERFORMANCE_GOAL_WEIGHTS_INVALID: 'PERFORMANCE_GOAL_WEIGHTS_INVALID',
+  /**
+   * The rating demands a development plan and none was written.
+   *
+   * `requires_development_plan` lives on the rating scale and the plan on the review — two tables,
+   * so a CHECK cannot compare them.
+   */
+  PERFORMANCE_DEVELOPMENT_PLAN_REQUIRED: 'PERFORMANCE_DEVELOPMENT_PLAN_REQUIRED',
+  /** The employee cannot sign off their own rating, whatever permissions they hold. */
+  PERFORMANCE_EMPLOYEE_APPROVAL: 'PERFORMANCE_EMPLOYEE_APPROVAL',
+  /** Only the assigned reviewer may write the review. */
+  PERFORMANCE_NOT_THE_REVIEWER: 'PERFORMANCE_NOT_THE_REVIEWER',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
