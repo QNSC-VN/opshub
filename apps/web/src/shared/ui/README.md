@@ -32,8 +32,11 @@ the right picker on a phone.
 Both are real ARIA widgets with arrow-key navigation and a roving tab index. A row of buttons is
 not either of them.
 
-**6. Label/value pairs are `DescriptionList`.**
-It renders `dl`/`dt`/`dd` and the em dash for absent values, so no page writes `?? '—'` again.
+**6. Label/value pairs are `DescriptionList`; a record drawer is `EntityDetailPanel`.**
+`DescriptionList` renders `dl`/`dt`/`dd` and the em dash for absent values, so no page writes
+`?? '—'` again. `EntityDetailPanel` fixes the drawer's section ORDER — what this is, what is
+special about it, what happened to it — and omits the Activity section entirely for a record type
+with no audit trail.
 
 **7. Dates and numbers go through `@/shared/lib/format`.**
 `formatDate` treats a `YYYY-MM-DD` as the calendar date it is — `new Date('2026-03-04')` is UTC
@@ -49,11 +52,24 @@ top — **not** a config glob, because Vitest 4 removed `environmentMatchGlobs`.
 behaviour, not classes: a Tailwind change must not fail a test, and a missing `role` must not pass
 one.
 
+## Composition
+
+A page file COMPOSES; it does not also contain the forms, tables and drawers. `fe-consistency.
+ratchet.test.ts` enforces a line ceiling and it has already earned it: the workforce conversion
+produced one 1272-line file and the ratchet refused it. That screen is now six modules —
+`workforce-page.tsx` (61 lines) plus a module per tab — and the largest is 343.
+
+Helpers live in their own module, not beside components: eslint's
+`react-refresh/only-export-components` is right that mixing them breaks Fast Refresh for the file.
+
 ## Conversion status
 
-Converted: `compliance`, `access`.
-Still hand-rolled (tables, dialogs, filters): `assets`, `people`, `workforce`, `requests`,
-`catalog`, `finops`, `profile`, `settings/rbac`, `settings/webhooks`, `settings/audit-logs`,
-`dashboard`, `security-posture`, `reports`.
+Converted: `compliance`, `access`, `workforce`.
+Still hand-rolled (tables, dialogs, filters): `assets`, `people`, `requests`, `catalog`, `finops`,
+`profile`, `settings/rbac`, `settings/webhooks`, `settings/audit-logs`, `dashboard`,
+`security-posture`, `reports`.
+
+Ratchet baselines move with each conversion — raw `<button>` 149 → 105, hand-rolled modal files
+11 → 8. Lower them by converting, never by editing the number.
 
 Convert a screen when you touch it, and keep this list honest.

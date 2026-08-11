@@ -16,6 +16,7 @@ export { Card, CardContent, CardHeader, CardTitle } from './card';
 export { ConfirmDialog } from './confirm-dialog';
 export { DataTable, type DataTableColumn, type DataTableProps } from './data-table';
 export { DescriptionList, type DescriptionItem } from './description-list';
+export { EntityDetailPanel, type EntityDetailPanelProps } from './entity-detail-panel';
 export { FormField } from './form-field';
 export { Input, type InputProps } from './input';
 export { ListPage, type ListPageProps } from './list-page';

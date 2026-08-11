@@ -31,9 +31,10 @@ import { describe, expect, it } from 'vitest';
 
 // ── Baselines — LOWER as the migration proceeds, NEVER raise ───────────────────
 //
-// `<button>` has a destination: shared/ui/button.tsx. 149 is a lot, and that is the point of
-// recording it — the number cannot grow while it is being worked down.
-const MAX_RAW_BUTTON = 149;
+// `<button>` has a destination: shared/ui/button.tsx. Was 149; converting access, compliance and
+// workforce onto `Button` took it to 105. Re-measured the way this file's docblock demands — by
+// forcing the constant to -1 and reading the count the failure reports.
+const MAX_RAW_BUTTON = 105;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -45,6 +46,11 @@ const MAX_ARBITRARY_TEXT = 29;
 // and the ratchet fails on the file it was measured from. rally's docblock flags the same trap.
 // pages/people/people-page.tsx. Pages are composition; a file this size is doing more than
 // composing. The generated API client is excluded — it is 7575 lines and not hand-written.
+//
+// THIS CEILING EARNED ITS KEEP. The workforce conversion produced a single 1272-line file and this
+// check refused it, correctly: four forms, four tables and four drawers in one file is four screens
+// sharing a filename. It is now six modules, the largest 343 lines. The ceiling stays at the
+// people-page number until that page is decomposed too.
 const MAX_FILE_LINES = 1082;
 
 /**
@@ -58,8 +64,11 @@ const MAX_FILE_LINES = 1082;
  * find a dialog is the same signal assistive tech gets.
  *
  * Twelve copies of backdrop markup is also the duplication `Modal` exists to remove.
+ *
+ * 11 → 8: access, compliance and workforce (which held FOUR of them) now use `Modal`, so those
+ * dialogs are announced as dialogs, trap focus and close on Escape. Eight files left.
  */
-const MAX_HANDROLLED_MODAL = 11;
+const MAX_HANDROLLED_MODAL = 8;
 
 // this file lives in src/test/
 const SRC = join(import.meta.dirname, '../');

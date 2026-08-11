@@ -59,28 +59,35 @@ test.describe('workforce leave', () => {
     // exists once Leave is selected. Worth stating: the first version of this spec waited 45s for
     // a "Request leave" button on the wrong tab, which reads like a missing feature rather than a
     // missing click.
-    await page.getByRole('button', { name: 'Leave', exact: true }).click();
+    //
+    // `role: 'tab'` now, not `'button'`: the tab bar is a real `tablist`. This spec had to change for
+    // that, which is the evidence the semantics improved rather than the markup merely moving.
+    await page.getByRole('tab', { name: 'Leave', exact: true }).click();
 
     await page.getByRole('button', { name: /request leave/i }).click();
 
-    // Located by ROLE and PLACEHOLDER, not by walking divs. This overlay is a bare `<div>` —
-    // 11 of the SPA's 12 modals hand-roll one instead of using `shared/ui/modal.tsx`, the only
-    // component that sets `role="dialog"`, so `getByRole('dialog')` finds nothing. That is a real
-    // accessibility defect (a screen reader never announces these as dialogs) and it is recorded
-    // in `fe-consistency.ratchet.test.ts` rather than worked around silently. When those modals
-    // move onto the shared component, scope this to `page.getByRole('dialog')`.
-    await expect(page.getByRole('heading', { name: 'Request leave' })).toBeVisible();
+    // SCOPED TO THE DIALOG, which the comment this replaces said to do "when those modals move onto
+    // the shared component". They have: the form is on `shared/ui/modal.tsx`, so it is announced as
+    // a dialog, traps focus and closes on Escape. `getByRole('dialog')` finding it is the same signal
+    // assistive technology now gets, and scoping the field lookups to it means a stray date input
+    // elsewhere on the page cannot be filled by mistake.
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Request leave' })).toBeVisible();
 
-    await page.getByRole('combobox').selectOption('annual');
+    await dialog.getByRole('combobox').selectOption('annual');
     // `input[type=date]` surfaces as a textbox in the accessibility tree, so the type selector is
     // the honest way to reach the two date fields.
-    const dates = page.locator('input[type="date"]');
+    const dates = dialog.locator('input[type="date"]');
     const { start, end } = uniqueLeaveWindow();
     await dates.nth(0).fill(start);
     await dates.nth(1).fill(end);
-    await page.getByPlaceholder(/optional reason/i).fill(reason);
+    await dialog.getByPlaceholder(/optional reason/i).fill(reason);
 
-    await page.getByRole('button', { name: 'Request', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Request', exact: true }).click();
+
+    // Closing the dialog is part of the flow: a form that submits and stays open reads as a failure.
+    await expect(dialog).toBeHidden();
 
     // The list re-fetches after the mutation; wait for the row rather than a fixed delay.
     await expect(page.getByText(reason).first()).toBeVisible({ timeout: 15_000 });
@@ -91,7 +98,7 @@ test.describe('workforce leave', () => {
     // the leave list is not even mounted. Without this the assertion below fails with "vanished on
     // reload", which reads exactly like a persistence bug — it cost one debugging round to find
     // that the row was fine and the tab was wrong.
-    await page.getByRole('button', { name: 'Leave', exact: true }).click();
+    await page.getByRole('tab', { name: 'Leave', exact: true }).click();
     await settle(page);
     await expect(
       page.getByText(reason).first(),
