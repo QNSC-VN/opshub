@@ -17,7 +17,7 @@ import { WorkforcePage } from '@/pages/workforce/workforce-page';
 import { WebhooksPage } from '@/pages/settings/webhooks-page';
 import { RequestsPage } from '@/pages/requests/requests-page';
 import { ReportsPage } from '@/pages/reports/reports-page';
-import { RbacPage } from '@/pages/settings/rbac-page';
+import { RbacPage } from '@/pages/settings/rbac/rbac-page';
 import { AuditLogsPage } from '@/pages/settings/audit-logs-page';
 import { NotificationPreferencesPage } from '@/pages/notifications/notification-preferences-page';
 import { ProfilePage } from '@/pages/profile/profile-page';
