@@ -86,11 +86,16 @@ describe('DataTable', () => {
     expect(document.querySelector('tbody td')?.getAttribute('colspan')).toBe('4');
   });
 
-  it('makes rows clickable when onRowClick is given', () => {
+  it('makes rows clickable and focusable WITHOUT turning them into buttons', () => {
+    // A `role="button"` row computes its accessible name from every cell, so it announces the whole
+    // row as one run of text and collides with the buttons inside it — `getByRole('button', { name })`
+    // matched both the row and its own delete control, which a Playwright run caught. A row stays a
+    // row.
     const onRowClick = vi.fn();
     render(<DataTable columns={COLUMNS} rows={ROWS} onRowClick={onRowClick} />);
 
-    const rows = screen.getAllByRole('button');
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    const rows = screen.getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveAttribute('tabindex', '0');
 
@@ -104,7 +109,7 @@ describe('DataTable', () => {
     // the one uncovered branch in this file.
     const onRowClick = vi.fn();
     render(<DataTable columns={COLUMNS} rows={ROWS} onRowClick={onRowClick} />);
-    const row = screen.getAllByRole('button')[1];
+    const row = screen.getAllByRole('row')[2];
 
     fireEvent.keyDown(row, { key: 'Enter' });
     expect(onRowClick).toHaveBeenLastCalledWith(ROWS[1]);
@@ -127,9 +132,11 @@ describe('DataTable', () => {
     expect(rows[1].className).not.toContain('bg-accent-muted');
   });
 
-  it('leaves rows inert — no role, no tab stop — when there is nothing to click', () => {
+  it('leaves rows inert — no tab stop — when there is nothing to click', () => {
     render(<DataTable columns={COLUMNS} rows={ROWS} />);
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    for (const row of screen.getAllByRole('row').slice(1)) {
+      expect(row).not.toHaveAttribute('tabindex');
+    }
   });
 
   it('keys rows by a custom function when the row has no id', () => {

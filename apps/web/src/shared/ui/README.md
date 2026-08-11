@@ -7,9 +7,13 @@ which file it was in — which is exactly how ten screens ended up hand-rolling 
 ## The rules
 
 **1. A list screen is `ListPage` + `DataTable` + `PaginationFooter` + `useListState`.**
-Never a bare `<table>`. `DataTable` owns loading, error, empty and the `colSpan`; the page owns the
-columns and the query. Every list endpoint pages server-side, so `useListState` holds the offset and
-resets it when the search or a filter changes.
+Never a bare `<table>`, and never a list of clickable `<div>`s. `DataTable` owns loading, error, empty
+and the `colSpan`; the page owns the columns and the query. Every list endpoint pages server-side, so
+`useListState` holds the offset and resets it when the search or a filter changes.
+
+A clickable row is focusable and answers Enter/Space, but it is **not** `role="button"` — a button's
+accessible name is computed from its contents, so the row swallowed every cell's text and collided
+with the buttons inside it. Find a row by its text, and the controls in it by name.
 
 **2. A status is a TONE, never a class string.**
 `<StatusBadge tone={statusTone(x)}>{humanizeStatus(x)}</StatusBadge>`. `statusTone` says what a word
@@ -22,6 +26,11 @@ belongs in `status-tone.ts`.
 `Modal` has `role="dialog"`, a focus trap, Escape, scroll lock and focus restore. A hand-rolled
 `fixed inset-0` has none of those, and the ten that existed let keyboard users tab into the page
 behind them.
+
+In a test: `Modal` and `SlideOver` are `role="dialog"`; `ConfirmDialog` is **`role="alertdialog"`**,
+which is correct for a destructive confirmation and is not matched by `getByRole('dialog')`. Close a
+drawer with its own **Close panel** button rather than Escape — Escape is handled on the panel, so it
+only fires while focus is inside it.
 
 **4. Form controls are `FormField` + `Input` / `Textarea` / `Select`.**
 `FormField` wires the label, the hint and `aria-describedby`; the controls wire `aria-invalid`.
@@ -64,14 +73,13 @@ Helpers live in their own module, not beside components: eslint's
 
 ## Conversion status
 
-Converted: `compliance`, `access`, `workforce`, `people`.
+Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`.
 Still hand-rolled (tables, dialogs, filters): `assets`, `requests`, `catalog`, `finops`, `profile`,
-`settings/rbac`, `settings/webhooks`, `settings/audit-logs`, `dashboard`, `security-posture`,
-`reports`.
+`settings/webhooks`, `settings/audit-logs`, `dashboard`, `security-posture`, `reports`.
 
-Ratchet baselines move with each conversion — raw `<button>` 149 → 105 → 93, hand-rolled modal files
-11 → 8, largest file 1082 → 907, arbitrary `text-[…]` 29 → 27. Lower them by converting, never by
-editing the number.
+Ratchet baselines move with each conversion — raw `<button>` 149 → 105 → 93 → 78, hand-rolled modal
+files 11 → 8 → 7, largest file 1082 → 907 → 818, arbitrary `text-[…]` 29 → 27 → 26. Lower them by
+converting, never by editing the number.
 
 **A selectable card is a real `<input>`.** The people wizard's device cards and access list were
 `<button>`s with a colour for "selected" — no group, no checked state, nothing announced. They are

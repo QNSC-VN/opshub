@@ -57,8 +57,16 @@ export interface DataTableProps<Row> {
   emptyIcon?: ComponentType<{ className?: string; strokeWidth?: number }>;
   /** Rendered under the empty message — usually the "create the first one" button. */
   emptyAction?: ReactNode;
-  /** Makes rows clickable. Also gives them keyboard focus and Enter/Space, since a clickable
-   *  row that only responds to a mouse is unusable for anyone who does not use one. */
+  /**
+   * Makes rows clickable, focusable, and operable with Enter/Space — a clickable row that only
+   * answers a mouse is unusable for anybody who does not use one.
+   *
+   * The row does NOT take `role="button"`. It did, and that was wrong twice over: a button's
+   * accessible name is computed from its contents, so the row announced every cell's text run
+   * together — including the labels of the buttons inside it — and `getByRole('button', { name })`
+   * then matched both the row and its own delete control. A row stays a row; the click is a
+   * shortcut, and the actions column holds the controls that are meant to be found by name.
+   */
   onRowClick?: (row: Row) => void;
   /** Marks a row as the selected one, e.g. while its detail panel is open. */
   isRowActive?: (row: Row) => boolean;
@@ -154,7 +162,6 @@ export function DataTable<Row>({
                   {...(clickable
                     ? {
                         tabIndex: 0,
-                        role: 'button',
                         onClick: () => onRowClick(row),
                         onKeyDown: (e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
