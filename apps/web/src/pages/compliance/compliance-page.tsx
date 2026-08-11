@@ -3,11 +3,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, PackageSearch, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { DataTable, type DataTableColumn } from '@/shared/ui/data-table';
+import { PaginationFooter } from '@/shared/ui/pagination-footer';
+import { useListState } from '@/shared/hooks/use-list-state';
 import { SlideOver, SlideOverSection } from '@/shared/ui/slide-over';
 import { ActivityTimeline } from '@/shared/ui/activity-timeline';
 import { UpgradeGate } from '@/shared/ui/upgrade-gate';
 import { FEATURES } from '@/shared/config/features';
-import type { FindingResponse, SoftwareListing, FindingSeverity, FindingStatus } from '@/shared/api/types';
+import type {
+  FindingResponse,
+  SoftwareListing,
+  FindingSeverity,
+  FindingStatus,
+} from '@/shared/api/types';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -49,68 +57,73 @@ const FINDING_STATUS_LABEL: Record<FindingStatus, string> = {
 // ── Software Catalog tab ──────────────────────────────────────────────────────
 
 function SoftwareCatalogTab() {
+  // Paged, where this tab previously asked for `limit: 100` and showed a total — which silently
+  // truncated any catalogue with more entries than that.
+  const list = useListState();
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['compliance', 'software'],
+    queryKey: ['compliance', 'software', list.offset, list.limit],
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/compliance/software', {
-        params: { query: { limit: 100 } },
+        params: { query: { limit: list.limit, offset: list.offset } },
       });
       if (error || !data) throw new Error('Failed to load software catalog');
       return data;
     },
   });
 
+  // The row type comes from the generated client rather than a hand-written interface, so a
+  // response shape change is a type error here instead of an `undefined` on screen.
+  type SoftwareRow = NonNullable<NonNullable<typeof data>['data']>[number];
+  const columns: DataTableColumn<SoftwareRow>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      cell: (r) => <span className="font-medium text-fg">{r.name}</span>,
+    },
+    { key: 'publisher', header: 'Publisher', cell: (r) => r.publisher ?? '—' },
+    {
+      key: 'listing',
+      header: 'Listing',
+      cell: (r) => (
+        <span
+          className={[
+            'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
+            LISTING_CLASS[r.listing as SoftwareListing],
+          ].join(' ')}
+        >
+          {LISTING_LABEL[r.listing as SoftwareListing]}
+        </span>
+      ),
+    },
+    {
+      key: 'notes',
+      header: 'Notes',
+      cell: (r) => (
+        <span className="text-xs text-fg-subtle" title={r.notes ?? ''}>
+          {r.notes ?? '—'}
+        </span>
+      ),
+      className: 'max-w-xs truncate',
+      hideOnMobile: true,
+    },
+  ];
+
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-surface-muted">
-            <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Name</th>
-            <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Publisher</th>
-
-            <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Listing</th>
-            <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Notes</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {isLoading && (
-            <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-fg-subtle">Loading…</td></tr>
-          )}
-          {isError && (
-            <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-danger">Failed to load software catalog.</td></tr>
-          )}
-          {data?.data?.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-4 py-12 text-center">
-                <div className="flex flex-col items-center gap-2">
-                  <PackageSearch className="h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
-                  <span className="text-sm text-fg-subtle">No software entries found</span>
-                </div>
-              </td>
-            </tr>
-          )}
-          {data?.data?.map((s) => (
-            <tr key={s.id} className="transition-colors hover:bg-surface-hover">
-              <td className="px-4 py-3 font-medium text-fg">{s.name}</td>
-              <td className="px-4 py-3 text-fg-muted">{s.publisher ?? '—'}</td>
-
-              <td className="px-4 py-3">
-                <span className={['inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium', LISTING_CLASS[s.listing as SoftwareListing]].join(' ')}>
-                  {LISTING_LABEL[s.listing as SoftwareListing]}
-                </span>
-              </td>
-              <td className="px-4 py-3 max-w-xs truncate text-xs text-fg-subtle" title={s.notes ?? ''}>
-                {s.notes ?? '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {data?.pageInfo && (
-        <div className="border-t border-border bg-surface-muted px-4 py-2.5 text-xs text-fg-subtle">
-          {data.pageInfo.total} entr{data.pageInfo.total !== 1 ? 'ies' : 'y'}
-        </div>
-      )}
+    <div className="space-y-3">
+      <DataTable
+        columns={columns}
+        rows={data?.data}
+        isLoading={isLoading}
+        isError={isError}
+        errorMessage="Failed to load software catalog."
+        emptyMessage="No software entries found"
+        emptyIcon={PackageSearch}
+      />
+      <PaginationFooter
+        pageInfo={data?.pageInfo}
+        onOffsetChange={list.goToOffset}
+        noun="software"
+      />
     </div>
   );
 }
@@ -136,7 +149,10 @@ function ResolveModal({ findingId, onClose, onSuccess }: ResolveModalProps) {
       body: { note: note || undefined, riskAccepted },
     });
     setLoading(false);
-    if (error) { toast.error('Failed to resolve finding'); return; }
+    if (error) {
+      toast.error('Failed to resolve finding');
+      return;
+    }
     toast.success(riskAccepted ? 'Finding marked as risk accepted' : 'Finding resolved');
     onSuccess();
     onClose();
@@ -150,7 +166,10 @@ function ResolveModal({ findingId, onClose, onSuccess }: ResolveModalProps) {
       <div className="w-full max-w-sm rounded-xl bg-surface shadow-xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold text-fg">Resolve finding</h2>
-          <button onClick={onClose} className="rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg-muted"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -172,17 +191,21 @@ function ResolveModal({ findingId, onClose, onSuccess }: ResolveModalProps) {
               onChange={(e) => setRiskAccepted(e.target.checked)}
               className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
             />
-            <span className="text-sm text-fg-muted">Accept residual risk (mark as risk accepted)</span>
+            <span className="text-sm text-fg-muted">
+              Accept residual risk (mark as risk accepted)
+            </span>
           </label>
           <div className="flex justify-end gap-2 pt-1">
             <button
-              type="button" onClick={onClose}
+              type="button"
+              onClick={onClose}
               className="h-8 rounded-md border border-border px-3.5 text-sm font-medium text-fg-muted hover:bg-surface-hover"
             >
               Cancel
             </button>
             <button
-              type="submit" disabled={loading}
+              type="submit"
+              disabled={loading}
               className="h-8 rounded-md bg-accent px-3.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
             >
               {loading ? 'Saving…' : riskAccepted ? 'Accept risk' : 'Resolve'}
@@ -204,17 +227,115 @@ const SEVERITY_FILTERS = [
   { value: 'low' as const, label: 'Low' },
 ];
 
+/**
+ * The findings columns.
+ *
+ * A function rather than a constant because two of them need the row actions, and those close over
+ * the tab's handlers. Declared outside the component so the array is not rebuilt per render.
+ */
+function findingColumns(actions: {
+  onAcknowledge: (id: string) => void;
+  onResolve: (id: string) => void;
+}): DataTableColumn<FindingResponse>[] {
+  return [
+    {
+      key: 'software',
+      header: 'Software',
+      cell: (f) => <span className="font-medium text-fg">{f.softwareName}</span>,
+    },
+    {
+      key: 'version',
+      header: 'Version',
+      cell: (f) => (
+        <span className="font-mono text-xs text-fg-muted">{f.softwareVersion ?? '—'}</span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'severity',
+      header: 'Severity',
+      cell: (f) => (
+        <span
+          className={[
+            'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
+            SEVERITY_CLASS[f.severity as FindingSeverity],
+          ].join(' ')}
+        >
+          {f.severity}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (f) => (
+        <span
+          className={[
+            'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
+            FINDING_STATUS_CLASS[f.status as FindingStatus],
+          ].join(' ')}
+        >
+          {FINDING_STATUS_LABEL[f.status as FindingStatus]}
+        </span>
+      ),
+    },
+    {
+      key: 'detected',
+      header: 'Detected',
+      cell: (f) => (
+        <span className="text-xs text-fg-subtle">
+          {new Date(f.detectedAt).toLocaleDateString()}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      // `stopPropagation` because the row itself opens the detail panel: without it, acknowledging
+      // a finding would also open the panel for it.
+      cell: (f) => (
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {f.status === 'open' && (
+            <button
+              onClick={() => actions.onAcknowledge(f.id)}
+              className="rounded px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent-muted"
+            >
+              Acknowledge
+            </button>
+          )}
+          {(f.status === 'open' || f.status === 'acknowledged') && (
+            <button
+              onClick={() => actions.onResolve(f.id)}
+              className="rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
+            >
+              Resolve
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+}
+
 function FindingsTab() {
   const qc = useQueryClient();
   const [severityFilter, setSeverityFilter] = useState<FindingSeverity | ''>('');
   const [resolveId, setResolveId] = useState<string | null>(null);
   const [selected, setSelected] = useState<FindingResponse | null>(null);
+  const list = useListState();
 
   const findings = useQuery({
-    queryKey: ['compliance', 'findings', severityFilter],
+    queryKey: ['compliance', 'findings', severityFilter, list.offset, list.limit],
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/compliance/findings', {
-        params: { query: { severity: (severityFilter || undefined) as never, limit: 100 } },
+        params: {
+          query: {
+            severity: (severityFilter || undefined) as never,
+            limit: list.limit,
+            offset: list.offset,
+          },
+        },
       });
       if (error || !data) throw new Error('Failed to load findings');
       return data;
@@ -227,7 +348,10 @@ function FindingsTab() {
     const { error } = await api.POST('/v1/compliance/findings/{id}/acknowledge', {
       params: { path: { id } },
     });
-    if (error) { toast.error('Failed to acknowledge finding'); return; }
+    if (error) {
+      toast.error('Failed to acknowledge finding');
+      return;
+    }
     toast.success('Finding acknowledged');
     invalidate();
   }
@@ -248,7 +372,11 @@ function FindingsTab() {
           {SEVERITY_FILTERS.map(({ value, label }) => (
             <button
               key={value}
-              onClick={() => setSeverityFilter(value)}
+              onClick={() => {
+                setSeverityFilter(value);
+                // Narrowing the set invalidates the offset: page 4 of the criticals may not exist.
+                list.resetPaging();
+              }}
               className={[
                 'rounded-md px-3 py-1 text-sm font-medium transition-colors',
                 severityFilter === value
@@ -261,84 +389,23 @@ function FindingsTab() {
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted">
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Software</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Version</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Severity</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Status</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Detected</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {findings.isLoading && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-fg-subtle">Loading…</td></tr>
-              )}
-              {findings.isError && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-danger">Failed to load findings.</td></tr>
-              )}
-              {findings.data?.data?.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <ShieldAlert className="h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
-                      <span className="text-sm text-fg-subtle">No findings found</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {findings.data?.data?.map((f) => (
-                <tr
-                  key={f.id}
-                  className="cursor-pointer transition-colors hover:bg-surface-hover"
-                  onClick={() => setSelected(f as FindingResponse)}
-                >
-                  <td className="px-4 py-3 font-medium text-fg">{f.softwareName}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-fg-muted">{f.softwareVersion ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={['inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize', SEVERITY_CLASS[f.severity as FindingSeverity]].join(' ')}>
-                      {f.severity}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={['inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium', FINDING_STATUS_CLASS[f.status as FindingStatus]].join(' ')}>
-                      {FINDING_STATUS_LABEL[f.status as FindingStatus]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-fg-subtle">{new Date(f.detectedAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1">
-                      {f.status === 'open' && (
-                        <button
-                          onClick={() => handleAcknowledge(f.id)}
-                          className="rounded px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent-muted"
-                        >
-                          Acknowledge
-                        </button>
-                      )}
-                      {(f.status === 'open' || f.status === 'acknowledged') && (
-                        <button
-                          onClick={() => setResolveId(f.id)}
-                          className="rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
-                        >
-                          Resolve
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {findings.data?.pageInfo && (
-            <div className="border-t border-border bg-surface-muted px-4 py-2.5 text-xs text-fg-subtle">
-              {findings.data.pageInfo.total} finding{findings.data.pageInfo.total !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
+        <DataTable
+          columns={findingColumns({ onAcknowledge: handleAcknowledge, onResolve: setResolveId })}
+          rows={findings.data?.data as FindingResponse[] | undefined}
+          isLoading={findings.isLoading}
+          isError={findings.isError}
+          errorMessage="Failed to load findings."
+          emptyMessage="No findings found"
+          emptyIcon={ShieldAlert}
+          onRowClick={(f) => setSelected(f)}
+          isRowActive={(f) => f.id === selected?.id}
+        />
+
+        <PaginationFooter
+          pageInfo={findings.data?.pageInfo}
+          onOffsetChange={list.goToOffset}
+          noun="findings"
+        />
       </div>
 
       {/* Finding detail slide-over */}
@@ -348,36 +415,75 @@ function FindingsTab() {
         title={selected?.softwareName ?? 'Finding detail'}
         description={selected ? `${selected.severity} · ${selected.status}` : undefined}
         width="lg"
-        headerActions={selected && (selected.status === 'open' || selected.status === 'acknowledged') ? (
-          <div className="flex items-center gap-2">
-            {selected.status === 'open' && (
+        headerActions={
+          selected && (selected.status === 'open' || selected.status === 'acknowledged') ? (
+            <div className="flex items-center gap-2">
+              {selected.status === 'open' && (
+                <button
+                  onClick={() => {
+                    handleAcknowledge(selected.id);
+                    setSelected(null);
+                  }}
+                  className="rounded-md bg-accent-muted px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-muted"
+                >
+                  Acknowledge
+                </button>
+              )}
               <button
-                onClick={() => { handleAcknowledge(selected.id); setSelected(null); }}
-                className="rounded-md bg-accent-muted px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-muted"
+                onClick={() => {
+                  setResolveId(selected.id);
+                  setSelected(null);
+                }}
+                className="rounded-md bg-success-bg px-3 py-1.5 text-xs font-medium text-success hover:bg-success-bg"
               >
-                Acknowledge
+                Resolve
               </button>
-            )}
-            <button
-              onClick={() => { setResolveId(selected.id); setSelected(null); }}
-              className="rounded-md bg-success-bg px-3 py-1.5 text-xs font-medium text-success hover:bg-success-bg"
-            >
-              Resolve
-            </button>
-          </div>
-        ) : undefined}
+            </div>
+          ) : undefined
+        }
       >
         {selected && (
           <>
             <SlideOverSection title="Details">
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 {[
-                  { label: 'Software',  value: selected.softwareName },
-                  { label: 'Version',   value: selected.softwareVersion ?? '—' },
-                  { label: 'Severity',  value: <span className={['inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize', SEVERITY_CLASS[selected.severity as FindingSeverity]].join(' ')}>{selected.severity}</span> },
-                  { label: 'Status',    value: <span className={['inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium', FINDING_STATUS_CLASS[selected.status as FindingStatus]].join(' ')}>{FINDING_STATUS_LABEL[selected.status as FindingStatus]}</span> },
-                  { label: 'Detected',  value: new Date(selected.detectedAt).toLocaleDateString() },
-                  { label: 'Asset ID',  value: selected.assetId ? <span className="font-mono text-xs">{selected.assetId}</span> : '—' },
+                  { label: 'Software', value: selected.softwareName },
+                  { label: 'Version', value: selected.softwareVersion ?? '—' },
+                  {
+                    label: 'Severity',
+                    value: (
+                      <span
+                        className={[
+                          'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
+                          SEVERITY_CLASS[selected.severity as FindingSeverity],
+                        ].join(' ')}
+                      >
+                        {selected.severity}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Status',
+                    value: (
+                      <span
+                        className={[
+                          'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
+                          FINDING_STATUS_CLASS[selected.status as FindingStatus],
+                        ].join(' ')}
+                      >
+                        {FINDING_STATUS_LABEL[selected.status as FindingStatus]}
+                      </span>
+                    ),
+                  },
+                  { label: 'Detected', value: new Date(selected.detectedAt).toLocaleDateString() },
+                  {
+                    label: 'Asset ID',
+                    value: selected.assetId ? (
+                      <span className="font-mono text-xs">{selected.assetId}</span>
+                    ) : (
+                      '—'
+                    ),
+                  },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <dt className="text-xs text-fg-subtle">{label}</dt>
@@ -388,7 +494,9 @@ function FindingsTab() {
               {!!(selected as Record<string, unknown>).cveId && (
                 <div className="mt-4 rounded-md bg-danger-bg px-3 py-2.5 text-sm">
                   <p className="text-xs text-red-400">CVE</p>
-                  <p className="font-mono text-xs text-danger">{(selected as Record<string, unknown>).cveId as string}</p>
+                  <p className="font-mono text-xs text-danger">
+                    {(selected as Record<string, unknown>).cveId as string}
+                  </p>
                 </div>
               )}
             </SlideOverSection>

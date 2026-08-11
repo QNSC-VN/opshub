@@ -13,11 +13,17 @@ import path from 'node:path';
  * pipeline where they belong. The root vitest config no longer sweeps `apps/web`, so every
  * spec runs exactly once rather than in both pipelines.
  *
- * `environment: 'node'`: nothing here renders a component. These are pure modules —
- * the CSRF policy, the session fetch wrapper, the proxy — exercised against the
- * web-standard `Request`/`Response`/`Headers` that Node provides natively. A jsdom
- * environment would be slower and would misrepresent the Workers runtime the proxy
- * actually runs in. Add jsdom (and a setup file) when the first component test lands.
+ * `environment: 'node'` is still the DEFAULT, and deliberately: the CSRF policy, the session
+ * fetch wrapper and the Pages Function proxy are pure modules exercised against the web-standard
+ * `Request`/`Response`/`Headers` Node provides natively, and jsdom would be slower while
+ * misrepresenting the Workers runtime the proxy actually runs in.
+ *
+ * The first component tests have now landed. They opt into jsdom with a per-file
+ * `// @vitest-environment jsdom` pragma rather than a config glob, because Vitest 4 REMOVED
+ * `environmentMatchGlobs` — a config written against it is silently ignored, which shows up as
+ * `document is not defined` in a spec the config claims to have given a DOM. Switching the whole
+ * project to jsdom would have been one line and the wrong one: it would run the Workers proxy specs
+ * in a fake browser.
  */
 export default defineConfig({
   resolve: {
@@ -25,6 +31,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'functions/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
     coverage: {
@@ -36,16 +43,20 @@ export default defineConfig({
       include: [
         'src/shared/api/csrf.ts',
         'src/shared/api/session-fetch.ts',
+        'src/shared/hooks/use-list-state.ts',
+        'src/shared/ui/data-table.tsx',
+        'src/shared/ui/pagination-footer.tsx',
         'functions/_lib/**/*.ts',
       ],
       exclude: ['**/*.spec.ts', '**/*.test.ts'],
-      // Measured at 100/100/100/100 on those three files. Floors sit just under, so a
-      // regression fails rather than merely dipping. Raise, never lower.
+      // Measured at 100 statements / 98.73 branches / 100 functions / 100 lines across the six
+      // files above. Floors sit just under, so a regression fails rather than merely dipping.
+      // Raise, never lower.
       thresholds: {
-        lines: 95,
-        functions: 95,
-        branches: 90,
-        statements: 95,
+        lines: 99,
+        functions: 99,
+        branches: 96,
+        statements: 99,
       },
     },
   },

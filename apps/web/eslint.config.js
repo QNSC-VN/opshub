@@ -5,7 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'src/shared/api/generated'] },
+  // `coverage` is the v8 reporter's own HTML output — third-party scripts with their own stale
+  // eslint directives, which surface as warnings and fail `--max-warnings 0` the moment somebody
+  // runs the coverage script before the lint one.
+  { ignores: ['dist', 'coverage', 'src/shared/api/generated'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
