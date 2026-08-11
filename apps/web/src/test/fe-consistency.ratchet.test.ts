@@ -32,9 +32,9 @@ import { describe, expect, it } from 'vitest';
 // ── Baselines — LOWER as the migration proceeds, NEVER raise ───────────────────
 //
 // `<button>` has a destination: shared/ui/button.tsx. 149 → 105 (access, compliance, workforce) →
-// 93 (people) → 78 (rbac). Re-measured each time the way this file's docblock demands: force the
-// constant to -1 and read the count the failure reports.
-const MAX_RAW_BUTTON = 78;
+// 93 (people) → 78 (rbac) → 72 (finops). Re-measured each time the way this file's docblock demands:
+// force the constant to -1 and read the count the failure reports.
+const MAX_RAW_BUTTON = 72;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -51,10 +51,12 @@ const MAX_ARBITRARY_TEXT = 26;
 // check refused it, correctly: four forms, four tables and four drawers in one file is four screens
 // sharing a filename. It is now six modules, the largest 343 lines.
 //
-// 1082 → 907 → 818 → 725: people-page.tsx, settings/rbac-page.tsx and dashboard-page.tsx were each
-// the file this number described, and each is now a folder of modules (their page shells are 315, 51
-// and 86 lines). The ceiling now describes `finops-page.tsx`, the next one to decompose.
-const MAX_FILE_LINES = 725;
+// 1082 → 907 → 818 → 725 → 499. Each number in turn described the largest hand-written screen, and
+// each of those screens is now a folder of modules: people (315-line shell), settings/rbac (51),
+// dashboard (86), finops (209). At 499 the ceiling describes `security-posture-page.tsx`, and the
+// remaining screens are close enough to it that the next conversion may not move it much — which is
+// the point of a ceiling rather than a target.
+const MAX_FILE_LINES = 499;
 
 /**
  * Hand-rolled modal overlays — a `fixed inset-0 z-50` backdrop built inline instead of using
@@ -70,9 +72,10 @@ const MAX_FILE_LINES = 725;
  *
  * 11 → 8: access, compliance and workforce (which held FOUR of them) now use `Modal`, so those
  * dialogs are announced as dialogs, trap focus and close on Escape. People was already on `Modal` for
- * two of its three, so that conversion did not move the number; rbac's three took it to 7.
+ * two of its three, so that conversion did not move the number; rbac's three took it to 7, and
+ * finops' one to 6.
  */
-const MAX_HANDROLLED_MODAL = 7;
+const MAX_HANDROLLED_MODAL = 6;
 
 // this file lives in src/test/
 const SRC = join(import.meta.dirname, '../');

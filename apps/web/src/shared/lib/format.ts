@@ -108,3 +108,25 @@ export function formatDecimal(
 export function orDash<T>(value: T | null | undefined): T | string {
   return value === null || value === undefined || value === '' ? EM_DASH : value;
 }
+
+/**
+ * Money held in CENTS, as the API stores it.
+ *
+ * Integer cents in the database and a formatted string at the edge — never a float in between, which
+ * is the whole reason the column is an integer. The finops screen had its own `centsToDollars` with a
+ * hard-coded `$`; the currency is a parameter here so a second currency does not need a second
+ * function.
+ *
+ * Under the shared `en-GB` locale this prints `US$12.50` rather than `$12.50`, and that is the point:
+ * a product used across countries should not leave a bare dollar sign to mean whichever dollar the
+ * reader assumes. Same reasoning as the date format.
+ */
+export function formatMoney(cents: number | null | undefined, currency = 'USD'): string {
+  if (cents === null || cents === undefined || Number.isNaN(cents)) return EM_DASH;
+  return new Intl.NumberFormat(LOCALE, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
