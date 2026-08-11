@@ -132,10 +132,14 @@ export async function expectRowSomewhere(page: Page, text: string): Promise<void
     if (!(await next.isVisible().catch(() => false)) || (await next.isDisabled())) break;
     await next.click();
   }
+  // 15s, the same budget as every other "wait for a list to arrive" in this harness. 5s was enough
+  // locally and not in CI, where a reload plus a tab click plus a fetch shared one budget — the leave
+  // spec failed on it once and passed on retry, which is the signature of a timeout rather than a
+  // missing row.
   await expect(
     page.getByText(text).first(),
     `"${text}" was not on any page of the list`,
-  ).toBeVisible({ timeout: 5_000 });
+  ).toBeVisible({ timeout: 15_000 });
 }
 
 /**

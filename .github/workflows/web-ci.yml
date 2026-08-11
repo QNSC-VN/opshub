@@ -65,6 +65,25 @@ jobs:
           --health-timeout 3s
           --health-retries 5
 
+      # OBJECT STORAGE, because without it this job could not see uploads at all.
+      #
+      # `StorageService` stubs every presign when `S3_FILES_BUCKET` is unset, so the upload specs
+      # answered 500 here while passing locally — and that blind spot is exactly how THREE dead
+      # upload paths reached main: a missing CSRF header, a CORS allow-list that refused a header the
+      # presign signs, and a replacement lookup by key through a by-id finder. None of them are
+      # visible without a bucket to PUT to.
+      localstack:
+        image: localstack/localstack:3
+        env:
+          SERVICES: s3
+          DEBUG: '0'
+        ports: ['4566:4566']
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
     env:
       # Authenticates pnpm against GitHub Packages for @qnsc-vn/* (see .npmrc).
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,6 +111,16 @@ jobs:
       NODE_ENV: test
       LOG_LEVEL: warn
       OTEL_ENABLED: 'false'
+      # Object storage points at LocalStack. `STORAGE_ENDPOINT` and not `AWS_ENDPOINT_URL`:
+      # StorageService selects its backend separately, because in production the bucket may live in
+      # Cloudflare R2 under different credentials. Path-style addressing, which LocalStack and R2 both
+      # require — virtual-host style resolves a bucket subdomain that does not exist here.
+      AWS_REGION: ap-southeast-1
+      S3_FILES_BUCKET: opshub-files-ci
+      STORAGE_ENDPOINT: http://localhost:4566
+      STORAGE_ACCESS_KEY_ID: test
+      STORAGE_SECRET_ACCESS_KEY: test
+      STORAGE_FORCE_PATH_STYLE: 'true'
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -132,6 +161,33 @@ jobs:
         run: pnpm db:migrate
         env:
           SEED_ON_DEPLOY: 'true'
+
+      # The bucket AND its CORS rules. The rules are not optional decoration: the browser PUTs
+      # straight to the presigned URL, and `presignUpload` signs `content-disposition` as well as
+      # `content-type`, so a preflight that allows only Content-Type refuses every upload with an
+      # opaque `net::ERR_FAILED`. Mirrors scripts/localstack/01-bootstrap.sh and the app-bucket
+      # module's `cors_rules`; the origin is the Vite dev server Playwright starts.
+      - name: Create the CI bucket
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: ap-southeast-1
+        run: |
+          aws --endpoint-url http://localhost:4566 s3api create-bucket \
+            --bucket opshub-files-ci \
+            --region ap-southeast-1 \
+            --create-bucket-configuration LocationConstraint=ap-southeast-1
+          aws --endpoint-url http://localhost:4566 s3api put-bucket-cors \
+            --bucket opshub-files-ci \
+            --cors-configuration '{
+              "CORSRules": [{
+                "AllowedMethods": ["PUT", "GET", "HEAD"],
+                "AllowedOrigins": ["http://localhost:5173"],
+                "AllowedHeaders": ["Content-Type", "Content-Disposition"],
+                "ExposeHeaders": ["ETag"],
+                "MaxAgeSeconds": 3600
+              }]
+            }'
 
       - name: Build API
         run: pnpm build:api
