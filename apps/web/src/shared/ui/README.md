@@ -64,12 +64,19 @@ Helpers live in their own module, not beside components: eslint's
 
 ## Conversion status
 
-Converted: `compliance`, `access`, `workforce`.
-Still hand-rolled (tables, dialogs, filters): `assets`, `people`, `requests`, `catalog`, `finops`,
-`profile`, `settings/rbac`, `settings/webhooks`, `settings/audit-logs`, `dashboard`,
-`security-posture`, `reports`.
+Converted: `compliance`, `access`, `workforce`, `people`.
+Still hand-rolled (tables, dialogs, filters): `assets`, `requests`, `catalog`, `finops`, `profile`,
+`settings/rbac`, `settings/webhooks`, `settings/audit-logs`, `dashboard`, `security-posture`,
+`reports`.
 
-Ratchet baselines move with each conversion — raw `<button>` 149 → 105, hand-rolled modal files
-11 → 8. Lower them by converting, never by editing the number.
+Ratchet baselines move with each conversion — raw `<button>` 149 → 105 → 93, hand-rolled modal files
+11 → 8, largest file 1082 → 907, arbitrary `text-[…]` 29 → 27. Lower them by converting, never by
+editing the number.
+
+**A selectable card is a real `<input>`.** The people wizard's device cards and access list were
+`<button>`s with a colour for "selected" — no group, no checked state, nothing announced. They are
+now `sr-only` radio/checkbox inputs inside styled labels, so the platform supplies the semantics and
+the keyboard while the card keeps its look. In a test, click the LABEL: an `sr-only` input has no
+clickable box and Playwright's `check()` waits forever for one.
 
 Convert a screen when you touch it, and keep this list honest.
