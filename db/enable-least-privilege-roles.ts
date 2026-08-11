@@ -110,70 +110,169 @@ const FORBIDDEN_ATTRIBUTES = [
 const PROBE_SCHEMA = 'workforce';
 
 /**
- * Application schemas whose every table the runtime roles must be able to read and
- * write. Kept in step with the `app_schemas` array in migration 0012 — if the two
- * disagree, {@link assertEveryTableReachable} reports the tables the migration missed.
+ * Schemas the runtime roles have no business in, so every OTHER schema is an application
+ * schema.
+ *
+ * DERIVED RATHER THAN LISTED, and that is the point. This check used to hold its own copy
+ * of migration 0012's `app_schemas`, which meant a schema created by a LATER migration was
+ * invisible to it: six of them had accumulated (`contracts`, `documents`, `isms`,
+ * `positions`, `qms`, `training`) and none were being verified — the exact hole the check
+ * exists to close, reopened by the list going stale. A blacklist cannot go stale in that
+ * direction: a new schema is covered the moment it is created, and nobody has to remember
+ * anything.
+ *
+ * `drizzle` holds the migration bookkeeping and belongs to the migrator alone — the app
+ * having no privilege on it is CORRECT, not a gap. `public` holds no application tables.
  */
-const APP_SCHEMAS = [
-  'identity',
-  'authz',
-  'access',
-  'assets',
-  'audit',
-  'catalog',
-  'compliance',
-  'licenses',
-  'messaging',
-  'notifications',
-  'requests',
-  'security_posture',
-  'storage',
-  'workforce',
-] as const;
-
-const DML_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] as const;
+const NON_APP_SCHEMAS = ['drizzle', 'public', 'information_schema'] as const;
 
 /**
- * Assert the role can perform all four DML operations on EVERY table in the
- * application schemas.
+ * Tables the runtime roles are deliberately NOT allowed to write, and why.
+ *
+ * Two kinds, both restricted by REVOKE in the migration that created them (a narrower GRANT
+ * changes nothing — see migration 0022):
+ *
+ *   REFERENCE DATA, seeded by migration and changed only by another one. A classification
+ *   scheme or an accrual policy is reviewed, not typed in by whoever holds the manage
+ *   permission.
+ *
+ *   APPEND-ONLY history, where the row IS the evidence. An UPDATE privilege on a table whose
+ *   purpose is to record what happened is a privilege to rewrite the record.
+ *
+ * VERIFIED IN BOTH DIRECTIONS by {@link assertPrivilegesAreExactlyAsDeclared}: a listed
+ * privilege must really be denied, so this cannot decay into a list of excuses for grants
+ * that were quietly restored, and an unlisted one must be held.
+ */
+const RESTRICTED_TABLES: { table: string; denied: readonly Privilege[]; why: string }[] = [
+  {
+    table: 'isms.classification_levels',
+    denied: ['INSERT', 'UPDATE', 'DELETE'],
+    why: 'reference data: the classification scheme itself',
+  },
+  {
+    table: 'isms.vendor_criticality_levels',
+    denied: ['INSERT', 'UPDATE', 'DELETE'],
+    why: 'reference data: the vendor criticality tiers',
+  },
+  {
+    table: 'qms.nonconformance_severities',
+    denied: ['INSERT', 'UPDATE', 'DELETE'],
+    why: 'reference data: the severity scale and its response times',
+  },
+  {
+    table: 'workforce.leave_policies',
+    denied: ['INSERT', 'UPDATE', 'DELETE'],
+    why: 'reference data: accrual method and carry-over caps are policy',
+  },
+  {
+    table: 'isms.asset_classification_history',
+    denied: ['UPDATE', 'DELETE'],
+    why: 'append-only: the record of every classification an asset has held',
+  },
+  {
+    table: 'isms.incident_events',
+    denied: ['UPDATE', 'DELETE'],
+    why: 'append-only: the incident timeline',
+  },
+  {
+    table: 'isms.vendor_assessments',
+    denied: ['UPDATE', 'DELETE'],
+    why: 'append-only: each assessment is a dated judgement, superseded and not edited',
+  },
+];
+
+const DML_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] as const;
+type Privilege = (typeof DML_PRIVILEGES)[number];
+
+/**
+ * Assert the role holds EXACTLY the privileges it is meant to: everything on every
+ * application table, minus the writes {@link RESTRICTED_TABLES} says it must not have.
  *
  * The DDL probe below samples one table; this is exhaustive, and it is the check that
- * actually protects the cutover. A table the migration's grants missed — one added by a
- * later migration in a schema nobody remembered to add to `app_schemas`, say — is
- * invisible until a request touches it, and then it is a 500 in production on a code
- * path that has nothing obviously to do with a database migration. Running the e2e
- * suite as this role catches only the tables the suite happens to touch.
+ * actually protects the cutover. A table nobody granted — one added by a later migration in
+ * a schema created after 0012, say — is invisible until a request touches it, and then it is
+ * a 500 in production on a code path that has nothing obviously to do with a database
+ * migration. Running the e2e suite as this role catches only the tables the suite happens to
+ * touch.
  *
- * `has_table_privilege` resolves inherited grants and role membership, so this answers
- * the real question — can this role do it — rather than inspecting grant rows.
+ * BOTH DIRECTIONS MATTER. A missing privilege breaks a feature loudly; an EXTRA one breaks
+ * an invariant silently, and a reference table or an append-only history that quietly became
+ * writable is exactly the failure this repo keeps finding — a restriction that was declared
+ * and never enforced. So a privilege listed as denied must really be denied, and a table
+ * listed here that no longer exists is an error too, because a stale entry is an exemption
+ * nobody is checking.
+ *
+ * `has_table_privilege` resolves inherited grants and role membership, so this answers the
+ * real question — can this role do it — rather than inspecting grant rows.
  */
-async function assertEveryTableReachable(admin: Client, role: string): Promise<void> {
-  const { rows } = await admin.query<{ tbl: string; missing: string }>(
+async function assertPrivilegesAreExactlyAsDeclared(admin: Client, role: string): Promise<void> {
+  const { rows } = await admin.query<{ tbl: string; priv: Privilege; held: boolean }>(
     `SELECT t.table_schema || '.' || t.table_name AS tbl,
-            string_agg(p.priv, ', ' ORDER BY p.priv) AS missing
+            p.priv,
+            has_table_privilege($1, t.table_schema || '.' || t.table_name, p.priv) AS held
        FROM information_schema.tables t
        CROSS JOIN unnest($2::text[]) AS p(priv)
       WHERE t.table_type = 'BASE TABLE'
-        AND t.table_schema = ANY($3::text[])
-        AND NOT has_table_privilege($1, t.table_schema || '.' || t.table_name, p.priv)
-      GROUP BY 1
-      ORDER BY 1`,
-    [role, [...DML_PRIVILEGES], [...APP_SCHEMAS]],
+        AND t.table_schema <> ALL($3::text[])
+        AND t.table_schema NOT LIKE 'pg\\_%'
+      ORDER BY 1, 2`,
+    [role, [...DML_PRIVILEGES], [...NON_APP_SCHEMAS]],
   );
 
-  if (rows.length > 0) {
-    throw new Error(
-      `${role} is missing privileges on ${rows.length} table(s), so it would fail at ` +
+  const restricted = new Map(RESTRICTED_TABLES.map((r) => [r.table, r]));
+  const seen = new Set<string>();
+  const missing = new Map<string, Privilege[]>();
+  const unexpected = new Map<string, Privilege[]>();
+
+  for (const row of rows) {
+    seen.add(row.tbl);
+    const shouldBeDenied = restricted.get(row.tbl)?.denied.includes(row.priv) ?? false;
+    if (shouldBeDenied === row.held) {
+      const into = row.held ? unexpected : missing;
+      into.set(row.tbl, [...(into.get(row.tbl) ?? []), row.priv]);
+    }
+  }
+
+  const problems: string[] = [];
+  if (missing.size > 0) {
+    problems.push(
+      `${role} is missing privileges on ${missing.size} table(s), so it would fail at ` +
         `runtime on any request touching them:\n` +
-        rows.map((r) => `    ${r.tbl} — missing ${r.missing}`).join('\n') +
-        `\n\nAdd the schema to app_schemas in ` +
-        `db/migrations/0012_app_role_least_privilege.sql (and to APP_SCHEMAS here), or ` +
-        `grant the table explicitly in the migration that created it.`,
+        [...missing].map(([tbl, ps]) => `    ${tbl} — missing ${ps.join(', ')}`).join('\n') +
+        `\n  Grant the table in the migration that created it, the way every schema added ` +
+        `after 0012 does.`,
+    );
+  }
+  if (unexpected.size > 0) {
+    problems.push(
+      `${role} holds privileges that RESTRICTED_TABLES says it must not, so a restriction ` +
+        `this repo declared is not being enforced:\n` +
+        [...unexpected]
+          .map(
+            ([tbl, ps]) =>
+              `    ${tbl} — holds ${ps.join(', ')} (${restricted.get(tbl)?.why ?? 'unknown'})`,
+          )
+          .join('\n') +
+        `\n  Either the REVOKE is missing from a migration, or a later migration re-granted ` +
+        `it — ALTER DEFAULT PRIVILEGES re-attaches writes at CREATE TABLE.`,
+    );
+  }
+  const vanished = RESTRICTED_TABLES.filter((r) => !seen.has(r.table)).map((r) => r.table);
+  if (vanished.length > 0) {
+    problems.push(
+      `RESTRICTED_TABLES names ${vanished.length} table(s) that no longer exist, and a stale ` +
+        `exemption is one nobody is checking:\n` +
+        vanished.map((t) => `    ${t}`).join('\n') +
+        `\n  Remove the entry, or fix the name.`,
     );
   }
 
+  if (problems.length > 0) throw new Error(problems.join('\n\n'));
+
+  const tables = seen.size;
   console.log(
-    `    ${role}: all four DML privileges on every table in ${APP_SCHEMAS.length} schemas.`,
+    `    ${role}: all four DML privileges on ${tables} tables, ` +
+      `minus the declared restrictions on ${RESTRICTED_TABLES.length} of them.`,
   );
 }
 
@@ -263,7 +362,7 @@ async function enableRole(
     );
   }
 
-  await assertEveryTableReachable(admin, role);
+  await assertPrivilegesAreExactlyAsDeclared(admin, role);
 
   // Two probes as the role itself. The positive one matters as much as the negative:
   // a role that cannot run DDL *because it cannot do anything* would pass the check
