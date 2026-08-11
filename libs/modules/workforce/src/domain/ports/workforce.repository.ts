@@ -15,6 +15,7 @@ import type {
   TimesheetFilters,
   TimesheetStatus,
 } from '../workforce.types';
+import type { LeaveWindow } from '../leave-window';
 
 export const WORKFORCE_REPOSITORY = Symbol('WORKFORCE_REPOSITORY');
 
@@ -50,11 +51,20 @@ export interface IWorkforceRepository {
   setLeaveRequestId(id: string, requestId: string): Promise<void>;
   /** Update the S3 object key for the leave supporting document. Pass null to clear. */
   updateLeaveDocument(id: string, documentStorageKey: string | null): Promise<void>;
-  hasOverlappingLeave(
+  /**
+   * Live requests whose DATE RANGE touches this one — candidates for an overlap, not a verdict.
+   *
+   * The range test cannot produce a false negative, so it is the right thing to push into SQL
+   * where an index serves it. It CAN produce a false positive now that leave is part-day: a
+   * morning and an afternoon on the same date share a range and no time. `leaveWindowsOverlap`
+   * decides the rows this returns, which keeps the portion vocabulary interpreted in exactly one
+   * place.
+   */
+  overlappingLeaveCandidates(
     employeeId: string,
     startDate: string,
     endDate: string,
-  ): Promise<boolean>;
+  ): Promise<LeaveWindow[]>;
 
   // Overtime
   createOvertime(input: CreateOvertimeInput): Promise<OvertimeEntry>;

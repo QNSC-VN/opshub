@@ -35,6 +35,11 @@ import type {
   Timesheet,
   TimesheetFilters,
 } from '../domain/workforce.types';
+import {
+  leaveWindowViolation,
+  leaveWindowsOverlap,
+  type LeaveWindow,
+} from '../domain/leave-window';
 import type { LeaveRequestPayload } from './leave-request.type-def';
 import type { OvertimePayload } from './overtime.type-def';
 import type { OnboardingPayload } from './onboarding.type-def';
@@ -176,24 +181,43 @@ export class WorkforceService {
     input: Omit<CreateLeaveInput, 'employeeId'>,
     actor: Actor,
   ): Promise<LeaveRequest> {
-    if (input.startDate > input.endDate) {
-      throw new PreconditionFailedException(
-        ErrorCodes.PRECONDITION_FAILED,
-        'startDate must be on or before endDate',
-      );
+    // The window, portions included. `full_day` at both ends unless asked otherwise, so a caller
+    // that says nothing about portions books whole days exactly as it did before migration 0028.
+    const window: LeaveWindow = {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      startPortion: input.startPortion ?? 'full_day',
+      endPortion: input.endPortion ?? 'full_day',
+    };
+
+    // Every one of these is also a CHECK on the table. Restated here because a raw constraint
+    // violation reaches the caller as a 500 with no code, and "morning to afternoon" is a mistake
+    // somebody will make — it reads like a whole day, and the whole day is what `full_day` is for.
+    const violation = leaveWindowViolation(window);
+    if (violation) {
+      throw new PreconditionFailedException(ErrorCodes.LEAVE_INVALID_WINDOW, violation);
     }
-    const overlaps = await this.repo.hasOverlappingLeave(actor.sub, input.startDate, input.endDate);
-    if (overlaps) {
+
+    // The date-range test finds the CANDIDATES in SQL; the portions decide. A morning off and an
+    // afternoon off on the same date share a date and no time, so refusing the second would be
+    // refusing leave the employee can see is free.
+    const candidates = await this.repo.overlappingLeaveCandidates(
+      actor.sub,
+      input.startDate,
+      input.endDate,
+    );
+    if (candidates.some((existing) => leaveWindowsOverlap(window, existing))) {
       throw new ConflictException(
         ErrorCodes.LEAVE_OVERLAPPING,
-        'You already have a leave request overlapping these dates',
+        'You already have a leave request covering part of that window',
       );
     }
 
-    // What this request COSTS, with weekends and public holidays excluded — computed once here and
-    // stored on the row, never recomputed. The holiday calendar is editable, so a later addition
-    // inside a window someone already took would otherwise restate what their approved leave cost.
-    const workingDays = await this.balances.workingDaysFor(input.startDate, input.endDate);
+    // What this request COSTS, with weekends, public holidays and part-day ends applied — computed
+    // once here and stored on the row, never recomputed. The holiday calendar is editable, so a
+    // later addition inside a window someone already took would otherwise restate what their
+    // approved leave cost.
+    const workingDays = await this.balances.leaveCostFor(window);
 
     // Refuse before creating anything. A leave type with no entitlement row is untracked and
     // passes; a window of nothing but weekends is refused as a mistaken date range.
@@ -209,7 +233,12 @@ export class WorkforceService {
     );
 
     // Create domain row first, then submit to engine
-    const leave = await this.repo.createLeave({ ...input, employeeId: actor.sub, workingDays });
+    const leave = await this.repo.createLeave({
+      ...input,
+      ...window,
+      employeeId: actor.sub,
+      workingDays,
+    });
 
     const enginePayload: LeaveRequestPayload = {
       leaveRequestId: leave.id,
@@ -217,6 +246,11 @@ export class WorkforceService {
       leaveType: leave.leaveType,
       startDate: leave.startDate,
       endDate: leave.endDate,
+      startPortion: leave.startPortion,
+      endPortion: leave.endPortion,
+      // The cost travels with the request so an approver sees what they are approving: "2 days"
+      // and "2 days minus an afternoon" are the same dates and a different decision.
+      workingDays,
       reason: leave.reason,
     };
     const engineItem = await this.engine.submit('leave_request', enginePayload, actor, {
@@ -235,6 +269,9 @@ export class WorkforceService {
         leaveType: leave.leaveType,
         startDate: leave.startDate,
         endDate: leave.endDate,
+        startPortion: leave.startPortion,
+        endPortion: leave.endPortion,
+        workingDays,
         engineRequestId: engineItem.id,
       },
     });

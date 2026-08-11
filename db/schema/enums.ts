@@ -579,3 +579,21 @@ export const leaveAccrualMethodEnum = pgEnum('leave_accrual_method', [
   'annual_grant',
   'monthly_accrual',
 ]);
+
+/**
+ * Which part of a day a leave window's boundary falls on — see migration 0028.
+ *
+ * A window runs from `start_date` at `start_portion` to `end_date` at `end_portion`, so a lone
+ * afternoon costs half a day and leave from Wednesday afternoon to Friday morning costs two.
+ * `full_day` is the default, which is what makes part-day leave additive rather than a change to
+ * every request that came before it.
+ *
+ * Half days and not hours: the entitlement is denominated in DAYS throughout, and OpsHub has no
+ * hours-per-day figure anywhere to convert with — no organisation settings, no contract hours — so
+ * an hours column would put a second, unowned unit inside the balance arithmetic.
+ */
+export const leaveDayPortionEnum = pgEnum('leave_day_portion', [
+  'full_day',
+  'morning',
+  'afternoon',
+]);

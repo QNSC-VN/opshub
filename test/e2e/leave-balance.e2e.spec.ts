@@ -88,12 +88,21 @@ async function submitLeave(
   start: string,
   end: string,
   leaveType = 'annual',
+  portions: { startPortion?: string; endPortion?: string } = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await app.inject({
     method: 'POST',
     url: '/v1/workforce/leave',
     headers: bearer(session),
-    payload: { leaveType, startDate: start, endDate: end, reason: `e2e ${start}` },
+    payload: {
+      leaveType,
+      startDate: start,
+      endDate: end,
+      reason: `e2e ${start}`,
+      // Spread rather than defaulted to 'full_day': a request that says NOTHING about portions has
+      // to keep working, and that is what most of this suite sends.
+      ...portions,
+    },
   });
   return { status: res.statusCode, body: JSON.parse(res.body) as Record<string, unknown> };
 }
@@ -224,6 +233,169 @@ describe('leave entitlement and balances', () => {
     expect(body.workingDays).toBe(5);
     // And it does not appear as a balance, because there is no allowance to report.
     expect((await balances(employee)).map((b) => b.leaveType)).not.toContain('unpaid');
+  });
+});
+
+describe('part-day leave', () => {
+  /**
+   * November's first Monday, the week these windows are laid out from.
+   *
+   * The earlier "cannot afford" test also names this Monday, but it is REFUSED, so it leaves no row
+   * to collide with. Every offset below is a multiple of 7 (plus 2 for the Wednesday case), so each
+   * window lands on the weekday its assertion assumes whatever `YEAR` resolves to.
+   */
+  const week = mondayIn(11);
+
+  beforeAll(async () => {
+    // Raise the allowance: the earlier tests deliberately consumed nearly all of 10 days, and these
+    // windows total nine. Set AFTER those assertions have run, which is why it is here and not in
+    // the file's own beforeAll.
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/v1/workforce/leave/entitlement',
+      headers: bearer(hr),
+      payload: {
+        employeeId: FIXTURE.NO_PERMISSIONS.id,
+        leaveType: 'annual',
+        year: YEAR,
+        grantedDays: 60,
+      },
+    });
+    expect(res.statusCode, res.body).toBe(204);
+  });
+
+  it('charges half a day for a lone afternoon, and reports the portions back', async () => {
+    const res = await submitLeave(employee, week, week, 'annual', {
+      startPortion: 'afternoon',
+      endPortion: 'afternoon',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body).toMatchObject({
+      startPortion: 'afternoon',
+      endPortion: 'afternoon',
+      workingDays: 0.5,
+    });
+  });
+
+  it('lets the morning of that same day be booked separately', async () => {
+    // A MORNING AND AN AFTERNOON ON THE SAME DATE DO NOT OVERLAP. The date-range test alone would
+    // refuse this, and refusing leave the employee can see is free is worse than no check.
+    const res = await submitLeave(employee, week, week, 'annual', {
+      startPortion: 'morning',
+      endPortion: 'morning',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body).toMatchObject({ workingDays: 0.5 });
+  });
+
+  it('refuses a third request for a half already taken', async () => {
+    const res = await submitLeave(employee, week, week, 'annual', {
+      startPortion: 'morning',
+      endPortion: 'morning',
+    });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: { code: 'LEAVE_OVERLAPPING' } });
+  });
+
+  it('charges two days for Wednesday afternoon through Friday morning', async () => {
+    // Half of Wednesday, all of Thursday, half of Friday.
+    const wednesday = plusDays(week, 9);
+    const res = await submitLeave(employee, wednesday, plusDays(wednesday, 2), 'annual', {
+      startPortion: 'afternoon',
+      endPortion: 'morning',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body).toMatchObject({ workingDays: 2 });
+  });
+
+  it('lets the next window begin in the afternoon the previous one ended at midday', async () => {
+    // Touching, not overlapping: Monday to Wednesday morning, then Wednesday afternoon onward.
+    const monday = plusDays(week, 21);
+    const wednesday = plusDays(monday, 2);
+    const first = await submitLeave(employee, monday, wednesday, 'annual', {
+      endPortion: 'morning',
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    expect(first.body).toMatchObject({ workingDays: 2.5 });
+
+    const second = await submitLeave(employee, wednesday, plusDays(wednesday, 1), 'annual', {
+      startPortion: 'afternoon',
+    });
+    expect(second.status, JSON.stringify(second.body)).toBe(201);
+    expect(second.body).toMatchObject({ workingDays: 1.5 });
+  });
+
+  it('moves the balance by exactly half a day', async () => {
+    // `numeric(5,2)` throughout, so a balance made of halves is exact rather than rounded — the
+    // reason part-day leave needed no new column at all.
+    //
+    // Measured as a DELTA around one booking rather than asserted against the running total: the
+    // total is whatever the tests before it consumed, and two halves that happen to pair into a
+    // whole would make an assertion about its fractional part pass or fail by accident.
+    const before = (await balances(employee)).find((b) => b.leaveType === 'annual')!;
+
+    const day = mondayIn(3);
+    const res = await submitLeave(employee, day, day, 'annual', {
+      startPortion: 'morning',
+      endPortion: 'morning',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const after = (await balances(employee)).find((b) => b.leaveType === 'annual')!;
+    expect(after.consumedDays - before.consumedDays).toBe(0.5);
+    expect(before.availableDays - after.availableDays).toBe(0.5);
+  });
+
+  it('refuses morning-to-afternoon, because that is what full_day is for', async () => {
+    const day = plusDays(week, 28);
+    const res = await submitLeave(employee, day, day, 'annual', {
+      startPortion: 'morning',
+      endPortion: 'afternoon',
+    });
+    expect(res.status).toBe(412);
+    expect(res.body).toMatchObject({ error: { code: 'LEAVE_INVALID_WINDOW' } });
+  });
+
+  it('refuses a multi-day window starting with a lone morning', async () => {
+    const day = plusDays(week, 35);
+    const res = await submitLeave(employee, day, plusDays(day, 2), 'annual', {
+      startPortion: 'morning',
+    });
+    expect(res.status).toBe(412);
+    expect(res.body).toMatchObject({ error: { code: 'LEAVE_INVALID_WINDOW' } });
+  });
+
+  it('refuses a multi-day window ending with a lone afternoon', async () => {
+    const day = plusDays(week, 42);
+    const res = await submitLeave(employee, day, plusDays(day, 2), 'annual', {
+      endPortion: 'afternoon',
+    });
+    expect(res.status).toBe(412);
+    expect(res.body).toMatchObject({ error: { code: 'LEAVE_INVALID_WINDOW' } });
+  });
+
+  it('refuses an afternoon that falls on a weekend, because it costs nothing', async () => {
+    // Reaches the existing zero-cost refusal rather than a part-day rule: the day it is half of
+    // costs nothing, so the half costs nothing.
+    const saturday = plusDays(week, 47);
+    const res = await submitLeave(employee, saturday, saturday, 'annual', {
+      startPortion: 'afternoon',
+      endPortion: 'afternoon',
+    });
+    expect(res.status).toBe(412);
+    expect(res.body).toMatchObject({ error: { code: 'LEAVE_NO_WORKING_DAYS' } });
+  });
+
+  it('books whole days when the caller says nothing about portions', async () => {
+    // The compatibility promise: every request in the rest of this suite is one of these.
+    const monday = plusDays(week, 49);
+    const res = await submitLeave(employee, monday, plusDays(monday, 1));
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body).toMatchObject({
+      startPortion: 'full_day',
+      endPortion: 'full_day',
+      workingDays: 2,
+    });
   });
 });
 

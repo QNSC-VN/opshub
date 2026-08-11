@@ -15,7 +15,7 @@ import {
   leaveRequests,
   leaveTypeEnum,
 } from '../../../../../db/schema';
-import { countWorkingDays } from '../domain/working-days';
+import { leaveWindowCost, type LeaveWindow } from '../domain/leave-window';
 import {
   accruedDays,
   carriedOverStillAvailable,
@@ -173,13 +173,16 @@ export class LeaveBalanceService {
   }
 
   /**
-   * Working days a window costs, with the holiday calendar applied.
+   * What a window costs in days, with the holiday calendar applied.
    *
    * The single place leave cost is computed, so the stored `working_days` on a request and the
-   * `consumedDays` in a balance can never disagree about what a day off means.
+   * `consumedDays` in a balance can never disagree about what a day off means. Takes the whole
+   * window rather than two dates so a part-day request cannot reach the cost rule with its portions
+   * dropped on the way — which would silently charge a full day for an afternoon.
    */
-  async workingDaysFor(start: string, end: string, tx?: DbExecutor): Promise<number> {
-    return countWorkingDays(start, end, await this.holidaysBetween(start, end, tx));
+  async leaveCostFor(window: LeaveWindow, tx?: DbExecutor): Promise<number> {
+    const holidays = await this.holidaysBetween(window.startDate, window.endDate, tx);
+    return leaveWindowCost(window, holidays);
   }
 
   /**

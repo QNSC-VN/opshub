@@ -92,6 +92,8 @@ function toLeaveDto(l: LeaveRequest): LeaveResponseDto {
     leaveType: l.leaveType,
     startDate: l.startDate,
     endDate: l.endDate,
+    startPortion: l.startPortion,
+    endPortion: l.endPortion,
     reason: l.reason,
     // numeric(5,2) arrives from the driver as a string; the API contract is a number.
     workingDays:
@@ -255,7 +257,17 @@ export class WorkforceController {
 
   @Post('leave')
   @SelfScoped('files leave FOR the caller — employeeId is actor.sub')
-  @ApiOperation({ summary: 'Request leave for the current user' })
+  @ApiOperation({
+    summary: 'Request leave for the current user',
+    description:
+      'Whole days by default. For part-day leave set `startPortion` / `endPortion`: a lone ' +
+      '`morning` or `afternoon` on a single day costs 0.5, and a window may begin in the ' +
+      '`afternoon` and end with a `morning` — Wednesday afternoon to Friday morning is 2 days. ' +
+      'A whole day is `full_day`, never morning-to-afternoon, and a multi-day window cannot ' +
+      'start with a lone morning or end with a lone afternoon (412 `LEAVE_INVALID_WINDOW`). ' +
+      'A part-day end falling on a weekend or public holiday costs nothing, because the day it ' +
+      'is half of costs nothing. Two requests sharing a date but not a half-day do NOT conflict.',
+  })
   @ApiCommonErrors(401, 409, 412, 422)
   async createLeave(
     @Body() dto: CreateLeaveDto,

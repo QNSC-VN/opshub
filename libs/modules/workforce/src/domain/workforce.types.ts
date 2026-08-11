@@ -1,5 +1,6 @@
 import type {
   leaveAccrualMethodEnum,
+  leaveDayPortionEnum,
   leaveStatusEnum,
   leaveTypeEnum,
   overtimeStatusEnum,
@@ -12,6 +13,8 @@ export type LeaveType = (typeof leaveTypeEnum.enumValues)[number];
 /** How a year's granted days become available — see `workforce.leave_policies`. */
 export type LeaveAccrualMethod = (typeof leaveAccrualMethodEnum.enumValues)[number];
 export type LeaveStatus = (typeof leaveStatusEnum.enumValues)[number];
+/** Which part of a day a leave window's boundary falls on — see `domain/leave-window.ts`. */
+export type LeaveDayPortion = (typeof leaveDayPortionEnum.enumValues)[number];
 export type OvertimeStatus = (typeof overtimeStatusEnum.enumValues)[number];
 export type ShiftType = (typeof shiftTypeEnum.enumValues)[number];
 
@@ -48,6 +51,8 @@ export interface LeaveRequest {
   leaveType: LeaveType;
   startDate: string;
   endDate: string;
+  startPortion: LeaveDayPortion;
+  endPortion: LeaveDayPortion;
   reason: string | null;
   /**
    * Working days the window costs, frozen at submit. `numeric(5,2)`, so the driver hands it back
@@ -69,6 +74,9 @@ export interface CreateLeaveInput {
   leaveType: LeaveType;
   startDate: string;
   endDate: string;
+  /** Defaults to `full_day` at both ends, which is how every request behaved before 0028. */
+  startPortion?: LeaveDayPortion;
+  endPortion?: LeaveDayPortion;
   /** Working days the window costs, frozen at submit — see the column's docblock. */
   workingDays?: number;
   reason?: string | null;
