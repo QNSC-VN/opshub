@@ -131,6 +131,22 @@ export const AUDIT_ACTION = {
   TRAINING_CERTIFICATE_ATTACHED: 'training_record.certificate_attached',
   TRAINING_CERTIFICATE_REMOVED: 'training_record.certificate_removed',
 
+  // ── EMS performance reviews ──
+  PERFORMANCE_CYCLE_CREATED: 'performance_cycle.created',
+  PERFORMANCE_CYCLE_OPENED: 'performance_cycle.opened',
+  PERFORMANCE_CYCLE_CLOSED: 'performance_cycle.closed',
+  PERFORMANCE_REVIEW_CREATED: 'performance_review.created',
+  PERFORMANCE_REVIEW_REVIEWER_CHANGED: 'performance_review.reviewer_changed',
+  PERFORMANCE_GOAL_SET: 'performance_review.goal_set',
+  PERFORMANCE_GOAL_REMOVED: 'performance_review.goal_removed',
+  PERFORMANCE_SELF_ASSESSMENT_SUBMITTED: 'performance_review.self_assessment_submitted',
+  PERFORMANCE_REVIEW_RATED: 'performance_review.rated',
+  PERFORMANCE_REVIEW_SUBMITTED_FOR_APPROVAL: 'performance_review.submitted_for_approval',
+  PERFORMANCE_REVIEW_APPROVED: 'performance_review.approved',
+  PERFORMANCE_REVIEW_RETURNED: 'performance_review.returned',
+  PERFORMANCE_REVIEW_ACKNOWLEDGED: 'performance_review.acknowledged',
+  PERFORMANCE_REVIEW_CANCELLED: 'performance_review.cancelled',
+
   // ── ISMS risk ──
   RISK_IDENTIFIED: 'risk.identified',
   RISK_ASSESSED: 'risk.assessed',
@@ -317,6 +333,8 @@ export const AUDIT_RESOURCE = {
   TRAINING_COURSE: 'training_course',
   TRAINING_REQUIREMENT: 'training_requirement',
   TRAINING_RECORD: 'training_record',
+  PERFORMANCE_CYCLE: 'performance_cycle',
+  PERFORMANCE_REVIEW: 'performance_review',
   RISK: 'risk',
   RISK_TREATMENT: 'risk_treatment',
   CONTROL: 'control',

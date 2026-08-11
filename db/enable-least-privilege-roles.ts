@@ -165,6 +165,11 @@ const RESTRICTED_TABLES: { table: string; denied: readonly Privilege[]; why: str
     why: 'reference data: accrual method and carry-over caps are policy',
   },
   {
+    table: 'performance.rating_scale',
+    denied: ['INSERT', 'UPDATE', 'DELETE'],
+    why: 'reference data: the rating scale and which grades demand a development plan',
+  },
+  {
     table: 'isms.asset_classification_history',
     denied: ['UPDATE', 'DELETE'],
     why: 'append-only: the record of every classification an asset has held',

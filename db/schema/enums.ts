@@ -597,3 +597,45 @@ export const leaveDayPortionEnum = pgEnum('leave_day_portion', [
   'morning',
   'afternoon',
 ]);
+
+// ── EMS performance reviews ──────────────────────────────────────────────────
+
+/** Lifecycle of a review CYCLE — see migration 0029. */
+export const performanceCycleStatusEnum = pgEnum('performance_cycle_status', [
+  'draft',
+  'open',
+  'closed',
+]);
+
+/**
+ * Lifecycle of one employee's review within a cycle.
+ *
+ * `self_assessment` → `manager_review` → `pending_approval` → `shared` → `acknowledged`, with
+ * `cancelled` reachable from anywhere before sharing. The calibration sign-off is the request
+ * engine's, which is why `pending_approval` is a state of the review and not a second approver
+ * column: an approval is an approval, and OpsHub has one spine for those.
+ */
+export const performanceReviewStatusEnum = pgEnum('performance_review_status', [
+  'self_assessment',
+  'manager_review',
+  'pending_approval',
+  'shared',
+  'acknowledged',
+  'cancelled',
+]);
+
+/**
+ * The rating vocabulary. A SET OF NAMES — the ordering lives in `performance.rating_scale.rank`.
+ *
+ * Declaration order here is not the scale: sorting a distribution report by it would be sorting by
+ * an accident of how the type was written, and inserting a grade later would silently reorder every
+ * historical report. The reference table also carries `requires_development_plan`, which is the
+ * only thing that makes a low rating actionable.
+ */
+export const performanceRatingEnum = pgEnum('performance_rating', [
+  'unsatisfactory',
+  'needs_improvement',
+  'meets',
+  'exceeds',
+  'outstanding',
+]);

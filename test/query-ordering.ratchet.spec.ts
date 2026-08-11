@@ -71,7 +71,19 @@ const ROOT = join(__dirname, '..');
  *                          audits would be exempted by this entry and should not be — order such a
  *                          query by the audit column too, or it is genuinely partial.
  *
- * The last three are the same pattern: a REFERENCE TABLE keyed by its enum, carrying a `rank` column
+ *   - `performanceRatingScale.rank` UNIQUE constraint `ux_rating_scale_rank`
+ *                          (db/schema/performance.ts, migration 0029). Unconditional: the constraint
+ *                          is on the column alone, so ordering the five-row scale by rank is total.
+ *                          The scale is deliberately ordered by RANK and never by `code`, since the
+ *                          enum's declaration order is not the scale.
+ *   - `performanceGoals.title` uniqueIndex('ux_goal_review_title') on (review_id, title)
+ *                          (db/schema/performance.ts, migration 0029). CONDITIONAL, exactly as
+ *                          `attachments.fileId` and `internalAuditAuditors.auditorId` are: unique
+ *                          only WITHIN one review, and listed because the single query ordering by it
+ *                          filters on `review_id` first. A future query ordering goals by title
+ *                          across reviews would be exempted by this entry and should not be.
+ *
+ * The reference-table entries are the same pattern: a REFERENCE TABLE keyed by its enum, carrying a `rank` column
  * and the policy that rank implies. They are enumerated individually rather than matched by a naming
  * rule on purpose — an entry here is a claim about a specific schema, and a pattern match would
  * exempt the next table that merely happens to have a `code` column.
@@ -96,6 +108,8 @@ const UNIQUE_NON_ID_COLUMNS = [
   'nonconformanceSeverities.code',
   'internalAuditAuditors.auditorId',
   'managementReviews.reference',
+  'performanceRatingScale.rank',
+  'performanceGoals.title',
 ] as const;
 
 interface Ordering {

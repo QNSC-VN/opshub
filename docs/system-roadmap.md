@@ -12,8 +12,8 @@ says something is absent, that was checked.
 
 | System                                    | State                                                                                                                       | Missing                                                                                                            |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **TMS** — time management                 | ~90%. Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar and working-day counting | Accrual over time, carry-over between years, part-day leave                                                        |
-| **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report | Performance reviews                                                                                                |
+| **TMS** — time management                 | Timesheets, leave, overtime and shift logs, each with a real approval workflow. Leave entitlement, balances, holiday calendar, working-day counting. **Accrual** over the year with **carry-over** between years, capped and lapsing. **Part-day leave** in halves, with portion-aware overlap | **Complete**                                                                                    |
+| **EMS** — employee management             | Solid core. `identity.employees`; status transitions; onboarding/offboarding; assets; licences; access. **Positions** with headcount and assignment history. **Employment contracts**: terms, lifecycle, renewal, expiry sweep, pay gated separately. **Training**: course catalogue, per-position requirements, retraining chain, certificate uploads, competency gap report. **Performance reviews**: cycles, a frozen position, self-assessment, weighted goals, engine-approved calibration, employee acknowledgement, coverage report | **Complete**                                                                                    |
 | **ISMS** — information security           | Substantial. Access control (RBAC + scoped PBAC), audit trail, compliance findings, security posture, asset inventory, controlled policies. **Risk register** with generated scoring and engine-approved acceptance. **Controls + SoA** with risk↔control coverage. **Incidents**: state machine, append-only timeline, 72-hour breach clock, risk feedback loop. **Information asset register**: classification levels with handling rules, named owners, CIA ratings, append-only classification history, declassification as a separate permission, device holdings. **Vendor risk**: criticality tiers with review cadence, due-diligence assessments, a go-live gate, GDPR Article 28 agreements, vendor↔risk links, unassessed-spend report | **Complete**                                                                                    |
 | **QMS** — quality management              | Started. Controlled documents: versions, approval through the request engine, publish-supersedes, acknowledgement tracking. Competency records via EMS training. **Non-conformance register**: severity grades with policy, containment windows, a closure gate. **CAPA**: root-cause analysis, an effectiveness review that can fail and loops back, separation of duties on sign-off, recurrence detection. **Internal audit**: the programme, auditor rosters, a reporting gate before closure, findings that ARE non-conformances, and auditor impartiality on effectiveness reviews. **Management review**: the §9.3.2 agenda composed from every other register, frozen as a snapshot when the review is held, and §9.3.3 actions carried into the next one | **Complete**                                                            |
 
@@ -85,7 +85,8 @@ action. It does not add a `*_history` table.
 2. ~~**Controlled-document module**~~ — **done**: the shared primitive from decision 2,
    ahead of the ISMS policies and QMS SOPs that both need it.
 
-3. ~~**EMS depth**~~ — **done**: positions and headcount, contracts, training records.
+3. ~~**EMS depth**~~ — **done**: positions and headcount, contracts, training records,
+   performance reviews. **The system is complete.**
    Before QMS and ISMS, because QMS competency/training records and ISMS policy
    acknowledgement both hang off employee and position data. Building those first means
    modelling training twice.
@@ -106,6 +107,27 @@ action. It does not add a `*_history` table.
 
    Training was also the first upload surface that ACCUMULATES, which is why it brought
    `storage.attachments` and the policy descriptors with it — see the upload section below.
+
+   Performance reviews closed the system, and paid the ordering off a second time: the review
+   freezes `position_id` from the employee's CURRENT assignment, so "what was this person reviewed
+   as" is a reference rather than a job-title string. Four decisions worth carrying forward:
+
+   - **A CYCLE, NOT A YEAR COLUMN.** "Who has not been reviewed yet" is the question the feature
+     exists to answer, and a year on the review row cannot answer it: an absent row means both "not
+     due" and "overdue", and nothing says when the window closed. The cycle owns the period and the
+     deadlines, so coverage is an anti-join — the same shape as the competency gap report.
+   - **THE POSITION IS FROZEN AND THE ASSIGNMENT IS NOT**, which is the opposite choice from the gap
+     report ON PURPOSE. A gap is a fact about now; a review is a record of then. Both read the same
+     table and neither is wrong.
+   - **THE SIGN-OFF IS THE REQUEST ENGINE'S** (`performance_review`, the ninth registered type),
+     not an `approved_by` column with its own permission check. Two people are excluded for
+     different reasons: the REVIEWER by `allowSelfApproval: false`, and the EMPLOYEE by a check in
+     the type def — the engine cannot know a request has a SUBJECT, so without it anybody holding
+     `performance.approve` could approve their own review.
+   - **THE RATING SCALE IS THE FIFTH ENUM-KEYED REFERENCE TABLE WITH A RANK**, carrying
+     `requires_development_plan` exactly as `nonconformance_severities` carries `requires_capa`. The
+     gate is the same shape because the problem is: a grade that demands something of the
+     organisation is worth nothing unless a row somewhere refuses without it.
 
 4. **ISMS** — ~~risk register~~, ~~controls / Statement of Applicability~~, ~~incidents~~,
    ~~asset classification~~, ~~vendor risk~~ — **the system is complete**.

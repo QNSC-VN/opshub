@@ -27,3 +27,4 @@ export * from './storage';
 export * from './catalog';
 export * from './licenses';
 export * from './security-posture';
+export * from './performance';

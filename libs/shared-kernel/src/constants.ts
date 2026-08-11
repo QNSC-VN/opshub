@@ -24,6 +24,15 @@ export const REQUEST_TYPE = {
    * column with its own approver check.
    */
   RISK_ACCEPTANCE: 'risk_acceptance',
+  /**
+   * Calibration sign-off on a performance rating, before the employee sees it.
+   *
+   * An approval, so it belongs to the engine rather than to a second approver column on the review:
+   * separation of duties, the SLA clock, expiry, the audit entry and the notification all come with
+   * it. The reviewer submits; somebody holding `performance.approve` who is neither the reviewer nor
+   * the employee decides.
+   */
+  PERFORMANCE_REVIEW: 'performance_review',
 } as const;
 
 export type RequestType = (typeof REQUEST_TYPE)[keyof typeof REQUEST_TYPE];
