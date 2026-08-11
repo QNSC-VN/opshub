@@ -211,6 +211,37 @@ describe('occupancy', () => {
     expect(ids).toContain(open.id);
     expect(ids).not.toContain(full.id);
   });
+
+  it('finds a position by search over its code, title and department', async () => {
+    // The SPA shipped a search box for this list before the API had the parameter, so the box looked
+    // like it filtered and the term was dropped. Asserting on all three fields because the point of a
+    // free-text search is that somebody types whichever one they remember.
+    const target = await createPosition(2);
+
+    for (const term of [target.code, 'E2E Engineer', DEPARTMENT]) {
+      const { status, body } = await apiRequest(
+        app,
+        hr,
+        'GET',
+        `/positions?search=${encodeURIComponent(term)}&limit=100`,
+      );
+      expect(status, `search=${term}`).toBe(200);
+      expect(
+        unwrap<PositionRow[]>(body).map((p) => p.id),
+        `search=${term} did not find the position`,
+      ).toContain(target.id);
+    }
+
+    // And it NARROWS: a term that matches nothing returns nothing, rather than the whole list — which
+    // is what a silently-dropped parameter looks like.
+    const { body: noMatch } = await apiRequest(
+      app,
+      hr,
+      'GET',
+      `/positions?search=NOSUCHPOSITION-${RUN}&limit=100`,
+    );
+    expect(unwrap<PositionRow[]>(noMatch)).toHaveLength(0);
+  });
 });
 
 describe('approved headcount', () => {

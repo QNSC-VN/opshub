@@ -223,12 +223,28 @@ test.describe('training', () => {
     await expect(drawer.getByRole('heading', { name: 'Certificates' })).toBeVisible();
     await expect(drawer.getByText('No certificate attached')).toBeVisible();
 
+    // WAITS ON EACH STEP OF THE HANDSHAKE. Waiting only for the filename to appear says "the upload
+    // failed" for a failure in any of three places — and the panel's own error text is short, so the
+    // trace does not say which. Presign is the step CSRF broke, the PUT is the step CORS broke, and
+    // confirm is where the API verifies size and quota; naming them separately means a future failure
+    // arrives already diagnosed.
+    const presign = page.waitForResponse(
+      (r) => r.url().includes('/certificates/presign') && r.request().method() === 'POST',
+    );
+    const put = page.waitForResponse((r) => r.request().method() === 'PUT');
+    const confirm = page.waitForResponse(
+      (r) => r.url().includes('/confirm') && r.request().method() === 'POST',
+    );
+
     await drawer
       .locator('input[type=file]')
       .setInputFiles({ name: 'certificate.pdf', mimeType: 'application/pdf', buffer: PDF_BYTES });
 
-    // The filename appearing means confirm succeeded: the row is rendered from the API's list, not from
-    // the local file handle.
+    expect((await presign).status(), 'presign was refused').toBe(201);
+    expect((await put).status(), 'storage refused the bytes').toBe(200);
+    expect((await confirm).status(), 'confirm was refused').toBe(200);
+
+    // The filename appearing means the list re-read from the API rather than from the local file handle.
     await expect(drawer.getByText('certificate.pdf')).toBeVisible({ timeout: 20_000 });
     await expect(drawer.getByRole('button', { name: /download certificate\.pdf/i })).toBeVisible();
   });

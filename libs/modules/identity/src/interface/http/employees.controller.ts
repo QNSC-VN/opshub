@@ -149,6 +149,10 @@ export class EmployeesController {
   // resource has ResourceScopeResolver load the row and supply `ownerId`, which is what
   // lets a `self`-scoped grant match its holder and a `dept`-scoped one match their
   // department. A global grant passes as before.
+  // UPLOAD tier: a presign hands out a signed PUT and a confirm does a HeadObject, so both cost S3
+  // requests rather than just database time. Assets carried this from the start; these three surfaces
+  // did not, which meant the tier existed and two thirds of the uploads in the product ignored it.
+  @RateLimit('UPLOAD')
   @Post(':id/avatar/presign')
   // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
   // already promises 200 — without this the generated client's contract disagreed with the server.
@@ -174,6 +178,7 @@ export class EmployeesController {
     return this.employeeService.presignAvatar(id, dto, { sub: user.sub, email: user.email });
   }
 
+  @RateLimit('UPLOAD')
   @Post(':id/avatar/confirm')
   // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
   // already promises 200 — without this the generated client's contract disagreed with the server.

@@ -20,15 +20,16 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
-  Auth,
-  RequirePermission,
   ApiCommonErrors,
   ApiPagedResponse,
-  buildPageResult,
+  Auth,
+  AuthorizedInService,
   CurrentUser,
+  RateLimit,
+  RequirePermission,
   SelfScoped,
   SharedRead,
-  AuthorizedInService,
+  buildPageResult,
 } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { EmployeeService } from '@modules/identity';
@@ -482,6 +483,10 @@ export class WorkforceController {
 
   // ── Leave document upload ─────────────────────────────────────────────
 
+  // UPLOAD tier: a presign hands out a signed PUT and a confirm does a HeadObject, so both cost S3
+  // requests rather than just database time. Assets carried this from the start; these three surfaces
+  // did not, which meant the tier existed and two thirds of the uploads in the product ignored it.
+  @RateLimit('UPLOAD')
   @Post('leave-requests/:id/document/presign')
   @AuthorizedInService(
     'assertOwnerOrApprover on the leave request the document attaches to',
@@ -511,6 +516,7 @@ export class WorkforceController {
     return this.service.presignLeaveDocument(id, dto, user);
   }
 
+  @RateLimit('UPLOAD')
   @Post('leave-requests/:id/document/confirm')
   @AuthorizedInService(
     'assertOwnerOrApprover on the owning leave request',

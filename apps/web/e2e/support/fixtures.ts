@@ -10,6 +10,20 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 export const AUTH_STATE = 'e2e/.auth/state.json';
 
 /**
+ * A 429 IN A FULL RUN IS THE SUITE, NOT THE PRODUCT.
+ *
+ * Every spec signs in as the same seeded admin, and each page load fires a dozen API calls, so a whole
+ * run makes well over the DEFAULT tier's 200 requests per minute for that one user. The refusal then
+ * lands on whichever request happens to be next — measured once as a 429 on a certificate presign, which
+ * reads like a broken upload. Re-run the spec on its own before believing it; the upload paths carry the
+ * stricter UPLOAD tier (30/min) and a handful of uploads per run stays comfortably inside it.
+ *
+ * Not worked around by skipping the limiter: it is a protective control, and a test environment that
+ * disables it stops testing the thing that runs in production. Spreading the specs across seeded
+ * identities is the real fix when this starts costing time.
+ */
+
+/**
  * Seeded principals, from `db/seed.ts` — one employee per system role.
  *
  * `ADMIN` holds the wildcard permission, so it is the tier that must see everything. `EMPLOYEE`

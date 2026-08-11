@@ -1,7 +1,6 @@
 import { test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import {
-  clickFirstRow,
   csrfHeaders,
   expect,
   expectRowSomewhere,
@@ -71,15 +70,24 @@ test.describe('positions', () => {
   });
 
   test('shows the assignment list in the drawer, empty and honest', async ({ page, request }) => {
-    await createPosition(request);
+    // Opens the position THIS test created, found by search, rather than whichever row sorts first.
+    //
+    // `clickFirstRow` was wrong here in a way that only showed up later: the first row eventually became
+    // a position holding an assignment that had already been ENDED, which is neither "nobody assigned"
+    // nor "current" — so the assertion failed against a drawer that was rendering correctly. A spec that
+    // asserts on state it did not create is asserting on the database's history.
+    const code = await createPosition(request);
     await gotoInShell(page, '/positions');
-    await clickFirstRow(page);
+    await page.getByRole('searchbox').fill(code);
+    const row = page.locator('tbody tr', { hasText: code });
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.click();
 
     const drawer = page.getByRole('dialog');
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole('heading', { name: 'Assignments' })).toBeVisible();
     // A position with nobody on it says so rather than rendering an empty table with no explanation.
-    await expect(drawer.getByText(/Nobody assigned yet|Current/)).toBeVisible();
+    await expect(drawer.getByText('Nobody assigned yet')).toBeVisible();
   });
 });
 

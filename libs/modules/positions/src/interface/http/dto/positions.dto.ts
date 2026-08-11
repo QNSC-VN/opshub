@@ -38,6 +38,8 @@ export class UpdatePositionDto extends createZodDto(UpdatePositionSchema) {}
 
 export const ListPositionsQuerySchema = z
   .object({
+    /** Matches title, code or department. The SPA's search box sends this. */
+    search: z.string().max(120).optional(),
     department: z.string().max(120).optional(),
     status: status.optional(),
     vacantOnly: queryBoolean().optional(),
