@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { expect, gotoInShell } from './support/fixtures';
+import { clickFirstRow, expect, gotoInShell } from './support/fixtures';
 
 /**
  * The people directory, in depth — the second-largest screen, and the one that carried a 1081-line
@@ -51,9 +51,12 @@ test.describe('people', () => {
     await gotoInShell(page, '/people');
 
     // The seeded directory always has rows; the row this clicks is whichever is first.
-    const firstRow = page.locator('tbody tr').first();
+    const firstRow = page
+      .locator('tbody tr')
+      .filter({ has: page.locator('td:nth-child(2)') })
+      .first();
     const name = await firstRow.locator('td').first().innerText();
-    await firstRow.click();
+    await clickFirstRow(page);
 
     const drawer = page.getByRole('dialog');
     await expect(drawer).toBeVisible();

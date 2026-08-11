@@ -68,6 +68,19 @@ data.** The dashboard was seven components and ~500 lines of near-identical JSX;
 `personas.ts` table, and the drift it was hiding — the same destination described three ways, an
 alert flag on four of five identical tiles — had nowhere left to live.
 
+## Testing a screen from the browser
+
+Three rules, each learned by a failing run rather than guessed:
+
+1. **Create the data you assert on.** The seed does not populate the software catalogue or the service
+   catalog, and "the first row" is whatever a previous run left behind. Two specs failed in CI for
+   this before the rule was written down.
+2. **Wait for the table to settle before clicking a row.** `tbody tr` also matches the loading, error
+   and empty rows, which have no click handler — `clickFirstRow()` in `e2e/support/fixtures.ts` waits
+   for a real data row. Racing it failed about one run in three.
+3. **Make "unique" actually unique.** A window derived from `Date.now() % 3000` repeats every fifty
+   minutes, so an afternoon of runs collided with itself.
+
 ## Testing
 
 Component specs live beside the component as `*.spec.tsx` with `// @vitest-environment jsdom` at the
@@ -87,12 +100,14 @@ Helpers live in their own module, not beside components: eslint's
 
 ## Conversion status
 
-Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`, `dashboard`, `finops`.
-Still hand-rolled (tables, dialogs, filters): `assets`, `requests`, `catalog`, `profile`,
-`settings/webhooks`, `settings/audit-logs`, `security-posture`, `reports`.
+Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`, `dashboard`, `finops`,
+`assets`, `requests`, `catalog`.
+Still hand-rolled: `profile`, `settings/webhooks`, `settings/audit-logs`, `security-posture`,
+`reports`. Only three of those still hand-roll a DIALOG — when they are converted, that ratchet
+becomes a floor at 0 and any new `fixed inset-0 z-50` fails the build.
 
-Ratchet baselines move with each conversion — raw `<button>` 149 → 72, hand-rolled modal files
-11 → 6, largest file 1082 → 499, arbitrary `text-[…]` 29 → 26. Lower them by converting, never by
+Ratchet baselines move with each conversion — raw `<button>` 149 → 59, hand-rolled modal files
+11 → 3, largest file 1082 → 499, arbitrary `text-[…]` 29 → 26. Lower them by converting, never by
 editing the number.
 
 **Charts take CSS variables, not hex.** `fill="var(--color-info)"` works in SVG exactly as it does in

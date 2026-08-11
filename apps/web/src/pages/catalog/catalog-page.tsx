@@ -1,243 +1,208 @@
 import { useState } from 'react';
-import { ENV } from '@/shared/config/env';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, X, Check, Clock, Package } from 'lucide-react';
-import { sessionFetch } from '@/shared/api/session-fetch';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, Clock, Package } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/shared/api/client';
+import { Button, FormField, Modal, PageHeader, Textarea, humanizeStatus } from '@/shared/ui';
+import type { components } from '@/shared/api/types';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+type CatalogItem = components['schemas']['CatalogItemResponseDto'];
 
-interface CatalogItem {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  iconEmoji: string | null;
-  approvalPermission: string;
-  slaHours: number | null;
-  isActive: boolean;
-  sortOrder: number;
-  createdAt: string;
-}
+/*
+ * WHAT THIS SCREEN NO LONGER CARRIES
+ *
+ * A hand-written `CatalogItem` interface and raw `sessionFetch` calls — the same pattern finops had,
+ * and the routes have been in the generated client all along. A `CATEGORY_LABEL` map whose values were
+ * emoji-prefixed strings (`'🖥 Hardware'`), so the emoji was data rather than presentation and a
+ * category the map did not know rendered as a bare slug. And its own `SuccessToast` component — a
+ * fixed-position box with a dismiss button — in an app that mounts `sonner` and uses `toast()`
+ * everywhere else.
+ *
+ * The minimum-length rule on the reason was enforced only by disabling the button, which tells
+ * somebody who has typed three characters nothing about why they cannot continue.
+ */
 
-// ── Hooks ─────────────────────────────────────────────────────────────────────
+/** Emoji per category, as PRESENTATION. The label itself comes from `humanizeStatus`. */
+const CATEGORY_EMOJI: Record<string, string> = {
+  hardware: '🖥',
+  software: '💿',
+  access: '🔑',
+  hr: '👤',
+  other: '📋',
+};
+
+const MIN_REASON = 10;
+const MAX_REASON = 1000;
 
 function useCatalogItems() {
   return useQuery({
     queryKey: ['catalog', 'items'],
     queryFn: async () => {
-      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/catalog`);
-      if (!res.ok) throw new Error('Failed to load catalog');
-      return res.json() as Promise<CatalogItem[]>;
+      const { data, error } = await api.GET('/v1/catalog');
+      if (error || !data) throw new Error('Failed to load the catalog');
+      return data;
     },
   });
 }
 
-// ── Request Modal ─────────────────────────────────────────────────────────────
-
-interface RequestModalProps {
+function RequestModal({
+  item,
+  onClose,
+  onSuccess,
+}: {
   item: CatalogItem;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-function RequestModal({ item, onClose, onSuccess }: RequestModalProps) {
+}) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/catalog/${item.id}/request`, {
-        method: 'POST',
-        body: JSON.stringify({ reason }),
+      const { error: err } = await api.POST('/v1/catalog/{id}/request', {
+        params: { path: { id: item.id } },
+        body: { reason },
       });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? 'Failed to submit request');
-      }
-      return res.json() as Promise<{ requestId: string }>;
+      if (err) throw new Error('Failed to submit the request');
     },
-    onSuccess: () => {
-      onSuccess();
-      onClose();
-    },
+    onSuccess,
     onError: (err: Error) => setError(err.message),
   });
 
+  const tooShort = reason.trim().length < MIN_REASON;
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+    <Modal
+      open
+      onClose={onClose}
+      title={`Request ${item.name}`}
+      description={item.slaHours ? `Fulfilled within ${item.slaHours}h once approved` : undefined}
     >
-      <div className="w-full max-w-md rounded-xl bg-surface shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">{item.iconEmoji ?? '📋'}</span>
-            <h2 className="text-sm font-semibold text-fg">{item.name}</h2>
-          </div>
-          <button onClick={onClose} className="rounded p-1 text-fg-subtle hover:bg-surface-hover">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          // Stated rather than silently disabled: a greyed-out button tells somebody who typed three
+          // characters nothing about why they cannot continue.
+          if (tooShort) {
+            setError(`Please give at least ${MIN_REASON} characters of context.`);
+            return;
+          }
+          setError('');
+          mutation.mutate();
+        }}
+        className="flex flex-col gap-4 p-5"
+      >
+        {item.description && <p className="text-sm text-fg-muted">{item.description}</p>}
 
-        <div className="space-y-4 p-5">
-          {item.description && <p className="text-sm text-fg-subtle">{item.description}</p>}
-          {item.slaHours && (
-            <div className="flex items-center gap-1.5 text-xs text-fg-muted">
-              <Clock className="h-3.5 w-3.5" />
-              Fulfilled within {item.slaHours}h
-            </div>
-          )}
-          {error && <p className="text-xs text-danger">{error}</p>}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-fg-subtle">
-              Reason / details <span className="text-danger">*</span>
-            </label>
-            <textarea
-              rows={4}
-              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 resize-none"
-              placeholder="Describe what you need and why…"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-            <p className="mt-1 text-xs text-fg-muted">{reason.length} / 1000 chars (min 10)</p>
-          </div>
-        </div>
+        <FormField
+          label="Why do you need this?"
+          htmlFor="catalog-reason"
+          required
+          error={error}
+          hint={`${reason.trim().length} / ${MAX_REASON} characters`}
+        >
+          <Textarea
+            id="catalog-reason"
+            rows={4}
+            maxLength={MAX_REASON}
+            value={reason}
+            error={error}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="What is it for, and when do you need it?"
+          />
+        </FormField>
 
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-fg-subtle hover:bg-surface-hover"
-          >
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            disabled={reason.length < 10 || mutation.isPending}
-            onClick={() => mutation.mutate()}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-          >
+          </Button>
+          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
             {mutation.isPending ? 'Submitting…' : 'Submit request'}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
-// ── Success Toast ─────────────────────────────────────────────────────────────
-
-function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  return (
-    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-success-bg bg-surface px-4 py-3 shadow-lg">
-      <Check className="h-4 w-4 text-success" />
-      <p className="text-sm text-fg">{message}</p>
-      <button onClick={onDismiss} className="ml-2 text-fg-subtle hover:text-fg">
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
-// ── Catalog Item Card ─────────────────────────────────────────────────────────
-
-function ItemCard({
-  item,
-  onRequest,
-}: {
-  item: CatalogItem;
-  onRequest: (item: CatalogItem) => void;
-}) {
+/** One requestable item. A `<button>` because the whole card is the action. */
+function ItemCard({ item, onRequest }: { item: CatalogItem; onRequest: (i: CatalogItem) => void }) {
   return (
     <button
+      type="button"
       onClick={() => onRequest(item)}
-      className="group flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 text-left hover:border-accent/50 hover:bg-surface-hover transition-colors"
+      className="group flex h-full flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
-      <div className="flex items-start justify-between">
-        <span className="text-2xl">{item.iconEmoji ?? '📋'}</span>
-        <ChevronRight className="h-4 w-4 text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-2xl" aria-hidden="true">
+          {item.iconEmoji ?? CATEGORY_EMOJI[item.category] ?? '📋'}
+        </span>
+        <ChevronRight
+          className="h-4 w-4 shrink-0 text-fg-subtle transition-colors group-hover:text-fg-muted"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
       </div>
-      <div>
-        <p className="text-sm font-semibold text-fg">{item.name}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-fg">{item.name}</p>
         {item.description && (
-          <p className="mt-1 line-clamp-2 text-xs text-fg-subtle">{item.description}</p>
+          <p className="mt-0.5 line-clamp-2 text-xs text-fg-muted">{item.description}</p>
         )}
       </div>
-      <div className="flex items-center gap-3 text-xs text-fg-muted">
-        <span className="capitalize">{item.category}</span>
-        {item.slaHours && (
-          <>
-            <span>·</span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {item.slaHours}h SLA
-            </span>
-          </>
-        )}
-      </div>
+      {item.slaHours && (
+        <span className="inline-flex items-center gap-1 text-xs text-fg-subtle">
+          <Clock className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+          {item.slaHours}h SLA
+        </span>
+      )}
     </button>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
-const CATEGORY_LABEL: Record<string, string> = {
-  hardware: '🖥 Hardware',
-  software: '💿 Software',
-  access: '🔑 Access',
-  hr: '👤 HR',
-  other: '📋 Other',
-};
-
 export function CatalogPage() {
   const qc = useQueryClient();
-  const { data: items = [], isLoading } = useCatalogItems();
+  const { data: items, isLoading, isError } = useCatalogItems();
   const [requesting, setRequesting] = useState<CatalogItem | null>(null);
-  const [successMsg, setSuccessMsg] = useState('');
 
-  // Group by category
-  const categories = [...new Set(items.map((i) => i.category))].sort();
+  const rows = items ?? [];
+  const categories = [...new Set(rows.map((i) => i.category))].sort();
 
   return (
-    <div className="flex flex-1 flex-col overflow-auto">
-      <div className="sticky top-0 z-10 border-b border-border bg-app px-6 py-3">
-        <h1 className="text-base font-semibold text-fg">Service Catalog</h1>
-        <p className="text-xs text-fg-subtle">
-          Request hardware, software, access, and more from IT
-        </p>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Service Catalog"
+        description="Request hardware, software, access and more. Every item has an owner and an SLA."
+      />
 
-      <div className="p-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <p className="text-sm text-fg-muted">Loading catalog…</p>
+      {isLoading && <p className="py-10 text-center text-sm text-fg-subtle">Loading…</p>}
+      {isError && (
+        <p className="py-10 text-center text-sm text-danger">Failed to load the catalog.</p>
+      )}
+
+      {!isLoading && !isError && rows.length === 0 && (
+        <div className="flex flex-col items-center gap-2 py-12">
+          <Package className="h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
+          <span className="text-sm text-fg-subtle">Nothing in the catalog yet</span>
+        </div>
+      )}
+
+      {categories.map((category) => (
+        <section key={category} className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold text-fg">
+            <span className="mr-1.5" aria-hidden="true">
+              {CATEGORY_EMOJI[category] ?? '📋'}
+            </span>
+            {humanizeStatus(category)}
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {rows
+              .filter((i) => i.category === category)
+              .map((item) => (
+                <ItemCard key={item.id} item={item} onRequest={setRequesting} />
+              ))}
           </div>
-        ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Package className="mb-3 h-10 w-10 text-fg-muted/40" />
-            <p className="text-sm font-medium text-fg">No catalog items yet</p>
-            <p className="mt-1 text-xs text-fg-muted">
-              Ask your IT administrator to set up the service catalog.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {categories.map((cat) => {
-              const catItems = items.filter((i) => i.category === cat);
-              return (
-                <section key={cat}>
-                  <h2 className="mb-3 text-sm font-semibold text-fg">
-                    {CATEGORY_LABEL[cat] ?? cat}
-                  </h2>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {catItems.map((item) => (
-                      <ItemCard key={item.id} item={item} onRequest={setRequesting} />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </section>
+      ))}
 
       {requesting && (
         <RequestModal
@@ -245,15 +210,14 @@ export function CatalogPage() {
           onClose={() => setRequesting(null)}
           onSuccess={() => {
             void qc.invalidateQueries({ queryKey: ['requests'] });
-            setSuccessMsg(
-              `Request submitted for "${requesting.name}". You'll be notified when it's approved.`,
-            );
+            // The app's own toaster, not a bespoke box: one place decides how a success looks.
+            toast.success('Request submitted', {
+              description: `"${requesting.name}" — you will be notified when it is approved.`,
+            });
             setRequesting(null);
           }}
         />
       )}
-
-      {successMsg && <SuccessToast message={successMsg} onDismiss={() => setSuccessMsg('')} />}
     </div>
   );
 }

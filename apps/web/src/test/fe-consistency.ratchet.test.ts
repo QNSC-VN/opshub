@@ -32,9 +32,9 @@ import { describe, expect, it } from 'vitest';
 // ── Baselines — LOWER as the migration proceeds, NEVER raise ───────────────────
 //
 // `<button>` has a destination: shared/ui/button.tsx. 149 → 105 (access, compliance, workforce) →
-// 93 (people) → 78 (rbac) → 72 (finops). Re-measured each time the way this file's docblock demands:
-// force the constant to -1 and read the count the failure reports.
-const MAX_RAW_BUTTON = 72;
+// 93 (people) → 78 (rbac) → 72 (finops) → 59 (assets, requests, catalog). Re-measured each time the
+// way this file's docblock demands: force the constant to -1 and read the count the failure reports.
+const MAX_RAW_BUTTON = 59;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -72,10 +72,13 @@ const MAX_FILE_LINES = 499;
  *
  * 11 → 8: access, compliance and workforce (which held FOUR of them) now use `Modal`, so those
  * dialogs are announced as dialogs, trap focus and close on Escape. People was already on `Modal` for
- * two of its three, so that conversion did not move the number; rbac's three took it to 7, and
- * finops' one to 6.
+ * two of its three, so that conversion did not move the number; rbac's three took it to 7, finops' one
+ * to 6, and assets + requests + catalog to 3.
+ *
+ * THREE LEFT: `profile`, `settings/webhooks` and `security-posture`. When they are converted this check
+ * becomes a floor at 0 and any new `fixed inset-0 z-50` is a build failure, which is the end state.
  */
-const MAX_HANDROLLED_MODAL = 6;
+const MAX_HANDROLLED_MODAL = 3;
 
 // this file lives in src/test/
 const SRC = join(import.meta.dirname, '../');
