@@ -41,6 +41,7 @@ export class AuditController {
     const { rows, total } = await this.auditService.list(
       {
         actorId: query.actorId,
+        actorEmail: query.actorEmail,
         resourceType: query.resourceType,
         resourceId: query.resourceId,
         action: query.action,

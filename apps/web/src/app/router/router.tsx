@@ -14,7 +14,7 @@ import { PeoplePage } from '@/pages/people/people-page';
 import { AccessPage } from '@/pages/access/access-page';
 import { CompliancePage } from '@/pages/compliance/compliance-page';
 import { WorkforcePage } from '@/pages/workforce/workforce-page';
-import { WebhooksPage } from '@/pages/settings/webhooks-page';
+import { WebhooksPage } from '@/pages/settings/webhooks/webhooks-page';
 import { RequestsPage } from '@/pages/requests/requests-page';
 import { ReportsPage } from '@/pages/reports/reports-page';
 import { RbacPage } from '@/pages/settings/rbac/rbac-page';

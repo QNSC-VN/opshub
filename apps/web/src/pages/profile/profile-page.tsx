@@ -14,28 +14,26 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import {
-  User,
-  ShieldCheck,
-  Mail,
-  Briefcase,
-  Building2,
-  ExternalLink,
-  CheckCircle2,
-  Pencil,
-  X,
-} from 'lucide-react';
+import { User, Mail, Briefcase, Building2, ExternalLink, CheckCircle2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import {
+  Badge,
+  Button,
+  FormField,
+  Input,
+  Modal,
+  StatusBadge,
+  humanizeStatus,
+  statusTone,
+} from '@/shared/ui';
+import { formatDate } from '@/shared/lib/format';
 import type { components } from '@/shared/api/generated/api';
 
 type MeDto = components['schemas']['MeResponseDto'];
 type EmployeeDto = components['schemas']['EmployeeResponseDto'];
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
-
-const inputClass =
-  'h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-surface-muted disabled:text-fg-subtle';
 
 function SectionCard({
   title,
@@ -152,71 +150,48 @@ function EditProfileModal({ employee, onClose, onSuccess }: EditProfileModalProp
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-md rounded-xl bg-surface shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-sm font-semibold text-fg">Edit Profile</h2>
-          <button onClick={onClose} className="rounded p-1 text-fg-subtle hover:bg-surface-hover">
-            <X className="h-4 w-4" />
-          </button>
+    <Modal open onClose={onClose} title="Edit profile">
+      <form onSubmit={submit} className="flex flex-col gap-4 p-5">
+        <FormField label="Display name" htmlFor="profile-name" required>
+          <Input
+            id="profile-name"
+            required
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Your full name"
+          />
+        </FormField>
+        <FormField label="Job title" htmlFor="profile-title">
+          <Input
+            id="profile-title"
+            value={jobTitle}
+            onChange={(e) => setJobTitle(e.target.value)}
+            placeholder="e.g. Senior Engineer"
+          />
+        </FormField>
+        <FormField label="Department" htmlFor="profile-department">
+          <Input
+            id="profile-department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            placeholder="e.g. Engineering"
+          />
+        </FormField>
+
+        {err && <p className="text-xs text-danger">{err}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="sm" disabled={loading}>
+            {loading ? 'Saving…' : 'Save changes'}
+          </Button>
         </div>
-        <form onSubmit={submit} className="flex flex-col gap-4 px-6 py-5">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">
-              Display name <span className="text-danger">*</span>
-            </label>
-            <input
-              className={inputClass}
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Your full name"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Job title</label>
-            <input
-              className={inputClass}
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              placeholder="e.g. Senior Engineer"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Department</label>
-            <input
-              className={inputClass}
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              placeholder="e.g. Engineering"
-            />
-          </div>
-          {err && <p className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger">{err}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-9 rounded-lg border border-border px-4 text-sm font-medium text-fg-muted hover:bg-surface-hover"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="h-9 rounded-lg bg-accent px-4 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-            >
-              {loading ? 'Saving…' : 'Save changes'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
-
-// ── Hooks ─────────────────────────────────────────────────────────────────────
 
 function useMe() {
   return useQuery<MeDto>({
@@ -246,36 +221,33 @@ function useEmployee(id: string | undefined) {
 
 // ── Role badge ────────────────────────────────────────────────────────────────
 
-const ROLE_LABELS: Record<string, string> = {
+/*
+ * NO ROLE OR STATUS COLOUR MAPS.
+ *
+ * `ROLE_LABELS` duplicated `ROLE_NAMES` from the permission catalogue, and the two colour maps
+ * (`colors` inside `RoleBadge`, `statusColors` inside the page) each invented their own palette for
+ * words the shared tone map already answers. `humanizeStatus` turns `it-admin` into `It-admin`, which
+ * is wrong for a role key, so roles keep an explicit label — but their COLOUR is shared.
+ */
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Platform Admin',
   'it-admin': 'IT Admin',
+  security: 'Security',
   hr: 'HR',
   manager: 'Manager',
-  security: 'Security',
+  auditor: 'Auditor',
+  helpdesk: 'Helpdesk',
   employee: 'Employee',
-  finance: 'Finance',
 };
 
+/** The privileged roles read as violet; everything else is neutral. Colour is not the only signal. */
+const PRIVILEGED = new Set(['admin', 'it-admin', 'security']);
+
 function RoleBadge({ role }: { role: string }) {
-  const label = ROLE_LABELS[role] ?? role;
-  const colors: Record<string, string> = {
-    'it-admin': 'bg-accent-muted text-accent',
-    hr: 'bg-violet-bg text-violet-fg',
-    manager: 'bg-warning-bg text-warning',
-    security: 'bg-danger-bg text-danger',
-    employee: 'bg-surface-muted text-fg-muted',
-    finance: 'bg-success-bg text-success',
-  };
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${colors[role] ?? 'bg-surface-muted text-fg-muted'}`}
-    >
-      <ShieldCheck className="h-3 w-3" />
-      {label}
-    </span>
+    <Badge tone={PRIVILEGED.has(role) ? 'violet' : 'neutral'}>{ROLE_LABEL[role] ?? role}</Badge>
   );
 }
-
-// ── Page ──────────────────────────────────────────────────────────────────────
 
 export function ProfilePage() {
   const qc = useQueryClient();
@@ -310,12 +282,6 @@ export function ProfilePage() {
   }
 
   if (!me) return null;
-
-  const statusColors: Record<string, string> = {
-    active: 'bg-success-bg text-success',
-    on_leave: 'bg-warning-bg text-warning',
-    offboarded: 'bg-surface-muted text-fg-muted',
-  };
 
   return (
     <>
@@ -359,11 +325,9 @@ export function ProfilePage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {displayEmployee?.status && (
-                    <span
-                      className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize ${statusColors[displayEmployee.status] ?? 'bg-surface-muted text-fg-muted'}`}
-                    >
-                      {displayEmployee.status.replace('_', ' ')}
-                    </span>
+                    <StatusBadge tone={statusTone(displayEmployee.status)}>
+                      {humanizeStatus(displayEmployee.status)}
+                    </StatusBadge>
                   )}
                   <button
                     onClick={() => setShowEdit(true)}
@@ -449,11 +413,7 @@ export function ProfilePage() {
               <FieldRow
                 label="Member since"
                 icon={CheckCircle2}
-                value={new Date(displayEmployee.createdAt).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                value={formatDate(displayEmployee.createdAt)}
               />
             )}
           </div>

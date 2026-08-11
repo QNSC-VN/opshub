@@ -7436,6 +7436,53 @@ export interface components {
         content: string;
       }[];
     };
+    ScoreLatestDto: {
+      /** @description Points achieved, as the Graph API reports them. */
+      score: string;
+      /** @description Points available. */
+      maxScore: string;
+      /** @description Achieved as a percentage of available. */
+      percentageScore: string;
+      /** @description The day this snapshot describes. */
+      scoreDate: string;
+    };
+    SecureScoreResponseDto: {
+      /** @description Null until the first sync has run — which is a state the UI has to render. */
+      latest: components['schemas']['ScoreLatestDto'] | null;
+    };
+    ScoreHistoryPointDto: {
+      scoreDate: string;
+      percentageScore: string;
+    };
+    ScoreHistoryResponseDto: {
+      history: components['schemas']['ScoreHistoryPointDto'][];
+      /** @description The window that was asked for, echoed back. */
+      days: number;
+    };
+    BaselineCategorySummaryDto: {
+      pass: number;
+      fail: number;
+      warning: number;
+      total: number;
+    };
+    BaselineCheckDto: {
+      id: string;
+      /** @description asr | firewall | encryption | endpoint | identity | other */
+      category: string;
+      checkName: string;
+      /** @description pass | fail | warning */
+      status: string;
+      expectedValue?: string | null;
+      actualValue?: string | null;
+      details?: string | null;
+    };
+    BaselineResponseDto: {
+      checks: components['schemas']['BaselineCheckDto'][];
+      /** @description Keyed by category. A category with no checks is absent rather than zeroed. */
+      summary: {
+        [key: string]: components['schemas']['BaselineCategorySummaryDto'];
+      };
+    };
   };
   responses: never;
   parameters: never;
@@ -7584,6 +7631,7 @@ export interface operations {
     parameters: {
       query?: {
         actorId?: string;
+        actorEmail?: string;
         resourceType?: string;
         resourceId?: string;
         action?: string;
@@ -22758,7 +22806,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['SecureScoreResponseDto'];
+        };
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
@@ -22791,7 +22841,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ScoreHistoryResponseDto'];
+        };
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
@@ -22824,7 +22876,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['BaselineResponseDto'];
+        };
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {

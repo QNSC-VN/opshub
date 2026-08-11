@@ -100,15 +100,19 @@ Helpers live in their own module, not beside components: eslint's
 
 ## Conversion status
 
-Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`, `dashboard`, `finops`,
-`assets`, `requests`, `catalog`.
-Still hand-rolled: `profile`, `settings/webhooks`, `settings/audit-logs`, `security-posture`,
-`reports`. Only three of those still hand-roll a DIALOG — when they are converted, that ratchet
-becomes a floor at 0 and any new `fixed inset-0 z-50` fails the build.
+**Every screen is converted.** `compliance`, `access`, `workforce`, `people`, `settings/rbac`,
+`dashboard`, `finops`, `assets`, `requests`, `catalog`, `profile`, `settings/webhooks`,
+`settings/audit-logs`, `security-posture`, `reports`.
 
-Ratchet baselines move with each conversion — raw `<button>` 149 → 59, hand-rolled modal files
-11 → 3, largest file 1082 → 499, arbitrary `text-[…]` 29 → 26. Lower them by converting, never by
-editing the number.
+The hand-rolled-dialog ratchet is now a **floor at 0**: every dialog goes through `Modal`, and any new
+`fixed inset-0 z-50` fails the build. The command palette is exempted **by name**, because it is a
+combobox surface rather than a titled dialog and implements its own pattern — a baseline of 1 would
+have silently absorbed the next real violation instead.
+
+Where the ratchets ended up: raw `<button>` **149 → 45** (the rest are inside `shared/ui`, where a
+button IS the primitive, plus icon actions carrying their own `aria-label`), hand-rolled modal files
+**11 → 0**, largest file **1082 → 497**, arbitrary `text-[…]` 29 → 26. Lower them by converting, never
+by editing the number.
 
 **Charts take CSS variables, not hex.** `fill="var(--color-info)"` works in SVG exactly as it does in
 Tailwind. The six hex literals finops used were the light palette baked in, so every slice kept its

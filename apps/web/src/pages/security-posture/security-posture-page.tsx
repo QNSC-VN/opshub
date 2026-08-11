@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ENV } from '@/shared/config/env';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/shared/api/client';
+import type { components } from '@/shared/api/types';
 import {
   Shield,
   ShieldCheck,
@@ -16,76 +17,62 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { sessionFetch } from '@/shared/api/session-fetch';
-import { PageHeader } from '@/shared/ui/page-header';
-import { UpgradeGate } from '@/shared/ui/upgrade-gate';
+import {
+  PageHeader,
+  StatusBadge,
+  UpgradeGate,
+  humanizeStatus,
+  statusTone,
+  type BadgeTone,
+} from '@/shared/ui';
 import { FEATURES } from '@/shared/config/features';
 import { cn } from '@/shared/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ScoreSnapshot {
-  scoreDate: string;
-  percentageScore: string;
-}
+/*
+ * NO HAND-WRITTEN RESPONSE TYPES, NO RAW `sessionFetch`.
+ *
+ * This screen declared four interfaces and four fetchers against hand-built URLs, while all four routes
+ * are in the generated client. The finops screen showed where that ends: its hand-written `PagedResult`
+ * drifted from the API and a stat tile read 0 forever. Generated types cannot drift.
+ */
+type ScoreSnapshot = components['schemas']['ScoreHistoryPointDto'];
+export type BaselineCheck = components['schemas']['BaselineCheckDto'];
 
-interface BaselineCheck {
-  id: string;
-  category: string;
-  checkName: string;
-  status: string;
-  expectedValue: string | null;
-  actualValue: string | null;
-  details: string | null;
-}
-
-interface BaselineSummary {
-  pass: number;
-  fail: number;
-  warning: number;
-  total: number;
-}
-
-interface ScoreLatest {
-  score: string;
-  maxScore: string;
-  percentageScore: string;
-  scoreDate: string;
-}
-
-// ── API helpers ───────────────────────────────────────────────────────────────
-
-async function fetchSecureScore(): Promise<{ latest: ScoreLatest | null }> {
-  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/security-posture/score`);
-  if (!res.ok) throw new Error('Failed to load score');
-  return res.json() as Promise<{ latest: ScoreLatest | null }>;
-}
-
-async function fetchScoreHistory(days: number): Promise<{ history: ScoreSnapshot[] }> {
-  const res = await sessionFetch(
-    `${ENV.API_BASE_URL}/v1/security-posture/score/history?days=${days}`,
-  );
-  if (!res.ok) throw new Error('Failed to load history');
-  return res.json() as Promise<{ history: ScoreSnapshot[] }>;
-}
-
-async function fetchBaseline(): Promise<{
-  checks: BaselineCheck[];
-  summary: Record<string, BaselineSummary>;
-}> {
-  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/security-posture/baseline`);
-  if (!res.ok) throw new Error('Failed to load baseline');
-  return res.json() as Promise<{
-    checks: BaselineCheck[];
-    summary: Record<string, BaselineSummary>;
-  }>;
-}
-
-async function triggerSync(): Promise<void> {
-  const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/security-posture/sync`, {
-    method: 'POST',
+function useSecureScore() {
+  return useQuery({
+    queryKey: ['security-posture', 'score'],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/v1/security-posture/score');
+      if (error || !data) throw new Error('Failed to load the secure score');
+      return data;
+    },
   });
-  if (!res.ok) throw new Error('Sync failed');
+}
+
+function useScoreHistory(days: number) {
+  return useQuery({
+    queryKey: ['security-posture', 'history', days],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/v1/security-posture/score/history', {
+        params: { query: { days } },
+      });
+      if (error || !data) throw new Error('Failed to load the score history');
+      return data;
+    },
+  });
+}
+
+function useBaseline() {
+  return useQuery({
+    queryKey: ['security-posture', 'baseline'],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/v1/security-posture/baseline');
+      if (error || !data) throw new Error('Failed to load the baseline');
+      return data;
+    },
+  });
 }
 
 // ── Sparkline SVG ─────────────────────────────────────────────────────────────
@@ -153,39 +140,44 @@ function grade(pct: number): string {
   return 'F';
 }
 
-function gradeColor(g: string): string {
-  const map: Record<string, string> = {
-    A: 'text-emerald-600',
-    B: 'text-green-600',
-    C: 'text-amber-600',
-    D: 'text-orange-600',
-    F: 'text-red-600',
-  };
-  return map[g] ?? 'text-fg';
+/**
+ * Grade → tone.
+ *
+ * The colours were five raw palette classes (`text-emerald-600` … `text-red-600`), and the local
+ * `StatusBadge` — which shadowed the shared component of the same name, the third file in this codebase
+ * to do that — carried its own emerald/amber/red pairs WITH hand-written dark variants. Tones now, so a
+ * grade and a status use the same six colours as everything else.
+ */
+const GRADE_TONE: Record<string, BadgeTone> = {
+  A: 'green',
+  B: 'green',
+  C: 'amber',
+  D: 'amber',
+  F: 'red',
+};
+
+const GRADE_TEXT: Record<BadgeTone, string> = {
+  green: 'text-success',
+  amber: 'text-warning',
+  red: 'text-danger',
+  blue: 'text-info',
+  violet: 'text-violet-fg',
+  neutral: 'text-fg',
+};
+
+function gradeClass(g: string): string {
+  return GRADE_TEXT[GRADE_TONE[g] ?? 'neutral'];
 }
 
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'pass')
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-        <CheckCircle className="h-3 w-3" /> Pass
-      </span>
-    );
-  if (status === 'fail')
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-        <XCircle className="h-3 w-3" /> Fail
-      </span>
-    );
-  if (status === 'warning')
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-        <AlertTriangle className="h-3 w-3" /> Warning
-      </span>
-    );
-  return <span className="text-xs text-fg-subtle">N/A</span>;
+/** A baseline check's verdict. `not_applicable` says so rather than showing a colour for nothing. */
+function CheckVerdict({ status }: { status: string }) {
+  if (status === 'not_applicable') return <span className="text-xs text-fg-subtle">N/A</span>;
+  const icon = status === 'pass' ? CheckCircle : status === 'fail' ? XCircle : AlertTriangle;
+  return (
+    <StatusBadge tone={statusTone(status === 'pass' ? 'approved' : status)} icon={icon}>
+      {humanizeStatus(status)}
+    </StatusBadge>
+  );
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -224,18 +216,15 @@ function SecurityPostureContent() {
   const qc = useQueryClient();
   const [showPassing, setShowPassing] = useState(false);
 
-  const scoreQ = useQuery({ queryKey: ['security-posture', 'score'], queryFn: fetchSecureScore });
-  const historyQ = useQuery({
-    queryKey: ['security-posture', 'history', 30],
-    queryFn: () => fetchScoreHistory(30),
-  });
-  const baselineQ = useQuery({
-    queryKey: ['security-posture', 'baseline'],
-    queryFn: fetchBaseline,
-  });
+  const scoreQ = useSecureScore();
+  const historyQ = useScoreHistory(30);
+  const baselineQ = useBaseline();
 
   const syncMut = useMutation({
-    mutationFn: triggerSync,
+    mutationFn: async () => {
+      const { error } = await api.POST('/v1/security-posture/sync', {});
+      if (error) throw new Error('Sync failed');
+    },
     onSuccess: () => {
       toast.success('Sync triggered — data will update shortly');
       void qc.invalidateQueries({ queryKey: ['security-posture'] });
@@ -290,7 +279,7 @@ function SecurityPostureContent() {
           ) : latest ? (
             <div className="flex items-end gap-3">
               <span className="text-4xl font-bold tabular-nums text-fg">{Math.round(pct!)}%</span>
-              {g && <span className={cn('mb-1 text-2xl font-bold', gradeColor(g))}>{g}</span>}
+              {g && <span className={cn('mb-1 text-2xl font-bold', gradeClass(g))}>{g}</span>}
             </div>
           ) : (
             <p className="text-sm text-fg-muted">No data yet — run a sync to populate.</p>
@@ -446,7 +435,7 @@ function SecurityPostureContent() {
                       </td>
                       <td className="px-4 py-3 text-fg">{c.checkName}</td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={c.status} />
+                        <CheckVerdict status={c.status} />
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-fg-muted text-xs">
                         {c.actualValue ?? '—'} / {c.expectedValue ?? '—'}
