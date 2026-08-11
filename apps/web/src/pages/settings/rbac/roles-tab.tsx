@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Badge,
   Button,
@@ -124,7 +125,7 @@ export function RolesTab() {
     setDeleting(false);
     setPendingDeleteId(null);
     if (error) {
-      toast.error('Failed to delete role');
+      toast.error(apiErrorMessage(error, 'Failed to delete role.'));
       return;
     }
     toast.success('Role deleted');
@@ -138,7 +139,7 @@ export function RolesTab() {
       body: { permissions },
     });
     if (error) {
-      toast.error('Failed to update permissions');
+      toast.error(apiErrorMessage(error, 'Failed to update permissions.'));
       return;
     }
     invalidate();

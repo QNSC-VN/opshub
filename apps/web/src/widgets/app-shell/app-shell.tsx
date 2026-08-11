@@ -9,6 +9,8 @@ import {
   ScanLine,
   CalendarClock,
   Users,
+  Briefcase,
+  FileText,
   LogOut,
   ChevronRight,
   Webhook,
@@ -63,7 +65,14 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Directory',
-    items: [{ to: '/people', label: 'People', icon: Users, cap: 'employee.read' }],
+    items: [
+      { to: '/people', label: 'People', icon: Users, cap: 'employee.read' },
+      // `position.read` and `contract.read` are separate codes on purpose: who may see the org chart
+      // and who may see engagements are different questions, and the auditor holds both while a
+      // manager holds only the first.
+      { to: '/positions', label: 'Positions', icon: Briefcase, cap: 'position.read' },
+      { to: '/contracts', label: 'Contracts', icon: FileText, cap: 'contract.read' },
+    ],
   },
   {
     label: 'IT Operations',

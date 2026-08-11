@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import type { components } from '@/shared/api/types';
 import {
   Shield,
@@ -223,13 +224,15 @@ function SecurityPostureContent() {
   const syncMut = useMutation({
     mutationFn: async () => {
       const { error } = await api.POST('/v1/security-posture/sync', {});
-      if (error) throw new Error('Sync failed');
+      // The API says WHY a sync failed — expired credentials, a Graph throttle, a missing tenant —
+      // where this screen used to blame the credentials for all of them.
+      if (error) throw new Error(apiErrorMessage(error, 'Sync failed.'));
     },
     onSuccess: () => {
       toast.success('Sync triggered — data will update shortly');
       void qc.invalidateQueries({ queryKey: ['security-posture'] });
     },
-    onError: () => toast.error('Sync failed. Check Graph credentials.'),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const latest = scoreQ.data?.latest;

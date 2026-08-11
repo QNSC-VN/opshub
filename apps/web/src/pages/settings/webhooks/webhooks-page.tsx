@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Webhook } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Badge,
   Button,
@@ -83,7 +84,7 @@ export function WebhooksPage() {
         params: { path: { id: sub.id } },
         body: { active: !sub.active },
       });
-      if (error) throw new Error('Failed to update the subscription');
+      if (error) throw new Error(apiErrorMessage(error, 'Failed to update the subscription.'));
     },
     onSuccess: () => {
       toast.success('Subscription updated');
@@ -97,7 +98,7 @@ export function WebhooksPage() {
       const { error } = await api.DELETE('/v1/webhooks/subscriptions/{id}', {
         params: { path: { id } },
       });
-      if (error) throw new Error('Failed to delete the subscription');
+      if (error) throw new Error(apiErrorMessage(error, 'Failed to delete the subscription.'));
     },
     onSuccess: () => {
       toast.success('Subscription deleted');

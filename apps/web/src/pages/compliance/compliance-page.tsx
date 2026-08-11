@@ -3,13 +3,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   ActivityTimeline,
-  Button,
   DataTable,
   DescriptionList,
-  FormField,
-  Modal,
   PageHeader,
   PaginationFooter,
   SegmentedControl,
@@ -18,7 +16,6 @@ import {
   StatusBadge,
   TabPanel,
   Tabs,
-  Textarea,
   UpgradeGate,
   humanizeStatus,
   statusTone,
@@ -27,6 +24,7 @@ import {
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate } from '@/shared/lib/format';
 import { FEATURES } from '@/shared/config/features';
+import { ResolveModal } from './compliance-modals';
 import type { FindingResponse, SoftwareListing, FindingSeverity } from '@/shared/api/types';
 
 /*
@@ -114,74 +112,6 @@ function SoftwareCatalogTab() {
         noun="software"
       />
     </div>
-  );
-}
-
-// ── Resolve modal ─────────────────────────────────────────────────────────────
-
-interface ResolveModalProps {
-  findingId: string;
-  open: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-function ResolveModal({ findingId, open, onClose, onSuccess }: ResolveModalProps) {
-  const [loading, setLoading] = useState(false);
-  const [note, setNote] = useState('');
-  const [riskAccepted, setRiskAccepted] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await api.POST('/v1/compliance/findings/{id}/resolve', {
-      params: { path: { id: findingId } },
-      body: { note: note || undefined, riskAccepted },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error('Failed to resolve finding');
-      return;
-    }
-    toast.success(riskAccepted ? 'Finding marked as risk accepted' : 'Finding resolved');
-    onSuccess();
-    onClose();
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Resolve finding" size="sm">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
-        <FormField label="Resolution note" htmlFor="resolve-note">
-          <Textarea
-            id="resolve-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Describe how this finding was addressed…"
-          />
-        </FormField>
-
-        <label className="flex cursor-pointer select-none items-center gap-2.5">
-          <input
-            type="checkbox"
-            checked={riskAccepted}
-            onChange={(e) => setRiskAccepted(e.target.checked)}
-            className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-          />
-          <span className="text-sm text-fg-muted">
-            Accept residual risk (mark as risk accepted)
-          </span>
-        </label>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Saving…' : 'Resolve'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 
@@ -299,7 +229,7 @@ function FindingsTab() {
       params: { path: { id } },
     });
     if (error) {
-      toast.error('Failed to acknowledge finding');
+      toast.error(apiErrorMessage(error, 'Failed to acknowledge finding.'));
       return;
     }
     toast.success('Finding acknowledged');

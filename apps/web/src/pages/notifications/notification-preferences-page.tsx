@@ -21,6 +21,7 @@ import { useState } from 'react';
 import { Bell, Mail, RotateCcw, BellOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated/api';
 
 type PreferenceDto = components['schemas']['PreferenceResponseDto'];
@@ -193,7 +194,7 @@ export function NotificationPreferencesPage() {
     });
 
     if (error) {
-      toast.error('Failed to save preference');
+      toast.error(apiErrorMessage(error, 'Failed to save preference.'));
       invalidate(); // rollback
     }
   }
@@ -203,7 +204,7 @@ export function NotificationPreferencesPage() {
       params: { path: { type } },
     });
     if (error) {
-      toast.error('Failed to reset preference');
+      toast.error(apiErrorMessage(error, 'Failed to reset preference.'));
       return;
     }
     toast.success('Reset to default');
@@ -230,7 +231,7 @@ export function NotificationPreferencesPage() {
     });
 
     if (error) {
-      toast.error('Failed to update global preference');
+      toast.error(apiErrorMessage(error, 'Failed to update global preference.'));
       invalidate();
     }
   }
@@ -240,7 +241,7 @@ export function NotificationPreferencesPage() {
       params: { path: { type: '*' } },
     });
     if (error) {
-      toast.error('Failed to reset');
+      toast.error(apiErrorMessage(error, 'Failed to reset.'));
       return;
     }
     invalidate();

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
   ConfirmDialog,
@@ -147,7 +148,7 @@ export function DelegationsTab() {
     setDeleting(false);
     setPendingDeleteId(null);
     if (error) {
-      toast.error('Failed to delete delegation');
+      toast.error(apiErrorMessage(error, 'Failed to delete delegation.'));
       return;
     }
     toast.success('Delegation deleted');

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
   DataTable,
@@ -55,7 +56,7 @@ function LogTimesheetModal({ open, onClose, onSuccess }: FormModalProps) {
     });
     setLoading(false);
     if (error) {
-      toast.error('Failed to log timesheet');
+      toast.error(apiErrorMessage(error, 'Failed to log timesheet.'));
       return;
     }
     toast.success('Timesheet logged');
@@ -138,7 +139,7 @@ export function TimesheetsTab() {
       params: { path: { id } },
     });
     if (error) {
-      toast.error('Failed to submit timesheet');
+      toast.error(apiErrorMessage(error, 'Failed to submit timesheet.'));
       return;
     }
     toast.success('Timesheet submitted for review');
@@ -151,7 +152,7 @@ export function TimesheetsTab() {
       body: { approve },
     });
     if (error) {
-      toast.error(`Failed to ${approve ? 'approve' : 'reject'} timesheet`);
+      toast.error(apiErrorMessage(error, `Failed to ${approve ? 'approve' : 'reject'} timesheet.`));
       return;
     }
     toast.success(`Timesheet ${approve ? 'approved' : 'rejected'}`);

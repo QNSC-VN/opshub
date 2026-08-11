@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/utils';
+import { responseErrorMessage } from '@/shared/api/errors';
 import { sessionFetch } from '@/shared/api/session-fetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,7 +33,9 @@ async function clockIn(isRemote: boolean): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ isRemote }),
   });
-  if (!res.ok) throw new Error('Clock-in failed');
+  // "You are already clocked in" and "no shift today" are both refusals with a reason; showing a bare
+  // "Failed to clock in" left somebody clicking the button again.
+  if (!res.ok) throw new Error(await responseErrorMessage(res, 'Clock-in failed.'));
 }
 
 async function clockOut(): Promise<void> {
@@ -40,7 +43,7 @@ async function clockOut(): Promise<void> {
     method: 'POST',
     body: JSON.stringify({}),
   });
-  if (!res.ok) throw new Error('Clock-out failed');
+  if (!res.ok) throw new Error(await responseErrorMessage(res, 'Clock-out failed.'));
 }
 
 // ── Elapsed timer ─────────────────────────────────────────────────────────────
@@ -86,7 +89,7 @@ export function AttendanceClock() {
       toast.success('Clocked in');
       void qc.invalidateQueries({ queryKey: ['attendance'] });
     },
-    onError: () => toast.error('Failed to clock in'),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const clockOutMut = useMutation({
@@ -95,7 +98,7 @@ export function AttendanceClock() {
       toast.success('Clocked out');
       void qc.invalidateQueries({ queryKey: ['attendance'] });
     },
-    onError: () => toast.error('Failed to clock out'),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const isPending = clockInMut.isPending || clockOutMut.isPending;

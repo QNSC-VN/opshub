@@ -33,13 +33,14 @@ import { describe, expect, it } from 'vitest';
 //
 // `<button>` has a destination: shared/ui/button.tsx. 149 → 105 (access, compliance, workforce) →
 // 93 (people) → 78 (rbac) → 72 (finops) → 59 (assets, requests, catalog) → 45 (profile, webhooks,
-// audit logs, security posture, reports — the last five). Re-measured each time the way this file's
-// docblock demands: force the constant to -1 and read the count the failure reports.
+// audit logs, security posture, reports) → 40, once `stripComments` stopped counting prose ABOUT the
+// rule as a violation OF it. Re-measured each time the way this file's docblock demands: force the
+// constant to -1 and read the count the failure reports.
 //
-// The 45 that remain are almost all inside `shared/ui` itself, where a `<button>` IS the primitive,
-// plus icon-only row actions that carry their own `aria-label`. Worth checking before assuming the
-// number can keep falling.
-const MAX_RAW_BUTTON = 45;
+// The 40 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
+// few widgets (the notification bell, the AI panel, the app shell's own nav) that were never screens.
+// Worth checking what is actually left before assuming the number can keep falling.
+const MAX_RAW_BUTTON = 40;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -62,8 +63,13 @@ const MAX_ARBITRARY_TEXT = 26;
 //
 // Reports was split BECAUSE OF THIS CHECK and not because it grew a feature: the comments explaining
 // its colour change pushed it past 499, the ceiling refused, and the honest response was three modules
-// rather than a bigger number. The ceiling now describes `compliance-page.tsx`.
-const MAX_FILE_LINES = 497;
+// rather than a bigger number.
+//
+// 497 → 486. It refused again at 498, on `compliance-page.tsx`, for one wrapped line added while routing
+// its toast through `apiErrorMessage`. The honest response was the same: its resolve dialog moved to
+// `compliance/compliance-modals.tsx`, where every other screen in this migration keeps its dialogs. The
+// ceiling now describes `reports/report-charts.tsx`.
+const MAX_FILE_LINES = 486;
 
 /**
  * Hand-rolled modal overlays — a `fixed inset-0 z-50` backdrop built inline instead of using
@@ -87,6 +93,24 @@ const MAX_FILE_LINES = 497;
  * was created to reach.
  */
 const MAX_HANDROLLED_MODAL = 0;
+
+/**
+ * Invented failure messages — `toast.error('…')` with a hand-written sentence instead of
+ * `apiErrorMessage(error, …)`. MAY ONLY FALL.
+ *
+ * The API answers a refused mutation with a code and a sentence naming the record and the rule. Fifteen
+ * screens threw that away and substituted a guess, and a guess is worse than nothing when it is wrong:
+ * the contracts screen showed "The employee may already have an active contract." for a 412 whose real
+ * message was "has no signature date. Supply `signedAt`" — so the activation silently never happened and
+ * the message named the one cause it was not. It cost an hour of debugging a test that was correct.
+ *
+ * 21 → 1. The one that remains is `login-page.tsx`: a failure to START an OAuth redirect, where there is
+ * no API response to read a message out of.
+ *
+ * A fallback sentence is still fine — `apiErrorMessage(error, 'Failed to activate the contract.')` says
+ * what failed and lets the API say why. This check only refuses the shape that CANNOT show the reason.
+ */
+const MAX_INVENTED_ERROR_MESSAGE = 1;
 
 /**
  * The command palette owns its overlay, deliberately.
@@ -115,6 +139,22 @@ function files(predicate: (rel: string) => boolean): string[] {
   );
 }
 
+/**
+ * Source with comments removed.
+ *
+ * The scanners count PATTERNS IN CODE, and prose about a rule is not a violation of it: a comment
+ * explaining "use `Button`, not a bare `<button>`" was itself counted as a raw button, and a comment
+ * naming `fixed inset-0 z-50` would count as a hand-rolled modal. Both are the opposite of the thing
+ * being measured — writing down why a rule exists must not cost a point against it.
+ *
+ * Deliberately naive (no string-literal awareness): a `//` inside a string would be over-stripped, which
+ * can only ever make a count LOWER on a file whose real violations are still counted elsewhere in the
+ * same sweep. The alternative is a parser, for a guardrail.
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^\n]*/g, '$1');
+}
+
 const inConsumerLayers = (rel: string) =>
   /^(pages|features|entities|widgets)\//.test(rel) && rel.endsWith('.tsx');
 
@@ -122,7 +162,7 @@ function countMatches(predicate: (rel: string) => boolean, re: RegExp) {
   const byFile: Record<string, number> = {};
   let total = 0;
   for (const rel of files(predicate)) {
-    const n = (readFileSync(join(SRC, rel), 'utf8').match(re) ?? []).length;
+    const n = (stripComments(readFileSync(join(SRC, rel), 'utf8')).match(re) ?? []).length;
     if (n) {
       byFile[rel] = n;
       total += n;
@@ -181,13 +221,22 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     for (const rel of files((f) => f.endsWith('.tsx'))) {
       if (rel.includes('shared/ui/')) continue; // Modal itself, and slide-over, legitimately own one.
       if (HANDROLLED_MODAL_EXEMPT.some((exempt) => rel.includes(exempt))) continue;
-      const hits = (readFileSync(join(SRC, rel), 'utf8').match(/fixed inset-0 z-50/g) ?? []).length;
+      const hits = (
+        stripComments(readFileSync(join(SRC, rel), 'utf8')).match(/fixed inset-0 z-50/g) ?? []
+      ).length;
       if (hits > 0) {
         byFile[rel] = hits;
         total += 1;
       }
     }
     assertRatchet('hand-rolled modal files', total, MAX_HANDROLLED_MODAL, byFile);
+  });
+
+  it(`invented failure messages <= ${MAX_INVENTED_ERROR_MESSAGE}`, () => {
+    // A string literal as the FIRST argument. `toast.error(e.message)` and
+    // `toast.error(apiErrorMessage(error, '…'))` both pass; only a bare sentence counts.
+    const { total, byFile } = countMatches((f) => /\.tsx?$/.test(f), /toast\.error\(['`]/g);
+    assertRatchet('invented failure message count', total, MAX_INVENTED_ERROR_MESSAGE, byFile);
   });
 
   it(`largest source file <= ${MAX_FILE_LINES} lines`, () => {
