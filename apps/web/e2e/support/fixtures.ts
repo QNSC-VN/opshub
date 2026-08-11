@@ -50,4 +50,24 @@ export async function gotoInShell(page: Page, path: string): Promise<void> {
   ).not.toContain('login');
 }
 
+/**
+ * Click the first DATA row of a `DataTable`, once there is one.
+ *
+ * `tbody tr` also matches the table's own state rows — the loading placeholder, the error row, the empty
+ * state — and those are single `colSpan` cells with no click handler. Clicking one does nothing, so a
+ * spec that raced the fetch failed with "no dialog appeared", which reads like a broken drawer rather
+ * than a test that clicked too early. Measured: it failed roughly one run in three.
+ *
+ * Waits for the loading row to go and for a row with more than one cell, which is what a data row is.
+ */
+export async function clickFirstRow(page: Page): Promise<void> {
+  await expect(page.getByText('Loading…')).toHaveCount(0, { timeout: 15_000 });
+  const dataRow = page
+    .locator('tbody tr')
+    .filter({ has: page.locator('td:nth-child(2)') })
+    .first();
+  await expect(dataRow).toBeVisible({ timeout: 15_000 });
+  await dataRow.click();
+}
+
 export { expect };

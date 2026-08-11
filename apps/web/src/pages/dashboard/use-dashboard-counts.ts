@@ -47,9 +47,17 @@ export function useDashboardCounts(): DashboardCounts {
       return data.pageInfo?.total ?? 0;
     }),
 
+    /*
+     * `myQueue`, not `mine`.
+     *
+     * This asked for `mine: true`, which is not a parameter the API has — `ListRequestsQuerySchema`
+     * defines `myQueue` — so it was stripped and the tile counted EVERY pending request rather than
+     * the caller's. It reads "Awaiting my approval". On the seeded database the two numbers happen to
+     * match, because admin is the assignee for everything, which is exactly why nobody noticed.
+     */
     myQueue: useTotal(['requests', 'my-queue-count'], async () => {
       const { data, error } = await api.GET('/v1/requests', {
-        params: { query: { limit: 1, mine: true, status: 'pending' } },
+        params: { query: { limit: 1, myQueue: true } },
       });
       if (error || !data) throw new Error('Failed to count my queue');
       return data.pageInfo?.total ?? 0;

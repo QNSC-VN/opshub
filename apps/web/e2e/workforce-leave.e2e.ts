@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test, type Page } from '@playwright/test';
 import { expect, gotoInShell, settle } from './support/fixtures';
 
 /**
@@ -28,7 +28,11 @@ import { expect, gotoInShell, settle } from './support/fixtures';
  * table. The database is shared with the API suites and is not reset between Playwright runs, so
  * uniqueness has to come from the test.
  *
- * Derived from the clock in whole days, so two runs collide only inside the same second.
+ * NOT `Date.now() % 3000`, which is what this did: that is 3000 SECONDS, so the window repeated every
+ * fifty minutes and a later run collided with an earlier run's request for a 409 `LEAVE_OVERLAPPING`.
+ *
+ * A random offset inside 2030–2039 instead. The range matters: the API suite grants entitlements from
+ * 2040 up, and a window landing in one of those hits a real balance earlier runs have partly consumed.
  *
  * ALWAYS LANDS ON A MONDAY. The API now refuses a window containing no working days
  * (`LEAVE_NO_WORKING_DAYS`): a Saturday-to-Sunday request costs nothing and is almost certainly a
@@ -40,11 +44,42 @@ function uniqueLeaveWindow(): { start: string; end: string } {
   const day = 86_400_000;
   // Base far in the future so nothing here can collide with seeded or hand-made data.
   const base = Date.UTC(2030, 0, 1);
-  const startMs = base + (Math.floor(Date.now() / 1000) % 3000) * day;
+  const startMs = base + Math.floor(Math.random() * 3600) * day;
   // Advance to the next Monday. getUTCDay: 0 = Sunday, 1 = Monday.
   const mondayMs = startMs + ((8 - new Date(startMs).getUTCDay()) % 7) * day;
   const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   return { start: iso(mondayMs), end: iso(mondayMs + day) };
+}
+
+/**
+ * Find a row anywhere in the paged list.
+ *
+ * The leave list is `ORDER BY start_date DESC` and pages at 25, so a request for 2032 sits below every
+ * 2037-dated row a previous run left behind and is NOT on page 1. Asserting only the first page made
+ * this spec pass or fail on how far into the future its random window happened to fall — which is a
+ * property of the test data, not of the feature.
+ *
+ * Walking the pager also proves the paging works, which is new on this screen.
+ */
+async function expectRowSomewhere(page: Page, text: string): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (
+      await page
+        .getByText(text)
+        .first()
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
+    const next = page.getByRole('button', { name: /Next/ });
+    if (!(await next.isVisible().catch(() => false)) || (await next.isDisabled())) break;
+    await next.click();
+    await page.waitForTimeout(400);
+  }
+  await expect(
+    page.getByText(text).first(),
+    `"${text}" was not on any page of the leave list`,
+  ).toBeVisible({ timeout: 5_000 });
 }
 
 test.describe('workforce leave', () => {
@@ -89,8 +124,8 @@ test.describe('workforce leave', () => {
     // Closing the dialog is part of the flow: a form that submits and stays open reads as a failure.
     await expect(dialog).toBeHidden();
 
-    // The list re-fetches after the mutation; wait for the row rather than a fixed delay.
-    await expect(page.getByText(reason).first()).toBeVisible({ timeout: 15_000 });
+    // The list re-fetches after the mutation; find the row rather than waiting a fixed delay.
+    await expectRowSomewhere(page, reason);
 
     // Reload: proves the row is on the SERVER, not just in React state.
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -100,9 +135,6 @@ test.describe('workforce leave', () => {
     // that the row was fine and the tab was wrong.
     await page.getByRole('tab', { name: 'Leave', exact: true }).click();
     await settle(page);
-    await expect(
-      page.getByText(reason).first(),
-      'the leave request vanished on reload — it was never persisted',
-    ).toBeVisible({ timeout: 15_000 });
+    await expectRowSomewhere(page, reason);
   });
 });
