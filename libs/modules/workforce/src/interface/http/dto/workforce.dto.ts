@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
 import {
   timesheetStatusEnum,
+  leaveDayPortionEnum,
   leaveTypeEnum,
   leaveStatusEnum,
   overtimeStatusEnum,
@@ -47,6 +48,17 @@ export const CreateLeaveSchema = z
     leaveType: z.enum(leaveTypeEnum.enumValues),
     startDate: dateStr,
     endDate: dateStr,
+    /**
+     * Which part of the first and last day the window covers. Both default to `full_day`, so a
+     * caller that ignores them books whole days exactly as it always did.
+     *
+     * The combinations that have no meaning — morning-to-afternoon for a whole day, a multi-day
+     * window starting with a lone morning — are refused by the service with
+     * `LEAVE_INVALID_WINDOW`, not here: they are also CHECKs on the table, and a rule stated in
+     * three places is a rule that will disagree with itself. Zod's job is the vocabulary.
+     */
+    startPortion: z.enum(leaveDayPortionEnum.enumValues).optional(),
+    endPortion: z.enum(leaveDayPortionEnum.enumValues).optional(),
     reason: z.string().max(1000).optional(),
   })
   .refine((v) => v.startDate <= v.endDate, {
@@ -69,9 +81,18 @@ export class LeaveResponseDto {
   leaveType!: string;
   startDate!: string;
   endDate!: string;
+  /**
+   * Which part of the first and last day the window covers: `full_day`, `morning` or `afternoon`.
+   *
+   * Always present — a whole-day request reads `full_day` at both ends — so a client never has to
+   * treat an absent portion as a special case.
+   */
+  startPortion!: string;
+  endPortion!: string;
   reason!: string | null;
   /**
-   * Working days this request costs, excluding weekends and public holidays, frozen at submit.
+   * Working days this request costs, excluding weekends, public holidays and part-day ends, frozen
+   * at submit. Half days are real values here: an afternoon off is `0.5`.
    *
    * `null` only for rows predating the column. Surfaced because an approver deciding a request
    * needs to know what it takes out of the balance — the number is useless if only the server

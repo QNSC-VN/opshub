@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
 import { REQUEST_TYPE } from '@shared-kernel';
 import { leaveRequests } from '../../../../../db/schema';
+import type { LeaveDayPortion } from '../domain/workforce.types';
 
 export interface LeaveRequestPayload extends Record<string, unknown> {
   leaveRequestId: string;
@@ -10,6 +11,11 @@ export interface LeaveRequestPayload extends Record<string, unknown> {
   leaveType: string;
   startDate: string;
   endDate: string;
+  /** Which part of the first and last day the window covers — `full_day` unless part-day. */
+  startPortion: LeaveDayPortion;
+  endPortion: LeaveDayPortion;
+  /** What the window costs in days, so a reviewer sees the size of what they are approving. */
+  workingDays: number;
   reason: string | null;
 }
 
@@ -19,9 +25,7 @@ export interface LeaveRequestPayload extends Record<string, unknown> {
  * continue to work unchanged.
  */
 @Injectable()
-export class LeaveRequestTypeDef
-  implements RequestTypeDef<LeaveRequestPayload>, OnModuleInit
-{
+export class LeaveRequestTypeDef implements RequestTypeDef<LeaveRequestPayload>, OnModuleInit {
   readonly type = REQUEST_TYPE.LEAVE_REQUEST;
   readonly requiredApprovalPermission = 'workforce.leave.review';
   readonly allowSelfApproval = false;

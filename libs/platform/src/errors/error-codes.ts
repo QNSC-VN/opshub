@@ -49,6 +49,11 @@ export const ErrorCodes = {
   LEAVE_REQUEST_NOT_FOUND: 'LEAVE_REQUEST_NOT_FOUND',
   LEAVE_REQUEST_NOT_PENDING: 'LEAVE_REQUEST_NOT_PENDING',
   LEAVE_OVERLAPPING: 'LEAVE_OVERLAPPING',
+  /**
+   * The window is not a legal shape: dates backwards, or a portion combination with no meaning —
+   * `ck_leave_single_day_portions_match` and its siblings in words. See `domain/leave-window.ts`.
+   */
+  LEAVE_INVALID_WINDOW: 'LEAVE_INVALID_WINDOW',
   /** Assigning would exceed the position's approved headcount. */
   POSITION_HEADCOUNT_EXCEEDED: 'POSITION_HEADCOUNT_EXCEEDED',
   /** An assignment would end before it began — `ck_employee_position_window` in words. */

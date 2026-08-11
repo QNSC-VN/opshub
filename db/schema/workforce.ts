@@ -15,6 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import {
   leaveAccrualMethodEnum,
+  leaveDayPortionEnum,
   leaveStatusEnum,
   leaveTypeEnum,
   overtimeStatusEnum,
@@ -54,6 +55,13 @@ export const leaveRequests = workforceSchema.table(
     leaveType: leaveTypeEnum('leave_type').notNull(),
     startDate: date('start_date').notNull(),
     endDate: date('end_date').notNull(),
+    /**
+     * Which part of the first and last day the window covers. Both `full_day` unless the request
+     * is part-day — see `domain/leave-window.ts` for the rules, and migration 0028 for the CHECKs
+     * that keep every window in exactly one spelling.
+     */
+    startPortion: leaveDayPortionEnum('start_portion').notNull().default('full_day'),
+    endPortion: leaveDayPortionEnum('end_portion').notNull().default('full_day'),
     reason: text('reason'),
     /**
      * Working days this request costs, computed at SUBMIT time and then frozen.

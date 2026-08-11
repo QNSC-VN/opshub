@@ -4,6 +4,7 @@ import { InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { timesheets, leaveRequests, overtimeEntries, shiftLogs } from '../../../../../../db/schema';
 import type { IWorkforceRepository } from '../../domain/ports/workforce.repository';
+import type { LeaveWindow } from '../../domain/leave-window';
 import type {
   CreateLeaveInput,
   CreateOvertimeInput,
@@ -99,6 +100,10 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         leaveType: input.leaveType,
         startDate: input.startDate,
         endDate: input.endDate,
+        // Omitted rather than defaulted to 'full_day' here: the column's DEFAULT is the one place
+        // that decision belongs, and a second copy of it would be the one that drifts.
+        startPortion: input.startPortion,
+        endPortion: input.endPortion,
         // Stored as a string: numeric(5,2) round-trips through the driver as text, and letting a
         // JS number through here would silently become '3' vs '3.00' depending on the value.
         workingDays: input.workingDays === undefined ? null : String(input.workingDays),
@@ -169,23 +174,28 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
     await this.db.update(leaveRequests).set({ documentStorageKey }).where(eq(leaveRequests.id, id));
   }
 
-  async hasOverlappingLeave(
+  async overlappingLeaveCandidates(
     employeeId: string,
     startDate: string,
     endDate: string,
-  ): Promise<boolean> {
-    const [row] = await this.db
-      .select({ count: sql<number>`count(*)::int` })
+  ): Promise<LeaveWindow[]> {
+    return this.db
+      .select({
+        startDate: leaveRequests.startDate,
+        endDate: leaveRequests.endDate,
+        startPortion: leaveRequests.startPortion,
+        endPortion: leaveRequests.endPortion,
+      })
       .from(leaveRequests)
       .where(
         and(
           eq(leaveRequests.employeeId, employeeId),
+          // Only live requests hold a date: a rejected or cancelled one released it.
           sql`${leaveRequests.status} in ('pending','approved')`,
           lte(leaveRequests.startDate, endDate),
           gte(leaveRequests.endDate, startDate),
         ),
       );
-    return (row?.count ?? 0) > 0;
   }
 
   // ── Overtime ───────────────────────────────────────────────────────────────

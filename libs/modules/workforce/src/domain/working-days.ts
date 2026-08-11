@@ -24,7 +24,7 @@
  * Mon–Fri, which is the standard week at QNSC. This is a CONSTANT rather than configuration
  * because there is nowhere to configure it yet — OpsHub has no organisation-settings table. When a
  * second working pattern is needed (a Saturday shift, a different country), this becomes a lookup
- * and every caller already passes through `countWorkingDays`, so there is one place to change.
+ * and every caller already passes through `workingDatesInRange`, so there is one place to change.
  */
 export const WORKING_WEEKDAYS: readonly number[] = [1, 2, 3, 4, 5];
 
@@ -57,28 +57,27 @@ export function datesInRange(start: string, end: string): string[] {
 }
 
 /**
- * How many working days a leave window costs.
+ * Every date in a range that actually costs something: a weekday, and not a public holiday.
  *
- * Inclusive of both ends — a request for the 4th to the 4th is one day, not zero, which is how
- * anyone filing a single day off would read it.
+ * The DATES and not a count, because part-day leave has to ask a question of each one — is this the
+ * boundary day, and if so which half is taken. A count could not answer that, and a second loop
+ * that re-derived which dates were working days would be the copy that eventually disagrees with
+ * this one about what a day off means. Callers wanting the whole-day cost take `.length`.
  *
- * Returns 0 for a window made entirely of weekends and holidays. That is a real answer, not an
- * error: the caller decides whether a zero-cost request is worth refusing (it is — see
- * `LeaveBalanceService`), and this function's job is only to count.
+ * Inclusive of both ends — the 4th to the 4th is one date, not zero, which is how anyone filing a
+ * single day off would read it. Empty for a range made entirely of weekends and holidays, which is
+ * a real answer rather than an error: whether a zero-cost request is worth refusing is the caller's
+ * decision (it is — see `LeaveBalanceService`).
  *
- * @param holidays Dates to exclude, as `YYYY-MM-DD`. A holiday already falling on a weekend is
- *                 not double-counted, because each date is considered once.
+ * @param holidays Dates to exclude, as `YYYY-MM-DD`. A holiday already falling on a weekend is not
+ *                 double-counted, because each date is considered once.
  */
-export function countWorkingDays(
+export function workingDatesInRange(
   start: string,
   end: string,
   holidays: ReadonlySet<string> = new Set(),
-): number {
-  let days = 0;
-  for (const date of datesInRange(start, end)) {
-    if (!WORKING_WEEKDAYS.includes(isoWeekday(date))) continue;
-    if (holidays.has(date)) continue;
-    days += 1;
-  }
-  return days;
+): string[] {
+  return datesInRange(start, end).filter(
+    (date) => WORKING_WEEKDAYS.includes(isoWeekday(date)) && !holidays.has(date),
+  );
 }

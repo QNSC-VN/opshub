@@ -999,7 +999,10 @@ export interface paths {
      */
     get: operations['WorkforceController_listLeave'];
     put?: never;
-    /** Request leave for the current user */
+    /**
+     * Request leave for the current user
+     * @description Whole days by default. For part-day leave set `startPortion` / `endPortion`: a lone `morning` or `afternoon` on a single day costs 0.5, and a window may begin in the `afternoon` and end with a `morning` — Wednesday afternoon to Friday morning is 2 days. A whole day is `full_day`, never morning-to-afternoon, and a multi-day window cannot start with a lone morning or end with a lone afternoon (412 `LEAVE_INVALID_WINDOW`). A part-day end falling on a weekend or public holiday costs nothing, because the day it is half of costs nothing. Two requests sharing a date but not a half-day do NOT conflict.
+     */
     post: operations['WorkforceController_createLeave'];
     delete?: never;
     options?: never;
@@ -5066,9 +5069,18 @@ export interface components {
       leaveType: string;
       startDate: string;
       endDate: string;
+      /**
+       * @description Which part of the first and last day the window covers: `full_day`, `morning` or `afternoon`.
+       *
+       *     Always present — a whole-day request reads `full_day` at both ends — so a client never has to
+       *     treat an absent portion as a special case.
+       */
+      startPortion: string;
+      endPortion: string;
       reason: string | null;
       /**
-       * @description Working days this request costs, excluding weekends and public holidays, frozen at submit.
+       * @description Working days this request costs, excluding weekends, public holidays and part-day ends, frozen
+       *     at submit. Half days are real values here: an afternoon off is `0.5`.
        *
        *     `null` only for rows predating the column. Surfaced because an approver deciding a request
        *     needs to know what it takes out of the balance — the number is useless if only the server
@@ -5087,6 +5099,10 @@ export interface components {
       startDate: string;
       /** Format: date */
       endDate: string;
+      /** @enum {string} */
+      startPortion?: 'full_day' | 'morning' | 'afternoon';
+      /** @enum {string} */
+      endPortion?: 'full_day' | 'morning' | 'afternoon';
       reason?: string;
     };
     OvertimeResponseDto: {
