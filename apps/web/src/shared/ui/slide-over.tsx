@@ -9,13 +9,7 @@
  *  - Animation: CSS translate (GPU-composited, no layout thrash)
  *  - Zero runtime dependencies beyond React
  */
-import {
-  useEffect,
-  useRef,
-  useId,
-  type ReactNode,
-  type KeyboardEvent,
-} from 'react';
+import { useEffect, useRef, useId, type ReactNode, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 
@@ -38,10 +32,10 @@ export interface SlideOverProps {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WIDTH: Record<NonNullable<SlideOverProps['width']>, string> = {
-  sm:  'w-80',
-  md:  'w-[420px]',
-  lg:  'w-[520px]',
-  xl:  'w-[640px]',
+  sm: 'w-80',
+  md: 'w-[420px]',
+  lg: 'w-[520px]',
+  xl: 'w-[640px]',
   '2xl': 'w-[768px]',
 };
 
@@ -63,8 +57,8 @@ export function SlideOver({
   width = 'md',
 }: SlideOverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const titleId  = useId();
-  const descId   = useId();
+  const titleId = useId();
+  const descId = useId();
 
   // ── Focus trap ────────────────────────────────────────────────────────────
 
@@ -117,7 +111,7 @@ export function SlideOver({
     if (focusable.length === 0) return;
 
     const first = focusable[0];
-    const last  = focusable[focusable.length - 1];
+    const last = focusable[focusable.length - 1];
 
     if (e.shiftKey) {
       if (document.activeElement === first) {
@@ -146,13 +140,22 @@ export function SlideOver({
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/*
+        Panel.
+        
+        MOUNTED ALWAYS, so it can animate in and out — but only exposed to assistive technology while
+        OPEN. A closed drawer that keeps `role="dialog"` is announced as a second dialog on the page:
+        `page.getByRole('dialog')` matched two elements the moment a `Modal` opened over one, which is
+        precisely the ambiguity a screen-reader user would have to resolve. `aria-hidden` while closed
+        also keeps its contents out of the reading order and off the tab sequence.
+      */}
       <div
         ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descId : undefined}
+        role={open ? 'dialog' : undefined}
+        aria-modal={open ? 'true' : undefined}
+        aria-hidden={open ? undefined : true}
+        aria-labelledby={open ? titleId : undefined}
+        aria-describedby={open && description ? descId : undefined}
         onKeyDown={handleKeyDown}
         className={cn(
           'fixed inset-y-0 right-0 z-50 flex flex-col',
@@ -165,17 +168,11 @@ export function SlideOver({
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0 flex-1">
-            <h2
-              id={titleId}
-              className="truncate text-sm font-semibold text-fg"
-            >
+            <h2 id={titleId} className="truncate text-sm font-semibold text-fg">
               {title}
             </h2>
             {description && (
-              <p
-                id={descId}
-                className="mt-0.5 truncate text-xs text-fg-muted"
-              >
+              <p id={descId} className="mt-0.5 truncate text-xs text-fg-muted">
                 {description}
               </p>
             )}
@@ -195,16 +192,10 @@ export function SlideOver({
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto">{children}</div>
 
         {/* Optional footer */}
-        {footer && (
-          <div className="shrink-0 border-t border-border px-5 py-3">
-            {footer}
-          </div>
-        )}
+        {footer && <div className="shrink-0 border-t border-border px-5 py-3">{footer}</div>}
       </div>
     </>
   );
