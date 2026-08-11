@@ -67,6 +67,10 @@ export const SEVERITY_TONE: Record<string, BadgeTone> = {
 /** Whether a thing is in service: employees, assets, positions, vendors, controlled documents. */
 export const LIFECYCLE_TONE: Record<string, BadgeTone> = {
   active: 'green',
+  // Shared by licences and employment contracts: both have a window that is about to close, and both
+  // were choosing their own amber for it.
+  expiring_soon: 'amber',
+  expired: 'red',
   published: 'green',
   open: 'amber',
   onboarding: 'blue',

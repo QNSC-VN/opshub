@@ -4,7 +4,7 @@
  * A `.ts` spec: these are pure functions over strings, so no DOM.
  */
 import { describe, expect, it } from 'vitest';
-import { EM_DASH, formatDate, formatDateTime, formatDecimal, orDash } from './format';
+import { EM_DASH, formatDate, formatDateTime, formatDecimal, formatMoney, orDash } from './format';
 
 describe('formatDate', () => {
   it('formats a calendar date unambiguously', () => {
@@ -87,5 +87,30 @@ describe('orDash', () => {
     expect(orDash(null)).toBe(EM_DASH);
     expect(orDash(undefined)).toBe(EM_DASH);
     expect(orDash('')).toBe(EM_DASH);
+  });
+});
+
+describe('formatMoney', () => {
+  it('formats integer cents as currency, naming the currency', () => {
+    // Cents in the column, a string at the edge, no float in between — which is why the column is an
+    // integer in the first place.
+    //
+    // `US$` and not a bare `$`: the shared locale is `en-GB` for the same reason dates are, and a
+    // product used across countries should not leave "$12.50" to mean whichever dollar the reader
+    // assumes. The finops screen's own formatter printed the bare symbol.
+    expect(formatMoney(1250)).toBe('US$12.50');
+    expect(formatMoney(0)).toBe('US$0.00');
+    expect(formatMoney(123456789)).toBe('US$1,234,567.89');
+  });
+
+  it('takes a currency', () => {
+    expect(formatMoney(1250, 'EUR')).toContain('12.50');
+  });
+
+  it('em-dashes an absent amount, and keeps a real zero', () => {
+    expect(formatMoney(null)).toBe(EM_DASH);
+    expect(formatMoney(undefined)).toBe(EM_DASH);
+    expect(formatMoney(Number.NaN)).toBe(EM_DASH);
+    expect(formatMoney(0)).not.toBe(EM_DASH);
   });
 });

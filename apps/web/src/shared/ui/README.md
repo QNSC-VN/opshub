@@ -47,17 +47,23 @@ not either of them.
 special about it, what happened to it — and omits the Activity section entirely for a record type
 with no audit trail.
 
-**7. Dates and numbers go through `@/shared/lib/format`.**
+**7. Never hand-write a response type; never call `fetch` directly.**
+`@/shared/api/client` is generated from the OpenAPI spec. The finops screen declared its own
+`SoftwareLicense`/`PagedResult` interfaces "until openapi-typescript regenerated" — and they drifted:
+`total` sat at the top level where the API puts it in `pageInfo`, so a stat tile read 0 forever and
+the pager never rendered. Generated types would not have compiled.
+
+**8. Dates and numbers go through `@/shared/lib/format`.**
 `formatDate` treats a `YYYY-MM-DD` as the calendar date it is — `new Date('2026-03-04')` is UTC
 midnight and renders as the 3rd for anyone behind UTC. `formatDecimal` handles the strings the
 `numeric` columns arrive as.
 
-**8. KPI tiles are `StatCard` inside `StatGrid`.**
+**9. KPI tiles are `StatCard` inside `StatGrid`.**
 It owns the loading skeleton and the `alert` treatment (a red ring, and only when the number is
 above zero — a red ring round a zero is an alarm about nothing). A tile that navigates wraps it in a
 `Link`; the kit stays router-free.
 
-**9. A screen whose only difference between variants is WHICH widgets it lists should list them as
+**10. A screen whose only difference between variants is WHICH widgets it lists should list them as
 data.** The dashboard was seven components and ~500 lines of near-identical JSX; it is now one
 `personas.ts` table, and the drift it was hiding — the same destination described three ways, an
 alert flag on four of five identical tiles — had nowhere left to live.
@@ -81,13 +87,17 @@ Helpers live in their own module, not beside components: eslint's
 
 ## Conversion status
 
-Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`, `dashboard`.
-Still hand-rolled (tables, dialogs, filters): `assets`, `requests`, `catalog`, `finops`, `profile`,
+Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`, `dashboard`, `finops`.
+Still hand-rolled (tables, dialogs, filters): `assets`, `requests`, `catalog`, `profile`,
 `settings/webhooks`, `settings/audit-logs`, `security-posture`, `reports`.
 
-Ratchet baselines move with each conversion — raw `<button>` 149 → 105 → 93 → 78, hand-rolled modal
-files 11 → 8 → 7, largest file 1082 → 907 → 818 → 725, arbitrary `text-[…]` 29 → 27 → 26. Lower them
-by converting, never by editing the number.
+Ratchet baselines move with each conversion — raw `<button>` 149 → 72, hand-rolled modal files
+11 → 6, largest file 1082 → 499, arbitrary `text-[…]` 29 → 26. Lower them by converting, never by
+editing the number.
+
+**Charts take CSS variables, not hex.** `fill="var(--color-info)"` works in SVG exactly as it does in
+Tailwind. The six hex literals finops used were the light palette baked in, so every slice kept its
+light-mode colour on a dark background.
 
 **A selectable card is a real `<input>`.** The people wizard's device cards and access list were
 `<button>`s with a colour for "selected" — no group, no checked state, nothing announced. They are
