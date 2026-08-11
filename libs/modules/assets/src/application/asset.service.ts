@@ -173,7 +173,7 @@ export class AssetService {
 
     // Soft-delete previous photo if one exists
     if (asset.photoStorageKey) {
-      const old = await this.storage.findById(asset.photoStorageKey);
+      const old = await this.storage.findByKey(asset.photoStorageKey);
       if (old) void this.storage.deleteFile(old.id, old.uploaderId);
     }
 

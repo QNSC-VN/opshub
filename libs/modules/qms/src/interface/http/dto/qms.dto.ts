@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import {
   auditRoleEnum,
@@ -101,9 +102,9 @@ export const ListNonconformancesQuerySchema = z
     ownerId: z.string().uuid().optional(),
     processArea: z.string().max(120).optional(),
     /** Everything not closed or void — the work queue. */
-    openOnly: z.coerce.boolean().optional(),
+    openOnly: queryBoolean().optional(),
     /** Only grades whose policy makes a corrective action mandatory. */
-    capaRequiredOnly: z.coerce.boolean().optional(),
+    capaRequiredOnly: queryBoolean().optional(),
     search: z.string().max(200).optional(),
   })
   .merge(PaginationQuerySchema);
@@ -153,7 +154,7 @@ export const ListCapasQuerySchema = z
     ownerId: z.string().uuid().optional(),
     nonconformanceId: z.string().uuid().optional(),
     /** Everything not verified or cancelled — the work queue. */
-    openOnly: z.coerce.boolean().optional(),
+    openOnly: queryBoolean().optional(),
     /** Due on or before this date. Today's date gives the overdue report. */
     dueOnOrBefore: z.string().date().optional(),
   })
@@ -322,7 +323,7 @@ export const ListAuditsQuerySchema = z
     /** Anybody on the roster, in any role — "which audits was I on". */
     auditorId: z.string().uuid().optional(),
     /** Everything not closed or cancelled — the programme's live work. */
-    openOnly: z.coerce.boolean().optional(),
+    openOnly: queryBoolean().optional(),
     plannedStartOnOrBefore: z.string().date().optional(),
     search: z.string().max(200).optional(),
   })
@@ -458,7 +459,7 @@ export const ListReviewsQuerySchema = z
   .object({
     status: reviewStatus.optional(),
     chairId: z.string().uuid().optional(),
-    openOnly: z.coerce.boolean().optional(),
+    openOnly: queryBoolean().optional(),
     scheduledOnOrBefore: z.string().date().optional(),
     search: z.string().max(200).optional(),
   })
@@ -472,7 +473,7 @@ export const ListReviewActionsQuerySchema = z
     ownerId: z.string().uuid().optional(),
     managementReviewId: z.string().uuid().optional(),
     /** Everything not completed or cancelled — the follow-up queue. */
-    openOnly: z.coerce.boolean().optional(),
+    openOnly: queryBoolean().optional(),
     dueOnOrBefore: z.string().date().optional(),
   })
   .merge(PaginationQuerySchema);

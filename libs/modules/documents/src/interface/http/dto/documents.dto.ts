@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import { documentCategoryEnum } from '@db/schema/enums';
 
@@ -26,7 +27,7 @@ export const ListDocumentsQuerySchema = z
   .object({
     category: category.optional(),
     ownerId: z.string().uuid().optional(),
-    includeRetired: z.coerce.boolean().optional(),
+    includeRetired: queryBoolean().optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListDocumentsQueryDto extends createZodDto(ListDocumentsQuerySchema) {}

@@ -8,31 +8,29 @@ import {
   Button,
   DataTable,
   EntityDetailPanel,
+  FileUploadWidget,
+  FormActions,
   FormField,
   Input,
   Modal,
   PaginationFooter,
-  PhotoUploadWidget,
+  PanelAction,
+  RowAction,
+  RowActions,
   SegmentedControl,
   Select,
   SlideOverSection,
   StatusBadge,
+  TabToolbar,
   Textarea,
   humanizeStatus,
   statusTone,
   type DataTableColumn,
+  type FormModalProps,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate } from '@/shared/lib/format';
 import type { LeaveResponse, LeaveStatus, LeaveType } from '@/shared/api/types';
-import {
-  FormActions,
-  PanelAction,
-  RowAction,
-  RowActions,
-  TabToolbar,
-  type FormModalProps,
-} from './workforce-shared';
 
 const LEAVE_FILTERS: { value: LeaveStatus | ''; label: string }[] = [
   { value: '', label: 'All' },
@@ -340,7 +338,7 @@ export function LeaveTab() {
       >
         {selected && (
           <SlideOverSection title="Supporting document">
-            <PhotoUploadWidget
+            <FileUploadWidget
               mode="document"
               currentUrl={documentUrl}
               presignUrl={`/v1/workforce/leave-requests/${selected.id}/document/presign`}

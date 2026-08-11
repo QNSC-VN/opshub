@@ -90,25 +90,27 @@ test.describe('contracts', () => {
   }) => {
     // The contract needs an employee that exists; create one rather than depending on the seed.
     const stamp = Date.now();
+    const employeeName = `Contract Probe ${stamp}`;
     const created = await request.post('/v1/employees', {
       headers: await csrfHeaders(request),
-      data: {
-        email: `contract.probe.${stamp}@opshub.local`,
-        displayName: `Contract Probe ${stamp}`,
-      },
+      data: { email: `contract.probe.${stamp}@opshub.local`, displayName: employeeName },
     });
     expect(created.status(), await created.text()).toBe(201);
-    // Read the body ONCE. Calling `.json()` twice inside a `??` chain is how `employeeId` came out
+    // The id is not typed into the form any more — the picker searches by name — but reading the body
+    // ONCE still matters here: calling `.json()` twice inside a `??` chain is how this came out
     // undefined and the draft silently failed validation, leaving a row that never appeared.
     const body = (await created.json()) as { data?: { id: string }; id?: string };
-    const employeeId = body.data?.id ?? body.id!;
+    expect(body.data?.id ?? body.id, 'the employee was created without an id').toBeTruthy();
 
     const reference = unique('PWC').toUpperCase();
     await gotoInShell(page, '/contracts');
 
     await page.getByRole('button', { name: /draft contract/i }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Employee ID').fill(employeeId);
+    // A PICKER, not a UUID box. The field used to be `Employee ID` with the placeholder "UUID", which
+    // meant opening the people screen and copying an id out of a URL to draft a contract.
+    await dialog.getByLabel('Employee').fill(employeeName);
+    await page.getByRole('option', { name: new RegExp(employeeName) }).click();
     await dialog.getByLabel('Reference').fill(reference);
     await dialog.getByLabel('Start date').fill('2030-02-04');
     await dialog.getByLabel('Base salary').fill('5000.00');

@@ -8,6 +8,7 @@ import {
   ShieldHalf,
   ScanLine,
   CalendarClock,
+  GraduationCap,
   Users,
   Briefcase,
   FileText,
@@ -97,7 +98,13 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Workforce',
-    items: [{ to: '/workforce', label: 'Workforce', icon: CalendarClock }],
+    items: [
+      { to: '/workforce', label: 'Workforce', icon: CalendarClock },
+      // NO `cap`, deliberately, unlike Positions and Contracts: the screen's first tab is the
+      // caller's OWN training, which is self-scoped and holds no permission code. Gating the nav
+      // entry on `training.read` would hide an employee's own certificates from them.
+      { to: '/training', label: 'Training', icon: GraduationCap },
+    ],
   },
   {
     label: 'Analytics',

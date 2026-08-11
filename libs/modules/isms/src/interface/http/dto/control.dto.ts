@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import {
   controlImplementationStatusEnum,
@@ -34,7 +35,7 @@ export const ListControlsQuerySchema = z
   .object({
     theme: theme.optional(),
     source: source.optional(),
-    includeRetired: z.coerce.boolean().optional(),
+    includeRetired: queryBoolean().optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListControlsQueryDto extends createZodDto(ListControlsQuerySchema) {}
@@ -67,7 +68,7 @@ export class MarkReviewedDto extends createZodDto(MarkReviewedSchema) {}
 
 export const ListSoaQuerySchema = z
   .object({
-    applicable: z.coerce.boolean().optional(),
+    applicable: queryBoolean().optional(),
     status: status.optional(),
     ownerId: z.string().uuid().optional(),
     theme: theme.optional(),

@@ -3,7 +3,8 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, FormField, Input, Modal, Select, Textarea } from '@/shared/ui';
+import { Button, EntityPicker, FormField, Input, Modal, Select, Textarea } from '@/shared/ui';
+import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import { todayIso } from '@/shared/lib/format';
 import type { Position } from './position.types';
 
@@ -249,13 +250,16 @@ export function AssignPositionModal({
         }}
         className="flex flex-col gap-4 p-5"
       >
-        <FormField label="Employee ID" htmlFor="assign-employee" required>
-          <Input
+        {/* Searched by name. This was a text box asking for a UUID, which meant opening the people
+            screen and copying an id out of the URL to fill in a form. */}
+        <FormField label="Employee" htmlFor="assign-employee" required>
+          <EntityPicker
             id="assign-employee"
-            required
+            queryKey="active-employees"
             value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="UUID of the employee"
+            onChange={setEmployeeId}
+            fetchOptions={activeEmployeeOptions}
+            placeholder="Search people…"
           />
         </FormField>
         <FormField

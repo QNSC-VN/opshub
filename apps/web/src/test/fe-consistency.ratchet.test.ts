@@ -37,10 +37,13 @@ import { describe, expect, it } from 'vitest';
 // rule as a violation OF it. Re-measured each time the way this file's docblock demands: force the
 // constant to -1 and read the count the failure reports.
 //
-// The 40 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
+// 40 → 38, because promoting workforce's `RowAction` and `PanelAction` into the kit rebuilt them on
+// `Button`: two components carrying their own tone maps became none, and every caller lost a raw button.
+//
+// The 38 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
 // few widgets (the notification bell, the AI panel, the app shell's own nav) that were never screens.
 // Worth checking what is actually left before assuming the number can keep falling.
-const MAX_RAW_BUTTON = 40;
+const MAX_RAW_BUTTON = 38;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;

@@ -42,16 +42,23 @@ aws_cmd s3api create-bucket \
   --create-bucket-configuration "LocationConstraint=$REGION" \
   >/dev/null 2>&1 || true
 
-# CORS mirrors the rules the app-bucket module applies in real AWS. Only
-# Content-Type is listed because that is the only header StorageService signs
-# into the presigned PUT (ContentLength is set by the browser automatically and
-# is a forbidden header name, so CORS does not govern it). Signing a header the
-# browser is not allowed to send fails every upload at preflight.
+# CORS mirrors the rules the app-bucket module applies in real AWS.
+#
+# EVERY SIGNED HEADER MUST BE LISTED. `StorageService.presignUpload` signs
+# content-type, content-length and content-disposition, and returns all of them
+# in `requiredHeaders` for the client to send. The comment that used to sit here
+# claimed Content-Type was the only signed header; it was wrong, so the preflight
+# refused Content-Disposition and every browser upload died with an opaque
+# `net::ERR_FAILED` — no status, no CORS headers, nothing to read. Measured from a
+# real browser, and the same gap was in infra/modules/stack/main.tf.
+#
+# Content-Length stays off the list deliberately: the browser sets it itself and it
+# is a forbidden header name, so CORS never governs it.
 aws_cmd s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "{
   \"CORSRules\": [{
     \"AllowedMethods\": [\"PUT\", \"GET\", \"HEAD\"],
     \"AllowedOrigins\": [\"${WEB_ORIGIN}\"],
-    \"AllowedHeaders\": [\"Content-Type\"],
+    \"AllowedHeaders\": [\"Content-Type\", \"Content-Disposition\"],
     \"ExposeHeaders\": [\"ETag\"],
     \"MaxAgeSeconds\": 3600
   }]

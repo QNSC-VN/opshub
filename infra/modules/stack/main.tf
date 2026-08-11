@@ -309,8 +309,15 @@ module "app_bucket" {
   # Browsers PUT straight to a presigned URL, so the bucket — not the API — has to
   # allow the SPA's origin. The app's own origin is always allowed; anything else is
   # an explicit per-environment addition.
+  #
+  # ALLOWED HEADERS MUST COVER EVERY SIGNED HEADER. `StorageService.presignUpload` signs
+  # `content-type`, `content-length` and `content-disposition`, and returns all of them in
+  # `requiredHeaders` for the client to send — but `Content-Disposition` was missing here, so the
+  # preflight refused it and every browser upload failed with an opaque `net::ERR_FAILED`. Measured
+  # from a real browser against LocalStack, whose bootstrap carried the same gap. A header the
+  # signature covers and CORS does not is an upload that cannot happen.
   cors_rules = [{
-    allowed_headers = ["Content-Type", "Content-Length", "Content-MD5"]
+    allowed_headers = ["Content-Type", "Content-Length", "Content-MD5", "Content-Disposition"]
     allowed_methods = ["PUT"]
     allowed_origins = concat([local.app_url], var.uploads.extra_cors_origins)
     expose_headers  = ["ETag"]

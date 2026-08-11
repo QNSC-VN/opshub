@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import { licenseTypeEnum, licenseStatusEnum } from '@db/schema/enums';
 
@@ -56,7 +57,7 @@ export const AssignSeatSchema = z.object({
 export class AssignSeatDto extends createZodDto(AssignSeatSchema) {}
 
 export const ListAssignmentsQuerySchema = z.object({
-  includeRevoked: z.coerce.boolean().default(false),
+  includeRevoked: queryBoolean().default(false),
 });
 export class ListAssignmentsQueryDto extends createZodDto(ListAssignmentsQuerySchema) {}
 

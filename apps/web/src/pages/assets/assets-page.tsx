@@ -7,7 +7,7 @@ import {
   DataTable,
   EntityDetailPanel,
   ListPage,
-  PhotoUploadWidget,
+  FileUploadWidget,
   SlideOverSection,
   StatusBadge,
   humanizeStatus,
@@ -155,7 +155,7 @@ export function AssetsPage() {
       >
         {selected && (
           <SlideOverSection title="Photo">
-            <PhotoUploadWidget
+            <FileUploadWidget
               mode="image"
               currentUrl={photoUrl}
               presignUrl={`/v1/assets/${selected.id}/photo/presign`}
