@@ -1,5 +1,5 @@
 import { test, type APIRequestContext } from '@playwright/test';
-import { expect, gotoInShell } from './support/fixtures';
+import { csrfHeaders, expect, gotoInShell } from './support/fixtures';
 
 /**
  * The compliance screen, in depth — the first page converted onto `DataTable`/`PaginationFooter`.
@@ -37,13 +37,8 @@ function uniqueSoftwareName(): string {
  * bypass — and it means the spec exercises the real protection instead of routing around it.
  */
 async function addSoftware(request: APIRequestContext, name: string): Promise<void> {
-  const me = await request.get('/v1/auth/me');
-  expect(me.ok(), await me.text()).toBe(true);
-  const { csrfToken } = (await me.json()) as { csrfToken?: string };
-  expect(csrfToken, 'GET /auth/me did not return a CSRF token').toBeTruthy();
-
   const created = await request.post('/v1/compliance/software', {
-    headers: { 'X-CSRF-Token': csrfToken! },
+    headers: await csrfHeaders(request),
     data: { name, publisher: 'Playwright', listing: 'review', notes: 'created by an e2e spec' },
   });
   expect(created.status(), await created.text()).toBe(201);

@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
 /**
  * Where global-setup writes the signed-in session for every spec to reuse.
@@ -48,6 +48,43 @@ export async function gotoInShell(page: Page, path: string): Promise<void> {
     new URL(page.url()).pathname,
     'bounced to the login page — the session did not load',
   ).not.toContain('login');
+}
+
+/**
+ * The CSRF token the API requires on every mutation.
+ *
+ * The saved storage state carries the SESSION cookie only, so a bare `request.post` comes back
+ * `FORBIDDEN: Missing csrf secret` — which reads like an authorization bug in the route rather than a
+ * missing header in the test. `GET /v1/auth/me` is where the SPA itself gets the token.
+ */
+export async function csrfHeaders(request: APIRequestContext): Promise<Record<string, string>> {
+  const me = await request.get('/v1/auth/me');
+  expect(me.ok(), await me.text()).toBe(true);
+  const { csrfToken } = (await me.json()) as { csrfToken?: string };
+  expect(csrfToken, 'GET /auth/me did not return a CSRF token').toBeTruthy();
+  return { 'X-CSRF-Token': csrfToken! };
+}
+
+/**
+ * Put one real item in the request engine, and return its id.
+ *
+ * Specs that assert on the inbox need a request to exist. A FRESH database has none — CI's does not,
+ * mine did, and that difference is what failed this spec in CI while it passed locally for the third
+ * time in this migration. Create what you assert on.
+ */
+export async function createAccessRequest(request: APIRequestContext): Promise<string> {
+  const res = await request.post('/v1/access-requests', {
+    headers: await csrfHeaders(request),
+    data: {
+      accessType: 'vpn',
+      target: `playwright-${Date.now()}`,
+      justification: 'Created by an e2e spec so the inbox has something to show.',
+      durationHours: 8,
+    },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const body = (await res.json()) as { data?: { id: string }; id?: string };
+  return body.data?.id ?? body.id!;
 }
 
 /**

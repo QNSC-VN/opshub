@@ -1,5 +1,11 @@
 import { test } from '@playwright/test';
-import { clickFirstRow, expect, gotoInShell } from './support/fixtures';
+import {
+  clickFirstRow,
+  createAccessRequest,
+  csrfHeaders,
+  expect,
+  gotoInShell,
+} from './support/fixtures';
 
 /**
  * The inbox, the asset register and the service catalog — the three screens converted together.
@@ -10,7 +16,10 @@ import { clickFirstRow, expect, gotoInShell } from './support/fixtures';
  * minimum reason length only by disabling the button.
  */
 test.describe('requests inbox', () => {
-  test('filters through a radiogroup and reports a real count', async ({ page }) => {
+  test('filters through a radiogroup and reports a real count', async ({ page, request }) => {
+    // A FRESH database has no requests at all — CI's did not, mine did, and the footer correctly
+    // renders nothing for an empty list, so this asserted against data it had not created.
+    await createAccessRequest(request);
     await gotoInShell(page, '/requests');
 
     const filter = page.getByRole('radiogroup', { name: /filter requests/i });
@@ -27,7 +36,8 @@ test.describe('requests inbox', () => {
     await expect(page.getByText(/of undefined/)).toHaveCount(0);
   });
 
-  test('opens a request drawer with its approval history', async ({ page }) => {
+  test('opens a request drawer with its approval history', async ({ page, request }) => {
+    await createAccessRequest(request);
     await gotoInShell(page, '/requests');
     await page.getByRole('radiogroup').getByRole('radio', { name: 'All' }).click();
 
@@ -67,11 +77,9 @@ test.describe('service catalog', () => {
     // clicked "the first item" found nothing. Second time this lesson has cost a run (the compliance
     // journey assumed a seeded software catalogue), which is why the rule is now in the kit README:
     // create what you assert on.
-    const me = await request.get('/v1/auth/me');
-    const { csrfToken } = (await me.json()) as { csrfToken?: string };
     const name = `Playwright Item ${Date.now()}`;
     const created = await request.post('/v1/catalog', {
-      headers: { 'X-CSRF-Token': csrfToken! },
+      headers: await csrfHeaders(request),
       data: {
         name,
         category: 'hardware',
