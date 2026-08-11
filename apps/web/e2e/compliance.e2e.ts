@@ -100,10 +100,19 @@ test.describe('compliance', () => {
     }
   });
 
-  test('switches to findings and renders that table with its own columns', async ({ page }) => {
+  test('switches to findings through a real tablist, not a row of buttons', async ({ page }) => {
     await gotoInShell(page, '/compliance');
 
-    await page.getByRole('button', { name: 'Findings' }).click();
+    // `role="tab"` and not `role="button"`: the tab bar is now a `tablist`, which is the point of
+    // replacing the hand-rolled one. This assertion is what caught the change — the spec used to
+    // find these as buttons, and it should not be able to.
+    const tabs = page.getByRole('tablist');
+    await expect(tabs).toBeVisible();
+    await page.getByRole('tab', { name: 'Findings' }).click();
+    await expect(page.getByRole('tab', { name: 'Findings' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
 
     const table = page.getByRole('table');
     await expect(table).toBeVisible();
@@ -112,15 +121,44 @@ test.describe('compliance', () => {
     await expect(page.getByText('Failed to load findings.')).toHaveCount(0);
   });
 
+  test('moves between tabs with the arrow keys', async ({ page }) => {
+    // The keyboard behaviour the hand-rolled bar never had. Asserted from the outside because it is
+    // the part a user actually feels.
+    await gotoInShell(page, '/compliance');
+
+    await page.getByRole('tab', { name: 'Software Catalog' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tab', { name: 'Findings' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    // Wraps: Left from the first tab lands on the last.
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tab', { name: 'Shadow IT' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
   test('filters by severity without leaving the pager on a page that no longer exists', async ({
     page,
   }) => {
     // The reset-on-filter rule, from the outside: narrowing the set has to return to page 1, or the
     // request asks for an offset past the end and the table comes back empty for no visible reason.
     await gotoInShell(page, '/compliance');
-    await page.getByRole('button', { name: 'Findings' }).click();
+    await page.getByRole('tab', { name: 'Findings' }).click();
 
-    await page.getByRole('button', { name: 'Critical', exact: true }).click();
+    // The filter is a `radiogroup` now, named so it is announced as "Filter by severity" rather than
+    // as five loose buttons.
+    const filter = page.getByRole('radiogroup', { name: 'Filter by severity' });
+    await expect(filter).toBeVisible();
+    await filter.getByRole('radio', { name: 'Critical' }).click();
+    await expect(filter.getByRole('radio', { name: 'Critical' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
 
     await expect(page.getByText('Failed to load findings.')).toHaveCount(0);
     // Either rows or the empty state — never a stuck loading row, which is what an out-of-range

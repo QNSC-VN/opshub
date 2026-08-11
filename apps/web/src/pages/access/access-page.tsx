@@ -1,10 +1,29 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, Plus, CheckCircle, XCircle, X } from 'lucide-react';
+import { ShieldCheck, Plus, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { SlideOver, SlideOverSection } from '@/shared/ui/slide-over';
-import { ActivityTimeline } from '@/shared/ui/activity-timeline';
+import {
+  ActivityTimeline,
+  Button,
+  DataTable,
+  DescriptionList,
+  FormField,
+  Input,
+  ListPage,
+  Modal,
+  SegmentedControl,
+  Select,
+  SlideOver,
+  SlideOverSection,
+  StatusBadge,
+  Textarea,
+  humanizeStatus,
+  statusTone,
+  type DataTableColumn,
+} from '@/shared/ui';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { formatDate } from '@/shared/lib/format';
 import type { AccessRequestResponse, AccessRequestStatus } from '@/shared/api/types';
 
 const ACCESS_TYPE_OPTIONS = [
@@ -16,21 +35,14 @@ const ACCESS_TYPE_OPTIONS = [
 ] as const;
 type AccessType = (typeof ACCESS_TYPE_OPTIONS)[number]['value'];
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  expired: 'Expired',
-};
-
-const STATUS_CLASS: Record<string, string> = {
-  pending: 'bg-warning-bg text-warning',
-  approved: 'bg-success-bg text-success',
-  rejected: 'bg-danger-bg text-danger',
-  expired: 'bg-surface-muted text-fg-muted',
-};
+/*
+ * NO LOCAL STATUS LABEL OR COLOUR MAPS.
+ *
+ * They used to live here — `pending` was amber, `expired` was a raw `bg-surface-muted` pair — and the
+ * inbox, workforce and catalog screens each had their own copy that disagreed. `statusTone` owns which
+ * tone a word MEANS and `StatusBadge` owns what a tone LOOKS like, so the same status is the same
+ * colour everywhere and a new screen cannot invent a seventh.
+ */
 
 const STATUS_FILTERS = [
   { value: '' as const, label: 'All' },
@@ -39,17 +51,15 @@ const STATUS_FILTERS = [
   { value: 'rejected' as const, label: 'Rejected' },
 ];
 
-const inputClass =
-  'h-8 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-function useAccessRequests(status: AccessRequestStatus | '') {
+function useAccessRequests(status: AccessRequestStatus | '', limit: number, offset: number) {
   return useQuery({
-    queryKey: ['access-requests', 'list', status],
+    // The offset is part of the key: without it React Query serves page 1 from cache for every page.
+    queryKey: ['access-requests', 'list', status, limit, offset],
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/access-requests', {
-        params: { query: { status: (status || undefined) as never, limit: 50 } },
+        params: { query: { status: (status || undefined) as never, limit, offset } },
       });
       if (error || !data) throw new Error('Failed to load access requests');
       return data;
@@ -60,11 +70,20 @@ function useAccessRequests(status: AccessRequestStatus | '') {
 // ── Submit modal ──────────────────────────────────────────────────────────────
 
 interface SubmitModalProps {
+  open: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function SubmitModal({ onClose, onSuccess }: SubmitModalProps) {
+/**
+ * The request form.
+ *
+ * On `Modal`, which was already in the codebase and which this page — like nine others — had
+ * reimplemented as a bare `fixed inset-0` overlay with NO `role="dialog"`, no focus trap, no Escape
+ * and no scroll lock. Keyboard users could tab into the page behind it and screen readers were never
+ * told a dialog had opened.
+ */
+function SubmitModal({ open, onClose, onSuccess }: SubmitModalProps) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [form, setForm] = useState({
@@ -91,96 +110,164 @@ function SubmitModal({ onClose, onSuccess }: SubmitModalProps) {
       },
     });
     setLoading(false);
-    if (error) { setErr('Failed to submit request. Please try again.'); return; }
+    if (error) {
+      setErr('Failed to submit request. Please try again.');
+      return;
+    }
     toast.success('Access request submitted');
     onSuccess();
     onClose();
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-md rounded-xl bg-surface shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-fg">Request temporary access</h2>
-          <button onClick={onClose} className="rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
-            <X className="h-4 w-4" />
-          </button>
+    <Modal open={open} onClose={onClose} title="Request temporary access">
+      <form id="access-request-form" onSubmit={onSubmit} className="flex flex-col gap-4 p-5">
+        <FormField label="Access type" htmlFor="access-type" required>
+          <Select
+            id="access-type"
+            required
+            value={form.accessType}
+            onChange={(e) => set('accessType', e.target.value as AccessType)}
+          >
+            {ACCESS_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+
+        <FormField label="Target system / resource" htmlFor="access-target" required>
+          <Input
+            id="access-target"
+            required
+            value={form.target}
+            onChange={(e) => set('target', e.target.value)}
+            placeholder="e.g. prod-db-01, 10.0.0.5, s3://my-bucket"
+          />
+        </FormField>
+
+        <FormField label="Justification" htmlFor="access-justification" required>
+          <Textarea
+            id="access-justification"
+            required
+            value={form.justification}
+            onChange={(e) => set('justification', e.target.value)}
+            placeholder="Why do you need this access and for what purpose?"
+          />
+        </FormField>
+
+        <FormField
+          label="Duration (hours)"
+          htmlFor="access-duration"
+          hint="Maximum 720 hours (30 days). Access is automatically revoked after expiry."
+        >
+          <Input
+            id="access-duration"
+            type="number"
+            min={1}
+            max={720}
+            required
+            value={form.durationHours}
+            onChange={(e) => set('durationHours', Number(e.target.value))}
+          />
+        </FormField>
+
+        {err && <p className="text-xs text-danger">{err}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="sm" disabled={loading}>
+            {loading ? 'Submitting…' : 'Submit request'}
+          </Button>
         </div>
-        <form onSubmit={onSubmit} className="flex flex-col gap-4 p-5">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Access type *</label>
-            <select
-              required value={form.accessType}
-              onChange={(e) => set('accessType', e.target.value as AccessType)}
-              className={inputClass}
-            >
-              {ACCESS_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Target system / resource *</label>
-            <input
-              required value={form.target}
-              onChange={(e) => set('target', e.target.value)}
-              placeholder="e.g. prod-db-01, 10.0.0.5, s3://my-bucket"
-              className={inputClass}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Justification *</label>
-            <textarea
-              required value={form.justification}
-              onChange={(e) => set('justification', e.target.value)}
-              rows={3}
-              placeholder="Why do you need this access and for what purpose?"
-              className="w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Duration (hours)</label>
-            <input
-              type="number" min={1} max={720} required
-              value={form.durationHours}
-              onChange={(e) => set('durationHours', Number(e.target.value))}
-              className={inputClass}
-            />
-            <p className="text-xs text-fg-subtle">Maximum 720 hours (30 days). Access is automatically revoked after expiry.</p>
-          </div>
-          {err && <p className="text-xs text-danger">{err}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button" onClick={onClose}
-              className="h-8 rounded-md border border-border px-3.5 text-sm font-medium text-fg-muted hover:bg-surface-hover"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit" disabled={loading}
-              className="h-8 rounded-md bg-accent px-3.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-            >
-              {loading ? 'Submitting…' : 'Submit request'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The table's columns.
+ *
+ * Declared outside the component so the array is not rebuilt every render, and taking the handlers as
+ * an argument because the actions column needs them.
+ */
+function accessColumns(actions: {
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}): DataTableColumn<AccessRequestResponse>[] {
+  return [
+    {
+      key: 'accessType',
+      header: 'Access type',
+      cell: (r) => <span className="font-mono text-xs font-medium text-fg">{r.accessType}</span>,
+    },
+    { key: 'target', header: 'Target', cell: (r) => r.target },
+    { key: 'duration', header: 'Duration', cell: (r) => `${r.durationHours}h`, hideOnMobile: true },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (r) => (
+        <StatusBadge tone={statusTone(r.status)}>{humanizeStatus(r.status)}</StatusBadge>
+      ),
+    },
+    {
+      key: 'requested',
+      header: 'Requested',
+      cell: (r) => <span className="text-xs text-fg-subtle">{formatDate(r.createdAt)}</span>,
+      hideOnMobile: true,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      // `stopPropagation` because the row opens the detail panel: without it, approving also opens it.
+      cell: (r) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          {r.status === 'pending' && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => actions.onApprove(r.id)}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
+              >
+                <CheckCircle className="h-3.5 w-3.5" strokeWidth={2} />
+                Approve
+              </button>
+              <button
+                onClick={() => actions.onReject(r.id)}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger-bg"
+              >
+                <XCircle className="h-3.5 w-3.5" strokeWidth={2} />
+                Reject
+              </button>
+            </div>
+          )}
+          {r.status === 'approved' && r.reviewedAt && (
+            <span className="text-xs text-fg-subtle">Approved {formatDate(r.reviewedAt)}</span>
+          )}
+          {r.status === 'rejected' && r.reviewNote && (
+            <span className="text-xs text-fg-subtle" title={r.reviewNote}>
+              Rejected — {r.reviewNote.slice(0, 30)}
+              {r.reviewNote.length > 30 ? '…' : ''}
+            </span>
+          )}
+        </div>
+      ),
+    },
+  ];
+}
 
 export function AccessPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<AccessRequestStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<AccessRequestResponse | null>(null);
+  const list = useListState();
 
-  const requests = useAccessRequests(statusFilter);
+  const requests = useAccessRequests(statusFilter, list.limit, list.offset);
   const invalidate = () => qc.invalidateQueries({ queryKey: ['access-requests'] });
 
   async function handleApprove(id: string) {
@@ -188,7 +275,10 @@ export function AccessPage() {
       params: { path: { id } },
       body: {},
     });
-    if (error) { toast.error('Failed to approve request'); return; }
+    if (error) {
+      toast.error('Failed to approve request');
+      return;
+    }
     toast.success('Request approved — time-boxed grant issued');
     invalidate();
   }
@@ -198,208 +288,111 @@ export function AccessPage() {
       params: { path: { id } },
       body: {},
     });
-    if (error) { toast.error('Failed to reject request'); return; }
+    if (error) {
+      toast.error('Failed to reject request');
+      return;
+    }
     toast.success('Request rejected');
     invalidate();
   }
 
   return (
     <>
-      {showForm && (
-        <SubmitModal onClose={() => setShowForm(false)} onSuccess={invalidate} />
-      )}
+      <SubmitModal open={showForm} onClose={() => setShowForm(false)} onSuccess={invalidate} />
 
-      <div className="flex flex-col gap-5">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-fg">Access Requests</h1>
-            <p className="mt-0.5 text-sm text-fg-muted">
-              Request and manage temporary privileged access to systems and resources.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 rounded-md bg-accent px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
-          >
+      <ListPage
+        title="Access Requests"
+        description="Request and manage temporary privileged access to systems and resources."
+        actions={
+          <Button variant="primary" onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4" strokeWidth={2} />
             Request access
-          </button>
-        </div>
+          </Button>
+        }
+        filters={
+          <SegmentedControl
+            label="Filter by status"
+            options={STATUS_FILTERS}
+            value={statusFilter}
+            onChange={(value) => {
+              setStatusFilter(value);
+              // Narrowing the set invalidates the offset — page 3 of the pending ones may not exist.
+              list.resetPaging();
+            }}
+          />
+        }
+        pageInfo={requests.data?.pageInfo}
+        onOffsetChange={list.goToOffset}
+        noun="requests"
+      >
+        <DataTable
+          columns={accessColumns({ onApprove: handleApprove, onReject: handleReject })}
+          rows={requests.data?.data as AccessRequestResponse[] | undefined}
+          isLoading={requests.isLoading}
+          isError={requests.isError}
+          errorMessage="Failed to load requests. Is the API running?"
+          emptyMessage="No access requests found"
+          emptyIcon={ShieldCheck}
+          onRowClick={setSelected}
+          isRowActive={(r) => r.id === selected?.id}
+        />
+      </ListPage>
 
-        {/* Status filter */}
-        <div className="flex gap-1 rounded-lg bg-surface-muted p-1 w-fit">
-          {STATUS_FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              className={[
-                'rounded-md px-3 py-1 text-sm font-medium transition-colors',
-                statusFilter === value
-                  ? 'bg-surface text-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg-muted',
-              ].join(' ')}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Table */}
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted">
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Access type</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Target</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Duration</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Status</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Requested</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wide text-fg-muted">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {requests.isLoading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-fg-subtle">Loading…</td>
-                </tr>
-              )}
-              {requests.isError && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-danger">
-                    Failed to load requests. Is the API running?
-                  </td>
-                </tr>
-              )}
-              {requests.data?.data?.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <ShieldCheck className="h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
-                      <span className="text-sm text-fg-subtle">No access requests found</span>
-                      <span className="text-xs text-fg-subtle">Submit a request to get started</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {requests.data?.data?.map((r) => (
-                <tr
-                  key={r.id}
-                  className="cursor-pointer transition-colors hover:bg-surface-hover"
-                  onClick={() => setSelected(r as AccessRequestResponse)}
-                >
-                  <td className="px-4 py-3 font-mono text-xs font-medium text-fg">{r.accessType}</td>
-                  <td className="px-4 py-3 text-fg-muted">{r.target}</td>
-                  <td className="px-4 py-3 text-fg-muted">{r.durationHours}h</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={[
-                        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-                        STATUS_CLASS[r.status] ?? 'bg-surface-muted text-fg-muted',
-                      ].join(' ')}
-                    >
-                      {STATUS_LABEL[r.status] ?? r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-fg-subtle">
-                    {new Date(r.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    {r.status === 'pending' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleApprove(r.id)}
-                          className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
-                        >
-                          <CheckCircle className="h-3.5 w-3.5" strokeWidth={2} />
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleReject(r.id)}
-                          className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger-bg"
-                        >
-                          <XCircle className="h-3.5 w-3.5" strokeWidth={2} />
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                    {r.status === 'approved' && r.reviewedAt && (
-                      <span className="text-xs text-fg-subtle">
-                        Approved {new Date(r.reviewedAt).toLocaleDateString()}
-                      </span>
-                    )}
-                    {r.status === 'rejected' && r.reviewNote && (
-                      <span className="text-xs text-fg-subtle" title={r.reviewNote}>
-                        Rejected — {r.reviewNote.slice(0, 30)}{r.reviewNote.length > 30 ? '…' : ''}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {requests.data?.pageInfo && (
-            <div className="border-t border-border bg-surface-muted px-4 py-2.5 text-xs text-fg-subtle">
-              {requests.data.pageInfo.total} request{requests.data.pageInfo.total !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Access request detail slide-over */}
       <SlideOver
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.accessType ?? 'Access request'}
         description={selected ? `${selected.target} · ${selected.durationHours}h` : undefined}
         width="lg"
-        headerActions={selected?.status === 'pending' ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { handleApprove(selected.id); setSelected(null); }}
-              className="flex items-center gap-1 rounded-md bg-success-bg px-3 py-1.5 text-xs font-medium text-success hover:bg-success-bg"
-            >
-              <CheckCircle className="h-3 w-3" strokeWidth={2} /> Approve
-            </button>
-            <button
-              onClick={() => { handleReject(selected.id); setSelected(null); }}
-              className="flex items-center gap-1 rounded-md bg-danger-bg px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-bg"
-            >
-              <XCircle className="h-3 w-3" strokeWidth={2} /> Reject
-            </button>
-          </div>
-        ) : undefined}
+        headerActions={
+          selected?.status === 'pending' ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  handleApprove(selected.id);
+                  setSelected(null);
+                }}
+                className="flex items-center gap-1 rounded-md bg-success-bg px-3 py-1.5 text-xs font-medium text-success"
+              >
+                <CheckCircle className="h-3 w-3" strokeWidth={2} /> Approve
+              </button>
+              <button
+                onClick={() => {
+                  handleReject(selected.id);
+                  setSelected(null);
+                }}
+                className="flex items-center gap-1 rounded-md bg-danger-bg px-3 py-1.5 text-xs font-medium text-danger"
+              >
+                <XCircle className="h-3 w-3" strokeWidth={2} /> Reject
+              </button>
+            </div>
+          ) : undefined
+        }
       >
         {selected && (
           <>
             <SlideOverSection title="Details">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                {[
+              <DescriptionList
+                items={[
                   { label: 'Access type', value: selected.accessType },
-                  { label: 'Target',      value: selected.target },
-                  { label: 'Duration',    value: `${selected.durationHours}h` },
-                  { label: 'Status',      value: <span className={['inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium', STATUS_CLASS[selected.status] ?? 'bg-surface-muted text-fg-muted'].join(' ')}>{STATUS_LABEL[selected.status] ?? selected.status}</span> },
-                  { label: 'Requested',   value: new Date(selected.createdAt).toLocaleDateString() },
-                  { label: 'Reviewed',    value: selected.reviewedAt ? new Date(selected.reviewedAt).toLocaleDateString() : '—' },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <dt className="text-xs text-fg-subtle">{label}</dt>
-                    <dd className="mt-0.5 text-fg">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {selected.justification && (
-                <div className="mt-4 rounded-md bg-surface-muted px-3 py-2.5 text-sm text-fg-muted">
-                  <p className="mb-1 text-xs text-fg-subtle">Justification</p>
-                  {selected.justification}
-                </div>
-              )}
-              {selected.reviewNote && (
-                <div className="mt-3 rounded-md bg-surface-muted px-3 py-2.5 text-sm text-fg-muted">
-                  <p className="mb-1 text-xs text-fg-subtle">Review note</p>
-                  {selected.reviewNote}
-                </div>
-              )}
+                  { label: 'Target', value: selected.target },
+                  { label: 'Duration', value: `${selected.durationHours}h` },
+                  {
+                    label: 'Status',
+                    value: (
+                      <StatusBadge tone={statusTone(selected.status)}>
+                        {humanizeStatus(selected.status)}
+                      </StatusBadge>
+                    ),
+                  },
+                  { label: 'Requested', value: formatDate(selected.createdAt) },
+                  // No `?? '—'`: DescriptionList renders the em dash for an absent value, which is
+                  // what makes it consistent across every panel rather than per call site.
+                  { label: 'Reviewed', value: formatDate(selected.reviewedAt) },
+                  { label: 'Justification', value: selected.justification, wide: true },
+                  { label: 'Review note', value: selected.reviewNote, wide: true },
+                ]}
+              />
             </SlideOverSection>
 
             <div className="mx-5 h-px bg-surface-muted" />

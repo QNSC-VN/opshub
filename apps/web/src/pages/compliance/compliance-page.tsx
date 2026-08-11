@@ -1,58 +1,52 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert, PackageSearch, X } from 'lucide-react';
+import { ShieldAlert, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { DataTable, type DataTableColumn } from '@/shared/ui/data-table';
-import { PaginationFooter } from '@/shared/ui/pagination-footer';
+import {
+  ActivityTimeline,
+  Button,
+  DataTable,
+  DescriptionList,
+  FormField,
+  Modal,
+  PageHeader,
+  PaginationFooter,
+  SegmentedControl,
+  SlideOver,
+  SlideOverSection,
+  StatusBadge,
+  TabPanel,
+  Tabs,
+  Textarea,
+  UpgradeGate,
+  humanizeStatus,
+  statusTone,
+  type DataTableColumn,
+} from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { SlideOver, SlideOverSection } from '@/shared/ui/slide-over';
-import { ActivityTimeline } from '@/shared/ui/activity-timeline';
-import { UpgradeGate } from '@/shared/ui/upgrade-gate';
+import { formatDate } from '@/shared/lib/format';
 import { FEATURES } from '@/shared/config/features';
-import type {
-  FindingResponse,
-  SoftwareListing,
-  FindingSeverity,
-  FindingStatus,
-} from '@/shared/api/types';
+import type { FindingResponse, SoftwareListing, FindingSeverity } from '@/shared/api/types';
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const LISTING_CLASS: Record<SoftwareListing, string> = {
-  whitelisted: 'bg-success-bg text-success',
-  blacklisted: 'bg-danger-bg text-danger',
-  unknown: 'bg-surface-muted text-fg-muted',
-  review: 'bg-warning-bg text-warning',
-};
-
-const LISTING_LABEL: Record<SoftwareListing, string> = {
-  whitelisted: 'Whitelisted',
-  blacklisted: 'Blacklisted',
-  unknown: 'Unknown',
-  review: 'Under review',
-};
-
-const SEVERITY_CLASS: Record<FindingSeverity, string> = {
-  critical: 'bg-danger-bg text-danger',
-  high: 'bg-orange-50 text-orange-700',
-  medium: 'bg-warning-bg text-warning',
-  low: 'bg-accent-muted text-accent',
-};
-
-const FINDING_STATUS_CLASS: Record<FindingStatus, string> = {
-  open: 'bg-warning-bg text-warning',
-  acknowledged: 'bg-accent-muted text-accent',
-  resolved: 'bg-success-bg text-success',
-  risk_accepted: 'bg-surface-muted text-fg-muted',
-};
-
-const FINDING_STATUS_LABEL: Record<FindingStatus, string> = {
-  open: 'Open',
-  acknowledged: 'Acknowledged',
-  resolved: 'Resolved',
-  risk_accepted: 'Risk accepted',
-};
+/*
+ * NO LOCAL COLOUR MAPS.
+ *
+ * This file used to carry four: `LISTING_CLASS`, `SEVERITY_CLASS`, `FINDING_STATUS_CLASS` and
+ * `FINDING_STATUS_LABEL`. `high` severity was `bg-orange-50 text-orange-700` — a raw palette pair in a
+ * codebase built on semantic tokens, so it did not flip in dark mode and was unreadable there. The
+ * shared `statusTone` decides which tone a word means, `StatusBadge` decides what a tone looks like,
+ * and `humanizeStatus` turns `risk_accepted` into `Risk accepted`.
+ *
+ * `listing` is the ONE vocabulary that stays local: whitelisted/blacklisted/unknown/review appears on
+ * this screen alone, and a lookup nobody can attribute to a caller is worse than a local one.
+ */
+const LISTING_TONE = {
+  whitelisted: 'green',
+  blacklisted: 'red',
+  review: 'amber',
+  unknown: 'neutral',
+} as const;
 
 // ── Software Catalog tab ──────────────────────────────────────────────────────
 
@@ -85,14 +79,9 @@ function SoftwareCatalogTab() {
       key: 'listing',
       header: 'Listing',
       cell: (r) => (
-        <span
-          className={[
-            'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-            LISTING_CLASS[r.listing as SoftwareListing],
-          ].join(' ')}
-        >
-          {LISTING_LABEL[r.listing as SoftwareListing]}
-        </span>
+        <StatusBadge tone={LISTING_TONE[r.listing as SoftwareListing]}>
+          {humanizeStatus(r.listing)}
+        </StatusBadge>
       ),
     },
     {
@@ -132,11 +121,12 @@ function SoftwareCatalogTab() {
 
 interface ResolveModalProps {
   findingId: string;
+  open: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function ResolveModal({ findingId, onClose, onSuccess }: ResolveModalProps) {
+function ResolveModal({ findingId, open, onClose, onSuccess }: ResolveModalProps) {
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
   const [riskAccepted, setRiskAccepted] = useState(false);
@@ -159,61 +149,39 @@ function ResolveModal({ findingId, onClose, onSuccess }: ResolveModalProps) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-sm rounded-xl bg-surface shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-fg">Resolve finding</h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg-muted"
-          >
-            <X className="h-4 w-4" />
-          </button>
+    <Modal open={open} onClose={onClose} title="Resolve finding" size="sm">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
+        <FormField label="Resolution note" htmlFor="resolve-note">
+          <Textarea
+            id="resolve-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Describe how this finding was addressed…"
+          />
+        </FormField>
+
+        <label className="flex cursor-pointer select-none items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={riskAccepted}
+            onChange={(e) => setRiskAccepted(e.target.checked)}
+            className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
+          />
+          <span className="text-sm text-fg-muted">
+            Accept residual risk (mark as risk accepted)
+          </span>
+        </label>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="sm" disabled={loading}>
+            {loading ? 'Saving…' : 'Resolve'}
+          </Button>
         </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-fg-muted">Resolution note</label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              placeholder="Describe how this finding was addressed…"
-              className="w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-            />
-          </div>
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={riskAccepted}
-              onChange={(e) => setRiskAccepted(e.target.checked)}
-              className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-            />
-            <span className="text-sm text-fg-muted">
-              Accept residual risk (mark as risk accepted)
-            </span>
-          </label>
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 rounded-md border border-border px-3.5 text-sm font-medium text-fg-muted hover:bg-surface-hover"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="h-8 rounded-md bg-accent px-3.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-            >
-              {loading ? 'Saving…' : riskAccepted ? 'Accept risk' : 'Resolve'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -255,38 +223,20 @@ function findingColumns(actions: {
       key: 'severity',
       header: 'Severity',
       cell: (f) => (
-        <span
-          className={[
-            'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
-            SEVERITY_CLASS[f.severity as FindingSeverity],
-          ].join(' ')}
-        >
-          {f.severity}
-        </span>
+        <StatusBadge tone={statusTone(f.severity)}>{humanizeStatus(f.severity)}</StatusBadge>
       ),
     },
     {
       key: 'status',
       header: 'Status',
       cell: (f) => (
-        <span
-          className={[
-            'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-            FINDING_STATUS_CLASS[f.status as FindingStatus],
-          ].join(' ')}
-        >
-          {FINDING_STATUS_LABEL[f.status as FindingStatus]}
-        </span>
+        <StatusBadge tone={statusTone(f.status)}>{humanizeStatus(f.status)}</StatusBadge>
       ),
     },
     {
       key: 'detected',
       header: 'Detected',
-      cell: (f) => (
-        <span className="text-xs text-fg-subtle">
-          {new Date(f.detectedAt).toLocaleDateString()}
-        </span>
-      ),
+      cell: (f) => <span className="text-xs text-fg-subtle">{formatDate(f.detectedAt)}</span>,
       hideOnMobile: true,
     },
     {
@@ -358,36 +308,28 @@ function FindingsTab() {
 
   return (
     <>
+      {/* Mounted only when there is an id, so the form resets between findings — `Modal` handles the
+          open/closed transition and the focus restore. */}
       {resolveId && (
         <ResolveModal
           findingId={resolveId}
+          open
           onClose={() => setResolveId(null)}
           onSuccess={invalidate}
         />
       )}
 
       <div className="flex flex-col gap-4">
-        {/* Severity filter */}
-        <div className="flex gap-1 rounded-lg bg-surface-muted p-1 w-fit">
-          {SEVERITY_FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => {
-                setSeverityFilter(value);
-                // Narrowing the set invalidates the offset: page 4 of the criticals may not exist.
-                list.resetPaging();
-              }}
-              className={[
-                'rounded-md px-3 py-1 text-sm font-medium transition-colors',
-                severityFilter === value
-                  ? 'bg-surface text-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg-muted',
-              ].join(' ')}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Filter by severity"
+          options={SEVERITY_FILTERS}
+          value={severityFilter}
+          onChange={(value) => {
+            setSeverityFilter(value);
+            // Narrowing the set invalidates the offset: page 4 of the criticals may not exist.
+            list.resetPaging();
+          }}
+        />
 
         <DataTable
           columns={findingColumns({ onAcknowledge: handleAcknowledge, onResolve: setResolveId })}
@@ -445,60 +387,43 @@ function FindingsTab() {
         {selected && (
           <>
             <SlideOverSection title="Details">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                {[
+              <DescriptionList
+                items={[
                   { label: 'Software', value: selected.softwareName },
-                  { label: 'Version', value: selected.softwareVersion ?? '—' },
+                  { label: 'Version', value: selected.softwareVersion },
                   {
                     label: 'Severity',
                     value: (
-                      <span
-                        className={[
-                          'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
-                          SEVERITY_CLASS[selected.severity as FindingSeverity],
-                        ].join(' ')}
-                      >
-                        {selected.severity}
-                      </span>
+                      <StatusBadge tone={statusTone(selected.severity)}>
+                        {humanizeStatus(selected.severity)}
+                      </StatusBadge>
                     ),
                   },
                   {
                     label: 'Status',
                     value: (
-                      <span
-                        className={[
-                          'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-                          FINDING_STATUS_CLASS[selected.status as FindingStatus],
-                        ].join(' ')}
-                      >
-                        {FINDING_STATUS_LABEL[selected.status as FindingStatus]}
-                      </span>
+                      <StatusBadge tone={statusTone(selected.status)}>
+                        {humanizeStatus(selected.status)}
+                      </StatusBadge>
                     ),
                   },
-                  { label: 'Detected', value: new Date(selected.detectedAt).toLocaleDateString() },
+                  { label: 'Detected', value: formatDate(selected.detectedAt) },
                   {
                     label: 'Asset ID',
                     value: selected.assetId ? (
                       <span className="font-mono text-xs">{selected.assetId}</span>
-                    ) : (
-                      '—'
-                    ),
+                    ) : null,
                   },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <dt className="text-xs text-fg-subtle">{label}</dt>
-                    <dd className="mt-0.5 text-fg">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {!!(selected as Record<string, unknown>).cveId && (
-                <div className="mt-4 rounded-md bg-danger-bg px-3 py-2.5 text-sm">
-                  <p className="text-xs text-red-400">CVE</p>
-                  <p className="font-mono text-xs text-danger">
-                    {(selected as Record<string, unknown>).cveId as string}
-                  </p>
-                </div>
-              )}
+                  {
+                    label: 'CVE',
+                    value: (selected as Record<string, unknown>).cveId ? (
+                      <span className="font-mono text-xs text-danger">
+                        {(selected as Record<string, unknown>).cveId as string}
+                      </span>
+                    ) : null,
+                  },
+                ]}
+              />
             </SlideOverSection>
 
             <div className="mx-5 h-px bg-surface-muted" />
@@ -526,53 +451,46 @@ function ShadowItTab() {
 
 type ComplianceTab = 'software' | 'findings' | 'shadow-it';
 
+/**
+ * The tabs.
+ *
+ * Declared as data rather than as three copies of a `<button>`, and rendered by the shared `Tabs` —
+ * which is a real `role="tablist"` with arrow-key navigation and a roving tab index. The hand-rolled
+ * bar this replaces had none of that: a screen reader announced three unrelated buttons and never
+ * connected them to the content below.
+ */
+const COMPLIANCE_TABS: { value: ComplianceTab; label: string; badge?: React.ReactNode }[] = [
+  { value: 'software', label: 'Software Catalog' },
+  { value: 'findings', label: 'Findings' },
+  {
+    value: 'shadow-it',
+    label: 'Shadow IT',
+    badge: FEATURES.SHADOW_IT ? undefined : (
+      <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-muted">
+        Upgrade
+      </span>
+    ),
+  },
+];
+
 export function CompliancePage() {
   const [tab, setTab] = useState<ComplianceTab>('software');
 
-  const TABS: Array<[ComplianceTab, string, boolean?]> = [
-    ['software', 'Software Catalog'],
-    ['findings', 'Findings'],
-    ['shadow-it', 'Shadow IT'],
-  ];
-
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight text-fg">Compliance</h1>
-        <p className="mt-0.5 text-sm text-fg-muted">
-          Software catalog, vulnerability findings, and remediation tracking.
-        </p>
-      </div>
+      <PageHeader
+        title="Compliance"
+        description="Software catalog, vulnerability findings, and remediation tracking."
+      />
 
-      {/* Tab bar */}
-      <div className="border-b border-border">
-        <nav className="-mb-px flex gap-6">
-          {TABS.map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setTab(value)}
-              className={[
-                'inline-flex items-center gap-1.5 pb-3 text-sm font-medium transition-colors',
-                tab === value
-                  ? 'border-b-2 border-blue-600 text-accent'
-                  : 'border-b-2 border-transparent text-fg-muted hover:text-fg-muted',
-              ].join(' ')}
-            >
-              {label}
-              {value === 'shadow-it' && !FEATURES.SHADOW_IT && (
-                <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-surface-muted text-fg-muted">
-                  Upgrade
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <Tabs items={COMPLIANCE_TABS} value={tab} onChange={setTab} idPrefix="compliance" />
 
-      {tab === 'software' && <SoftwareCatalogTab />}
-      {tab === 'findings' && <FindingsTab />}
-      {tab === 'shadow-it' && <ShadowItTab />}
+      {/* One panel at a time: mounting all three would fire every tab's query on load. */}
+      <TabPanel idPrefix="compliance" value={tab}>
+        {tab === 'software' && <SoftwareCatalogTab />}
+        {tab === 'findings' && <FindingsTab />}
+        {tab === 'shadow-it' && <ShadowItTab />}
+      </TabPanel>
     </div>
   );
 }
