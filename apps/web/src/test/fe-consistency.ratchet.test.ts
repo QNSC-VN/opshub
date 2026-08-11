@@ -31,16 +31,17 @@ import { describe, expect, it } from 'vitest';
 
 // ── Baselines — LOWER as the migration proceeds, NEVER raise ───────────────────
 //
-// `<button>` has a destination: shared/ui/button.tsx. Was 149; converting access, compliance and
-// workforce onto `Button` took it to 105. Re-measured the way this file's docblock demands — by
-// forcing the constant to -1 and reading the count the failure reports.
-const MAX_RAW_BUTTON = 105;
+// `<button>` has a destination: shared/ui/button.tsx. 149 → 105 (access, compliance, workforce) →
+// 93 (people). Re-measured each time the way this file's docblock demands: force the constant to -1
+// and read the count the failure reports.
+const MAX_RAW_BUTTON = 93;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
 // Arbitrary `text-[13px]`-style values. Destination is a plain Tailwind size — this one does
-// not need a custom scale, unlike the font-size check omitted above.
-const MAX_ARBITRARY_TEXT = 29;
+// not need a custom scale, unlike the font-size check omitted above. 29 → 27 with the people
+// conversion, which dropped two of them.
+const MAX_ARBITRARY_TEXT = 27;
 // Largest single source file, counted as `split('\n').length` — ONE MORE than `wc -l`, which
 // is worth stating because setting this from `wc -l` output puts it one below the real count
 // and the ratchet fails on the file it was measured from. rally's docblock flags the same trap.
@@ -49,9 +50,11 @@ const MAX_ARBITRARY_TEXT = 29;
 //
 // THIS CEILING EARNED ITS KEEP. The workforce conversion produced a single 1272-line file and this
 // check refused it, correctly: four forms, four tables and four drawers in one file is four screens
-// sharing a filename. It is now six modules, the largest 343 lines. The ceiling stays at the
-// people-page number until that page is decomposed too.
-const MAX_FILE_LINES = 1082;
+// sharing a filename. It is now six modules, the largest 343 lines.
+//
+// 1082 → 907: people-page.tsx WAS the file this number described, and it is now five modules (the
+// page itself is 315 lines). The new ceiling is `settings/rbac-page.tsx`, the next one to decompose.
+const MAX_FILE_LINES = 907;
 
 /**
  * Hand-rolled modal overlays — a `fixed inset-0 z-50` backdrop built inline instead of using
@@ -66,7 +69,8 @@ const MAX_FILE_LINES = 1082;
  * Twelve copies of backdrop markup is also the duplication `Modal` exists to remove.
  *
  * 11 → 8: access, compliance and workforce (which held FOUR of them) now use `Modal`, so those
- * dialogs are announced as dialogs, trap focus and close on Escape. Eight files left.
+ * dialogs are announced as dialogs, trap focus and close on Escape. Eight files left — people was
+ * already on `Modal` for two of its three, so this one did not move.
  */
 const MAX_HANDROLLED_MODAL = 8;
 
