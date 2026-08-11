@@ -240,6 +240,13 @@ export const AUDIT_ACTION = {
   REVIEW_ACTION_COMPLETED: 'review_action.completed',
   REVIEW_ACTION_CANCELLED: 'review_action.cancelled',
 
+  // ── TMS leave accrual ──
+  /**
+   * A carry-over run. Recorded against the YEAR rather than an employee: it is one decision applied
+   * to everybody, and an entry per employee would bury the fact that it happened at all.
+   */
+  LEAVE_CARRY_OVER_RUN: 'leave.carry_over_run',
+
   // ── Controlled documents ──
   DOCUMENT_CREATED: 'document.created',
   DOCUMENT_RETIRED: 'document.retired',

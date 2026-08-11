@@ -202,6 +202,10 @@ export class WorkforceService {
       input.leaveType,
       Number(input.startDate.slice(0, 4)),
       workingDays,
+      undefined,
+      // Accrual is judged as of the LAST day of the window: by the time these days are taken, will
+      // they have been earned? Judging it today would refuse every advance booking.
+      input.endDate,
     );
 
     // Create domain row first, then submit to engine
@@ -563,6 +567,59 @@ export class WorkforceService {
       scoped.employeeId ?? actor.sub,
       year ?? new Date().getUTCFullYear(),
     );
+  }
+
+  /**
+   * Every leave policy, with the DEFAULT filled in for types that have none.
+   *
+   * Returns a row per leave type rather than only the configured ones, because "annual leave accrues
+   * monthly" and "nobody has decided how sick leave accrues" are different answers and a screen
+   * showing only three rows cannot tell them apart.
+   */
+  async listLeavePolicies(): Promise<
+    {
+      leaveType: LeaveType;
+      accrualMethod: string;
+      carryOverMaxDays: number;
+      carryOverExpiryMonths: number | null;
+      note: string | null;
+      isDefault: boolean;
+    }[]
+  > {
+    return this.balances.listPolicies();
+  }
+
+  /**
+   * Bring unused days from `year - 1` into `year`.
+   *
+   * Wrapped in a transaction: it updates a row per employee per leave type, and a half-applied
+   * carry-over would leave some people with next year's days and some without, with no way to tell
+   * which from the rows themselves.
+   */
+  async runLeaveCarryOver(year: number, actor: Actor) {
+    return this.db.transaction(async (tx) => {
+      const result = await this.balances.runCarryOver(year, tx);
+      // Inside the transaction, so a run that commits days ALWAYS leaves the entry saying it did.
+      // The entry is the only record of the run — nothing on the rows distinguishes days carried by
+      // this run from days HR typed in — so an audit write that silently failed would make a bulk
+      // change to everyone's balance untraceable.
+      await this.audit.record(
+        {
+          actorId: actor.sub,
+          actorEmail: actor.email,
+          action: AUDIT_ACTION.LEAVE_CARRY_OVER_RUN,
+          resourceType: AUDIT_RESOURCE.LEAVE_ENTITLEMENT,
+          resourceId: String(year),
+          metadata: {
+            year,
+            applied: result.applied.length,
+            skippedNoTargetRow: result.skippedNoTargetRow.length,
+          },
+        },
+        tx,
+      );
+      return result;
+    });
   }
 
   async setLeaveEntitlement(

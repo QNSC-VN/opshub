@@ -566,3 +566,16 @@ export const managementReviewActionStatusEnum = pgEnum('management_review_action
   'completed',
   'cancelled',
 ]);
+
+// ── TMS leave accrual ────────────────────────────────────────────────────────
+/**
+ * How a year's granted days become AVAILABLE.
+ *
+ * `annual_grant` makes the whole year's entitlement available on 1 January; `monthly_accrual` earns
+ * it a twelfth at a time. The distinction is only about availability — neither changes how many days
+ * the year carries, which is `leave_entitlements.granted_days` and set by HR.
+ */
+export const leaveAccrualMethodEnum = pgEnum('leave_accrual_method', [
+  'annual_grant',
+  'monthly_accrual',
+]);
