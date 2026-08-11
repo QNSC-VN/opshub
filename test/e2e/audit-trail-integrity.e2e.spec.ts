@@ -268,3 +268,59 @@ describe('audit trail integrity', () => {
     expect(byAction.get(AUDIT_ACTION.ASSET_CREATED)).toBe(1);
   });
 });
+
+describe('the actorEmail filter', () => {
+  /**
+   * `GET /audit-logs?actorEmail=` — added because the SPA has always shown an "actor email" box while
+   * the API only accepted `actorId`, a UUID. The field was collected, committed to state, and never
+   * sent: a filter that silently did nothing.
+   *
+   * Asserted in BOTH directions. A filter that returns rows proves nothing on its own — one that
+   * returns everything would also pass — so the second half checks that a different actor's entries
+   * are excluded.
+   */
+  it('matches the actor by a case-insensitive substring, and excludes everybody else', async () => {
+    // Two entries by two different actors, written directly so the test does not depend on which
+    // mutations happen to be audited.
+    const tag = `filter-${Date.now().toString(36)}`;
+    await audit.record({
+      actorId: FIXTURE.ADMIN.id,
+      actorEmail: 'Filter.Probe@OpsHub.local',
+      action: AUDIT_ACTION.EMPLOYEE_UPDATED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
+      resourceId: tag,
+      metadata: {},
+    });
+    await audit.record({
+      actorId: FIXTURE.HR.id,
+      actorEmail: 'someone.else@opshub.local',
+      action: AUDIT_ACTION.EMPLOYEE_UPDATED,
+      resourceType: AUDIT_RESOURCE.EMPLOYEE,
+      resourceId: tag,
+      metadata: {},
+    });
+
+    // Lower case in the query against mixed case in the column, and only a fragment of it.
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/audit-logs?actorEmail=filter.probe&resourceId=${tag}`,
+      headers: bearer(admin),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const rows = (JSON.parse(res.body) as { data: { actorEmail: string | null }[] }).data;
+
+    expect(rows.length, 'the matching entry must be found by a lower-case fragment').toBe(1);
+    expect(rows[0].actorEmail).toBe('Filter.Probe@OpsHub.local');
+  });
+
+  it('refuses an empty filter rather than treating it as "everyone"', async () => {
+    // `min(1)`: an empty string would otherwise become `ILIKE '%%'`, which matches every row — a
+    // filter that appears to be applied and is not.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/audit-logs?actorEmail=',
+      headers: bearer(admin),
+    });
+    expect(res.statusCode).toBe(422);
+  });
+});

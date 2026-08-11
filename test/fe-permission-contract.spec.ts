@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PERMISSION, WILDCARD_PERMISSION } from '../db/permissions.catalog';
@@ -31,10 +31,17 @@ const VALID = new Set<string>([...Object.values(PERMISSION), WILDCARD_PERMISSION
 const PATTERNS = [/\bcap:\s*'([^']+)'/g, /\bcan\(\s*'([^']+)'\s*\)/g, /\bcan\(\s*"([^"]+)"\s*\)/g];
 
 function webSources(): string[] {
-  return execFileSync('git', ['ls-files', 'apps/web/src'], { cwd: ROOT, encoding: 'utf8' })
-    .split('\n')
-    .filter((f) => /\.tsx?$/.test(f))
-    .filter((f) => !f.includes('/generated/'));
+  return (
+    execFileSync('git', ['ls-files', 'apps/web/src'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\n')
+      .filter((f) => /\.tsx?$/.test(f))
+      .filter((f) => !f.includes('/generated/'))
+      // `git ls-files` lists TRACKED paths, which includes files deleted in the working tree but not
+      // yet staged. Reading one throws ENOENT and the failure names a missing file rather than a bad
+      // permission code — which is what it did during a screen rename. A deleted file has no literals
+      // to check, so skipping it loses nothing.
+      .filter((f) => existsSync(join(ROOT, f)))
+  );
 }
 
 describe('frontend permission literals', () => {

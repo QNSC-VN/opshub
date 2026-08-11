@@ -32,9 +32,14 @@ import { describe, expect, it } from 'vitest';
 // ── Baselines — LOWER as the migration proceeds, NEVER raise ───────────────────
 //
 // `<button>` has a destination: shared/ui/button.tsx. 149 → 105 (access, compliance, workforce) →
-// 93 (people) → 78 (rbac) → 72 (finops) → 59 (assets, requests, catalog). Re-measured each time the
-// way this file's docblock demands: force the constant to -1 and read the count the failure reports.
-const MAX_RAW_BUTTON = 59;
+// 93 (people) → 78 (rbac) → 72 (finops) → 59 (assets, requests, catalog) → 45 (profile, webhooks,
+// audit logs, security posture, reports — the last five). Re-measured each time the way this file's
+// docblock demands: force the constant to -1 and read the count the failure reports.
+//
+// The 45 that remain are almost all inside `shared/ui` itself, where a `<button>` IS the primitive,
+// plus icon-only row actions that carry their own `aria-label`. Worth checking before assuming the
+// number can keep falling.
+const MAX_RAW_BUTTON = 45;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -51,12 +56,14 @@ const MAX_ARBITRARY_TEXT = 26;
 // check refused it, correctly: four forms, four tables and four drawers in one file is four screens
 // sharing a filename. It is now six modules, the largest 343 lines.
 //
-// 1082 → 907 → 818 → 725 → 499. Each number in turn described the largest hand-written screen, and
-// each of those screens is now a folder of modules: people (315-line shell), settings/rbac (51),
-// dashboard (86), finops (209). At 499 the ceiling describes `security-posture-page.tsx`, and the
-// remaining screens are close enough to it that the next conversion may not move it much — which is
-// the point of a ceiling rather than a target.
-const MAX_FILE_LINES = 499;
+// 1082 → 907 → 818 → 725 → 499 → 497. Each number in turn described the largest hand-written screen,
+// and each of those is now a folder of modules: people (315-line shell), settings/rbac (51), dashboard
+// (86), finops (209), reports (77).
+//
+// Reports was split BECAUSE OF THIS CHECK and not because it grew a feature: the comments explaining
+// its colour change pushed it past 499, the ceiling refused, and the honest response was three modules
+// rather than a bigger number. The ceiling now describes `compliance-page.tsx`.
+const MAX_FILE_LINES = 497;
 
 /**
  * Hand-rolled modal overlays — a `fixed inset-0 z-50` backdrop built inline instead of using
@@ -73,12 +80,23 @@ const MAX_FILE_LINES = 499;
  * 11 → 8: access, compliance and workforce (which held FOUR of them) now use `Modal`, so those
  * dialogs are announced as dialogs, trap focus and close on Escape. People was already on `Modal` for
  * two of its three, so that conversion did not move the number; rbac's three took it to 7, finops' one
- * to 6, and assets + requests + catalog to 3.
+ * to 6, assets + requests + catalog to 3, and profile + webhooks to ZERO.
  *
- * THREE LEFT: `profile`, `settings/webhooks` and `security-posture`. When they are converted this check
- * becomes a floor at 0 and any new `fixed inset-0 z-50` is a build failure, which is the end state.
+ * THIS IS NOW A FLOOR. Every dialog in the SPA goes through `shared/ui/modal.tsx`, so any new
+ * `fixed inset-0 z-50` outside the exemption below fails the build. That is the end state this ratchet
+ * was created to reach.
  */
-const MAX_HANDROLLED_MODAL = 3;
+const MAX_HANDROLLED_MODAL = 0;
+
+/**
+ * The command palette owns its overlay, deliberately.
+ *
+ * It is a COMBOBOX surface, not a titled dialog: it implements `role="combobox"`, `role="option"`,
+ * `aria-selected`, arrow-key navigation, Escape and a focus trap itself, and `Modal`'s header/title
+ * structure is wrong for it. Exempting it by NAME rather than leaving the baseline at 1 is what keeps
+ * this check a floor — a baseline of 1 would silently absorb the next real violation.
+ */
+const HANDROLLED_MODAL_EXEMPT = ['widgets/command-palette/'];
 
 // this file lives in src/test/
 const SRC = join(import.meta.dirname, '../');
@@ -162,6 +180,7 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     let total = 0;
     for (const rel of files((f) => f.endsWith('.tsx'))) {
       if (rel.includes('shared/ui/')) continue; // Modal itself, and slide-over, legitimately own one.
+      if (HANDROLLED_MODAL_EXEMPT.some((exempt) => rel.includes(exempt))) continue;
       const hits = (readFileSync(join(SRC, rel), 'utf8').match(/fixed inset-0 z-50/g) ?? []).length;
       if (hits > 0) {
         byFile[rel] = hits;
