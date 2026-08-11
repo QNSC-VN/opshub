@@ -51,10 +51,10 @@ const MAX_ARBITRARY_TEXT = 26;
 // check refused it, correctly: four forms, four tables and four drawers in one file is four screens
 // sharing a filename. It is now six modules, the largest 343 lines.
 //
-// 1082 → 907 → 818: people-page.tsx and then settings/rbac-page.tsx were each the file this number
-// described, and each is now a folder of modules (their page shells are 315 and 51 lines). The
-// ceiling now describes `dashboard-page.tsx`, the next one to decompose.
-const MAX_FILE_LINES = 818;
+// 1082 → 907 → 818 → 725: people-page.tsx, settings/rbac-page.tsx and dashboard-page.tsx were each
+// the file this number described, and each is now a folder of modules (their page shells are 315, 51
+// and 86 lines). The ceiling now describes `finops-page.tsx`, the next one to decompose.
+const MAX_FILE_LINES = 725;
 
 /**
  * Hand-rolled modal overlays — a `fixed inset-0 z-50` backdrop built inline instead of using

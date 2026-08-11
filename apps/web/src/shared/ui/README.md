@@ -53,6 +53,14 @@ midnight and renders as the 3rd for anyone behind UTC. `formatDecimal` handles t
 `numeric` columns arrive as.
 
 **8. KPI tiles are `StatCard` inside `StatGrid`.**
+It owns the loading skeleton and the `alert` treatment (a red ring, and only when the number is
+above zero — a red ring round a zero is an alarm about nothing). A tile that navigates wraps it in a
+`Link`; the kit stays router-free.
+
+**9. A screen whose only difference between variants is WHICH widgets it lists should list them as
+data.** The dashboard was seven components and ~500 lines of near-identical JSX; it is now one
+`personas.ts` table, and the drift it was hiding — the same destination described three ways, an
+alert flag on four of five identical tiles — had nowhere left to live.
 
 ## Testing
 
@@ -73,13 +81,13 @@ Helpers live in their own module, not beside components: eslint's
 
 ## Conversion status
 
-Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`.
+Converted: `compliance`, `access`, `workforce`, `people`, `settings/rbac`, `dashboard`.
 Still hand-rolled (tables, dialogs, filters): `assets`, `requests`, `catalog`, `finops`, `profile`,
-`settings/webhooks`, `settings/audit-logs`, `dashboard`, `security-posture`, `reports`.
+`settings/webhooks`, `settings/audit-logs`, `security-posture`, `reports`.
 
 Ratchet baselines move with each conversion — raw `<button>` 149 → 105 → 93 → 78, hand-rolled modal
-files 11 → 8 → 7, largest file 1082 → 907 → 818, arbitrary `text-[…]` 29 → 27 → 26. Lower them by
-converting, never by editing the number.
+files 11 → 8 → 7, largest file 1082 → 907 → 818 → 725, arbitrary `text-[…]` 29 → 27 → 26. Lower them
+by converting, never by editing the number.
 
 **A selectable card is a real `<input>`.** The people wizard's device cards and access list were
 `<button>`s with a colour for "selected" — no group, no checked state, nothing announced. They are
