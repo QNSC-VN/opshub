@@ -8,8 +8,10 @@ import {
   ShieldHalf,
   ScanLine,
   AlertOctagon,
+  Building2,
   CalendarClock,
   ClipboardCheck,
+  Database,
   GraduationCap,
   Users,
   Briefcase,
@@ -122,6 +124,13 @@ const navGroups: NavGroup[] = [
       // `incident.read` gates the LIST. Reporting needs no permission at all, which is why the report
       // action lives on the page rather than behind this entry.
       { to: '/incidents', label: 'Incidents', icon: AlertOctagon, cap: 'incident.read' },
+      {
+        to: '/information-assets',
+        label: 'Information Assets',
+        icon: Database,
+        cap: 'information_asset.read',
+      },
+      { to: '/vendors', label: 'Suppliers', icon: Building2, cap: 'vendor.read' },
     ],
   },
   {
