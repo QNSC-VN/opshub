@@ -111,6 +111,16 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    // ISMS. Its own group rather than folded into IT Operations, where `/compliance` already means
+    // endpoint findings — two different things called compliance in one list is how people click the
+    // wrong one.
+    label: 'Information Security',
+    items: [
+      { to: '/risks', label: 'Risk register', icon: ShieldAlert, cap: 'risk.read' },
+      { to: '/controls', label: 'Controls & SoA', icon: ShieldCheck, cap: 'control.read' },
+    ],
+  },
+  {
     label: 'Analytics',
     items: [{ to: '/reports', label: 'Reports', icon: BarChart2, cap: 'reports.read' }],
   },

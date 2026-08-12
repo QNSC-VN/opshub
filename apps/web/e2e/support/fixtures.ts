@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, request, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 /**
  * Where global-setup writes the signed-in session for every spec to reuse.
@@ -8,6 +8,38 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
  * drift into "storageState not found" the first time either moved.
  */
 export const AUTH_STATE = 'e2e/.auth/state.json';
+
+/**
+ * A SECOND signed-in state, and the reason it exists.
+ *
+ * The DEFAULT rate-limit tier is 200 requests per minute keyed on the USER id, and every spec used to
+ * sign in as the same admin: around fifteen API calls per page load, times forty-odd specs inside two
+ * minutes, crosses that line and fails whichever request lands next with a 429. It happened twice, and the
+ * first time it arrived disguised as a broken upload.
+ *
+ * So the suite has two admin seats and splits its spec FILES between them (see `playwright.config.ts`).
+ * Not one seat per spec: the point is to stay inside a limit that protects production, not to make the
+ * limit irrelevant. If the suite doubles again, add a third seat rather than raising the tier.
+ */
+export const AUTH_STATE_SECOND = 'e2e/.auth/state-2.json';
+
+/** A third seat. Training drives more requests than any other file — uploads, five pickers, two tabs. */
+export const AUTH_STATE_THIRD = 'e2e/.auth/state-3.json';
+
+/**
+ * OPEN QUESTION, recorded rather than guessed at: roughly one full run in three, ONE spec on a
+ * non-primary seat starts on the login page — `gotoInShell` fails on the missing `nav`, which is the
+ * assertion that exists to catch exactly this rather than let the spec fail on an empty screen later.
+ *
+ * Ruled out by measurement, so nobody repeats the work:
+ *   - Valkey eviction — `maxmemory 0`, `noeviction`, `evicted_keys:0` during a failing run.
+ *   - Session revocation — `authCache.revokeUser` fires only on offboarding, and no spec offboards.
+ *   - The rate limiter — a 429 does not clear a session, and the message now says what it is.
+ *
+ * Still to check when it next costs time: whether the BFF rotates a session on some concurrent path, and
+ * whether two contexts on one origin can race the `__Host-` cookie. CI retries once, which passes, so this
+ * is a flake and not a gate. It is written down because "re-run it" is not an explanation.
+ */
 
 /**
  * A 429 IN A FULL RUN IS THE SUITE, NOT THE PRODUCT.
@@ -32,6 +64,10 @@ export const AUTH_STATE = 'e2e/.auth/state.json';
  */
 export const FIXTURE = {
   ADMIN: { email: 'admin@opshub.local' },
+  /** The second admin seat — same role, separate rate-limit bucket. Seeded by `db/seed.ts`. */
+  ADMIN_SECOND: { email: 'admin2@opshub.local' },
+  /** The third seat, for the heaviest spec file. */
+  ADMIN_THIRD: { email: 'admin3@opshub.local' },
   EMPLOYEE: { email: 'employee@opshub.local' },
 } as const;
 
@@ -80,32 +116,26 @@ export async function csrfHeaders(request: APIRequestContext): Promise<Record<st
 }
 
 /**
- * Act as somebody ELSE for one API call, without disturbing the browser session.
+ * A request context signed in as somebody ELSE, isolated from the spec's own session.
  *
- * Some flows can only be advanced by a different person: a performance review moves to the reviewer
- * only when its SUBJECT submits a self-assessment, and the API keys that on the caller's own id. Driving
- * it in the browser would mean a second signed-in context and a logout, for a step the spec is not
- * testing.
+ * Some flows can only be advanced by a different person: a performance review reaches its reviewer only
+ * when the SUBJECT submits a self-assessment, and the API keys that on the caller's own id.
  *
- * A BEARER TOKEN, not a session cookie: `/v1/auth/dev-login` returns one, the API accepts it, and it
- * carries no cookie so it cannot interfere with the storage state every other call in the spec uses.
- * Non-production only, exactly like the BFF dev-login the global setup uses.
+ * VIA THE BFF LOGIN, NOT `/v1/auth/dev-login`. The latter carries the `AUTH_LOGIN` tier — FIVE attempts
+ * per fifteen minutes, keyed on the IP — which a suite cannot spend on bookkeeping: it failed exactly that
+ * way, `RATE_LIMITED` on a helper the test was not testing. `/v1/bff/dev-login` sits on the default tier,
+ * and brute-force protection on a passwordless dev route that 404s in production is protecting nothing.
+ *
+ * A FRESH CONTEXT, so the new session cookie cannot overwrite the one every other call in the spec uses.
+ * Dispose it when done.
  */
-export async function actingAs(
-  request: APIRequestContext,
-  email: string,
-): Promise<Record<string, string>> {
-  // CSRF applies here too: the request context carries the saved SESSION cookie, so the API treats this
-  // as a browser call and the hook demands the header — a bearer login is still a mutation.
-  const res = await request.post('/v1/auth/dev-login', {
-    headers: await csrfHeaders(request),
-    data: { email },
-  });
-  expect(res.ok(), `dev-login failed for ${email}: ${await res.text()}`).toBe(true);
-  const body = (await res.json()) as { accessToken?: string; data?: { accessToken?: string } };
-  const token = body.accessToken ?? body.data?.accessToken;
-  expect(token, `dev-login returned no access token for ${email}`).toBeTruthy();
-  return { authorization: `Bearer ${token}` };
+export async function contextAs(email: string): Promise<APIRequestContext> {
+  const context = await request.newContext({ baseURL: 'http://localhost:5173' });
+  const res = await context.post('/v1/bff/dev-login', { data: { email } });
+  expect(res.ok(), `bff dev-login failed for ${email}: ${res.status()} ${await res.text()}`).toBe(
+    true,
+  );
+  return context;
 }
 
 /**
@@ -147,6 +177,18 @@ export async function createAccessRequest(request: APIRequestContext): Promise<s
  * failed three runs out of three that way, with the row present in both the API and the DOM.
  */
 export async function expectRowSomewhere(page: Page, text: string): Promise<void> {
+  /*
+   * REWIND FIRST. This walks FORWARD only, from wherever the list happens to be — and a spec that looked
+   * for two rows in turn left the pager on the last page after the first lookup, so the second row (on
+   * page one) was unreachable and the failure said "not on any page of the list" about a row that was.
+   * Measured on the risk register, where the two rows sort to opposite ends by score.
+   */
+  for (let rewind = 0; rewind < 20; rewind++) {
+    const previous = page.getByRole('button', { name: /Previous/ });
+    if (!(await previous.isVisible().catch(() => false)) || (await previous.isDisabled())) break;
+    await previous.click();
+  }
+
   for (let attempt = 0; attempt < 10; attempt++) {
     await expect(page.getByText('Loading…')).toHaveCount(0, { timeout: 15_000 });
     if (
@@ -185,6 +227,45 @@ export async function selectStatusFilter(page: Page, label: string): Promise<voi
     .getByRole('radio', { name: label });
   await radio.click();
   await expect(radio).toHaveAttribute('aria-checked', 'true');
+}
+
+/**
+ * Choose a value from an `EntityPicker` by typing part of its name.
+ *
+ * SCOPED TO THE LISTBOX, and that is the whole reason this helper exists. A native `<select>` exposes
+ * `role="option"` for each of its `<option>`s, so `page.getByRole('option').first()` on a form that has
+ * both a picker and a select resolves to a hidden `<option>` and waits forever for it to become
+ * clickable — measured on the risk form, where the first option belonged to the likelihood select.
+ * `EntityPicker` renders a real `role="listbox"`, so scoping to it is unambiguous.
+ *
+ * `container` is the dialog or page the picker lives in; the listbox is queried from the PAGE because it
+ * is positioned absolutely and may render outside the container's subtree.
+ */
+export async function chooseFromPicker(
+  page: Page,
+  container: Locator,
+  label: string,
+  term: string,
+): Promise<void> {
+  await container.getByLabel(label).fill(term);
+  /*
+   * The option MATCHING THE TERM, not the first one. The picker debounces its search by 250ms, so for a
+   * moment the open list still holds the unfiltered page — and `.first()` then chose a different record
+   * entirely. Measured: a requirement was added to whichever position sorted first, and the failure
+   * surfaced two steps later as a dialog heading naming the wrong position.
+   *
+   * Waiting for the option whose name contains the term is the same wait AND the same assertion.
+   */
+  const option = page
+    .getByRole('listbox')
+    .getByRole('option', { name: new RegExp(escapeForRegExp(term), 'i') });
+  await expect(option.first()).toBeVisible({ timeout: 15_000 });
+  await option.first().click();
+}
+
+/** Terms come from test data and can contain regex metacharacters — `A.5.1`, `PW-1786…`. */
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

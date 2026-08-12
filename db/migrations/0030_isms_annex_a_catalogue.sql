@@ -1,0 +1,11 @@
+-- Annex A now ships in `db/seed.ts` (`seedControlCatalogueInto`), NOT here.
+--
+-- This migration inserted the 93 controls once. That was wrong for one measured reason: `db/reset.ts`
+-- truncates `isms.controls` before every API e2e run — it must, because `uq_control_reference` is global —
+-- and a migration does not run twice, so the catalogue vanished and never came back. 93 controls before the
+-- suite, 20 after.
+--
+-- The rows moved to the always-run seed, which is idempotent on the reference and therefore restores itself
+-- after every reset. The file stays because its journal entry is already recorded; emptying it is the only
+-- honest way to say "this step is now somewhere else".
+SELECT 1;

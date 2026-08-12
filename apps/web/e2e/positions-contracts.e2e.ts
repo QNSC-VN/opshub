@@ -62,8 +62,12 @@ test.describe('positions', () => {
     await dialog.getByRole('button', { name: /create position/i }).click();
     await expect(dialog).toBeHidden();
 
+    // FOUND BY SEARCH, because the register is ordered by CODE: with hundreds of positions from the API
+    // suites, a new `PW-…` code is wherever the alphabet puts it, which is not page one. The search box
+    // is server-side as of #165, so this also proves the term reaches the API.
+    await page.getByRole('searchbox').fill(code);
     const row = page.locator('tbody tr', { hasText: code });
-    await expect(row).toBeVisible();
+    await expect(row).toBeVisible({ timeout: 15_000 });
     // Nobody assigned yet: 0 of 3 filled, 3 vacancies — the numbers the API computes, not the client.
     await expect(row).toContainText('0 / 3');
     await expect(row).toContainText('3');

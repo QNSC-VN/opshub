@@ -15,6 +15,8 @@ import { PositionsPage } from '@/pages/positions/positions-page';
 import { ContractsPage } from '@/pages/contracts/contracts-page';
 import { TrainingPage } from '@/pages/training/training-page';
 import { PerformancePage } from '@/pages/performance/performance-page';
+import { RisksPage } from '@/pages/risks/risks-page';
+import { ControlsPage } from '@/pages/controls/controls-page';
 import { AccessPage } from '@/pages/access/access-page';
 import { CompliancePage } from '@/pages/compliance/compliance-page';
 import { WorkforcePage } from '@/pages/workforce/workforce-page';
@@ -98,6 +100,18 @@ const performanceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/performance',
   component: PerformancePage,
+});
+
+const risksRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/risks',
+  component: RisksPage,
+});
+
+const controlsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/controls',
+  component: ControlsPage,
 });
 
 const accessRoute = createRoute({
@@ -188,6 +202,8 @@ const routeTree = rootRoute.addChildren([
     contractsRoute,
     trainingRoute,
     performanceRoute,
+    risksRoute,
+    controlsRoute,
     accessRoute,
     complianceRoute,
     workforceRoute,

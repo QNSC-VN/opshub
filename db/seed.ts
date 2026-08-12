@@ -31,6 +31,8 @@ import { pgOptions } from './pg-ssl';
 import { resolveDatabaseUrl } from './database-url';
 import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
 import { employees } from './schema/identity';
+import { controls } from './schema/isms-controls';
+import { ANNEX_A_CONTROLS } from './annex-a-controls';
 import {
   PERMISSION,
   PERMISSION_DESCRIPTIONS,
@@ -64,6 +66,22 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = Objec
 // `user_role_assignments` row (drives effective permissions via authz.resolve).
 // Sign in locally with any of these via `POST /v1/auth/dev-login`.
 const ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000001';
+
+/**
+ * A SECOND admin, for the browser suite only.
+ *
+ * The rate limiter keys the DEFAULT tier (200 req/min) on the user id, and the Playwright suite signs in
+ * as one principal for every spec — around 15 API calls per page load, times forty-odd specs inside two
+ * minutes, which crosses that line and fails whichever request lands next with a 429. Measured, twice,
+ * once as an "upload broken" report that was nothing of the kind.
+ *
+ * Two admins let the suite split its spec files between them and stay inside a limit that protects
+ * production. The alternative was making the limit configurable, which is a control weakened for the
+ * convenience of tests.
+ */
+const E2E_ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000009';
+/** A third seat: the browser suite splits its spec files three ways. See `E2E_ADMIN_EMPLOYEE_ID`. */
+const E2E_ADMIN_THIRD_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000a';
 const DEMO_EMPLOYEES: Array<{
   id: string;
   email: string;
@@ -74,6 +92,18 @@ const DEMO_EMPLOYEES: Array<{
     id: ADMIN_EMPLOYEE_ID,
     email: 'admin@opshub.local',
     displayName: 'Admin User',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_EMPLOYEE_ID,
+    email: 'admin2@opshub.local',
+    displayName: 'Admin User (second seat)',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_THIRD_EMPLOYEE_ID,
+    email: 'admin3@opshub.local',
+    displayName: 'Admin User (third seat)',
     roleKey: 'admin',
   },
   {
@@ -178,6 +208,34 @@ async function seedRbacCatalogInto(db: SeedDb): Promise<void> {
 }
 
 /**
+ * ISO 27001 Annex A, as reference data rather than as a migration.
+ *
+ * IT WAS A MIGRATION FIRST, AND THAT WAS WRONG. `db/reset.ts` truncates `isms.controls` before every API
+ * e2e run — it has to, because `uq_control_reference` is global and a leftover control makes the next
+ * run's first insert a 409 — and a migration does not run twice, so the catalogue disappeared and did not
+ * come back. Measured: 93 controls before the suite, 20 after. The sibling reference tables
+ * (`classification_levels`, `vendor_criticality_levels`) survive only because reset deliberately leaves
+ * them alone, which it cannot do here: this table also holds an organisation's CUSTOM controls.
+ *
+ * So it belongs where reference data that shares a table with real data belongs: in the always-run seed,
+ * idempotent on the reference, restoring itself after every reset.
+ */
+async function seedControlCatalogueInto(db: SeedDb): Promise<void> {
+  await db
+    .insert(controls)
+    .values(
+      ANNEX_A_CONTROLS.map((control) => ({
+        reference: control.reference,
+        title: control.title,
+        theme: control.theme,
+        source: 'annex_a' as const,
+      })),
+    )
+    // On the reference, not the id: the ids are generated, and a re-seed must not duplicate A.5.1.
+    .onConflictDoNothing({ target: controls.reference });
+}
+
+/**
  * Standalone entrypoint that seeds ONLY the RBAC reference catalogue. Safe on
  * every deploy in every environment — including real production — because it
  * contains no demo fixtures. Exported so db/migrate.ts runs it unconditionally.
@@ -191,6 +249,8 @@ export async function seedRbacCatalog(connectionUrl?: string): Promise<void> {
   const db = drizzle(pool);
   try {
     await seedRbacCatalogInto(db);
+    // Reference data, like the permissions above: safe in every environment, including production.
+    await seedControlCatalogueInto(db);
   } finally {
     await pool.end();
   }
@@ -211,7 +271,11 @@ async function seedDemoEmployeesInto(db: SeedDb): Promise<void> {
     .values(
       DEMO_EMPLOYEES.map((e) => ({
         id: e.id,
-        email: e.roleKey === 'admin' ? adminEmail : e.email,
+        // Keyed on the PRIMARY admin's id, not on its role. `ADMIN_EMAIL` overrides one seat, and the
+        // condition used to be `roleKey === 'admin'` — which rewrote every admin-role fixture to the same
+        // address, so the second seat collided on `employees.email`, was dropped by
+        // `onConflictDoNothing`, and dev-login answered "No active account exists for this email".
+        email: e.id === ADMIN_EMPLOYEE_ID ? adminEmail : e.email,
         displayName: e.displayName,
         roles: [e.roleKey],
         status: 'active' as const,
@@ -267,6 +331,7 @@ export async function seed(connectionUrl?: string): Promise<void> {
   try {
     // Reference catalogue first so role assignments below resolve.
     await seedRbacCatalogInto(db);
+    await seedControlCatalogueInto(db);
     await seedDemoEmployeesInto(db);
   } finally {
     await pool.end();

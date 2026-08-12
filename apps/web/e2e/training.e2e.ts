@@ -1,6 +1,12 @@
 import { test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { csrfHeaders, expect, expectRowSomewhere, gotoInShell } from './support/fixtures';
+import {
+  chooseFromPicker,
+  csrfHeaders,
+  expect,
+  expectRowSomewhere,
+  gotoInShell,
+} from './support/fixtures';
 
 /**
  * Training and competency — five tabs, and the full loop that makes them worth having.
@@ -124,15 +130,13 @@ test.describe('training', () => {
     //
     // Located by its ACCESSIBLE NAME, not `.first()`: a native `<select>` also has role combobox, so
     // "the first combobox" silently means a different control the moment a tab grows a select.
-    await page.getByRole('combobox', { name: 'Position' }).fill(position.title);
-    await page.getByRole('option', { name: new RegExp(position.title) }).click();
+    await chooseFromPicker(page, page.locator('body'), 'Position', position.title);
 
     await page.getByRole('button', { name: /require a course/i }).click();
     dialog = page.getByRole('dialog');
     // The modal names the position, which it can only do because the picker reports the chosen option.
     await expect(dialog.getByRole('heading', { name: new RegExp(position.title) })).toBeVisible();
-    await dialog.getByLabel('Course').fill(courseTitle);
-    await page.getByRole('option', { name: new RegExp(courseCode) }).click();
+    await chooseFromPicker(page, dialog, 'Course', courseTitle);
     await dialog.getByRole('button', { name: /add requirement/i }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator('tbody tr', { hasText: courseCode })).toContainText('Mandatory');
@@ -152,10 +156,8 @@ test.describe('training', () => {
     await page.getByRole('tab', { name: 'Records' }).click();
     await page.getByRole('button', { name: /record completion/i }).click();
     dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Employee').fill(employee.name);
-    await page.getByRole('option', { name: new RegExp(employee.name) }).click();
-    await dialog.getByLabel('Course').fill(courseTitle);
-    await page.getByRole('option', { name: new RegExp(courseCode) }).click();
+    await chooseFromPicker(page, dialog, 'Employee', employee.name);
+    await chooseFromPicker(page, dialog, 'Course', courseTitle);
     await dialog.getByLabel('Result').fill('Pass');
     await dialog.getByRole('button', { name: /record completion/i }).click();
     await expect(dialog).toBeHidden();
@@ -173,8 +175,7 @@ test.describe('training', () => {
 
     // ── The gap it closes ─────────────────────────────────────────────────────
     await page.getByRole('tab', { name: 'Competency gaps' }).click();
-    await page.getByRole('combobox', { name: 'Filter by employee' }).fill(employee.name);
-    await page.getByRole('option', { name: new RegExp(employee.name) }).click();
+    await chooseFromPicker(page, page.locator('body'), 'Filter by employee', employee.name);
     await expect(page.locator('tbody tr', { hasText: courseCode })).toHaveCount(0, {
       timeout: 15_000,
     });
@@ -212,8 +213,7 @@ test.describe('training', () => {
 
     await gotoInShell(page, '/training');
     await page.getByRole('tab', { name: 'Records' }).click();
-    await page.getByRole('combobox', { name: 'Filter by employee' }).fill(employee.name);
-    await page.getByRole('option', { name: new RegExp(employee.name) }).click();
+    await chooseFromPicker(page, page.locator('body'), 'Filter by employee', employee.name);
 
     const row = page.locator('tbody tr', { hasText: `Playwright Cert Course ${stamp}` });
     await expect(row).toBeVisible({ timeout: 15_000 });
