@@ -84,6 +84,18 @@ export const LIFECYCLE_TONE: Record<string, BadgeTone> = {
   terminated: 'red',
   offboarded: 'red',
   void: 'red',
+  // The quality loop, shared by the non-conformance register and the CAPA queue.
+  //
+  // `contained` is BLUE and not green: the bleeding stopped, which is progress and not resolution — the
+  // finding is still open work until it closes. `verified` is the only green in this set, because it is the
+  // only state that means the corrective action was shown to work, and `ineffective` is amber rather than
+  // red: it sends the CAPA back to analysis, so it is a loop and not a failure to be written off.
+  contained: 'blue',
+  analysis: 'amber',
+  planned: 'blue',
+  implemented: 'blue',
+  verified: 'green',
+  ineffective: 'amber',
 };
 
 /**

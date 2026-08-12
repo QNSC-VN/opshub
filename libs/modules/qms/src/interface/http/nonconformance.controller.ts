@@ -214,10 +214,13 @@ export class NonconformanceController {
   @Get(':id')
   @RequirePermission('nonconformance.read')
   @ApiOperation({ summary: 'One finding' })
-  @ApiOkResponse({ type: NonconformanceResponseDto })
+  // The ROW shape, the same one the register lists. A detail view that omitted `requiresCapa` and
+  // `verifiedCapaCount` could not say whether the finding it was showing may close — which is the one
+  // question a reader opens a finding to answer.
+  @ApiOkResponse({ type: NonconformanceRowResponseDto })
   @ApiCommonErrors(401, 403, 404)
-  async getOne(@Param('id', ParseUUIDPipe) id: string): Promise<NonconformanceResponseDto> {
-    return toDto(await this.service.getById(id));
+  async getOne(@Param('id', ParseUUIDPipe) id: string): Promise<NonconformanceRowResponseDto> {
+    return toRowDto(await this.service.getRowById(id));
   }
 
   @Patch(':id')

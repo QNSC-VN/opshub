@@ -20,6 +20,8 @@ import { ControlsPage } from '@/pages/controls/controls-page';
 import { IncidentsPage } from '@/pages/incidents/incidents-page';
 import { InformationAssetsPage } from '@/pages/information-assets/information-assets-page';
 import { VendorsPage } from '@/pages/vendors/vendors-page';
+import { NonconformancesPage } from '@/pages/quality/nonconformances-page';
+import { CapasPage } from '@/pages/quality/capas-page';
 import { AccessPage } from '@/pages/access/access-page';
 import { CompliancePage } from '@/pages/compliance/compliance-page';
 import { WorkforcePage } from '@/pages/workforce/workforce-page';
@@ -135,6 +137,18 @@ const vendorsRoute = createRoute({
   component: VendorsPage,
 });
 
+const nonconformancesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/nonconformances',
+  component: NonconformancesPage,
+});
+
+const capasRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/capas',
+  component: CapasPage,
+});
+
 const accessRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/access',
@@ -228,6 +242,8 @@ const routeTree = rootRoute.addChildren([
     incidentsRoute,
     informationAssetsRoute,
     vendorsRoute,
+    nonconformancesRoute,
+    capasRoute,
     accessRoute,
     complianceRoute,
     workforceRoute,

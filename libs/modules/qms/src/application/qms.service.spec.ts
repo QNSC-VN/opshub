@@ -124,6 +124,7 @@ function makeServices(
     listSeverities: vi.fn().mockResolvedValue(severities()),
     create: vi.fn().mockResolvedValue(finding()),
     findById: vi.fn().mockResolvedValue(finding()),
+    findRowById: vi.fn().mockResolvedValue(finding()),
     findByReference: vi.fn().mockResolvedValue(null),
     list: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
     update: vi

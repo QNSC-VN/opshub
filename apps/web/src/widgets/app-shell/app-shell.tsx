@@ -11,6 +11,8 @@ import {
   Building2,
   CalendarClock,
   ClipboardCheck,
+  ClipboardX,
+  ListChecks,
   Database,
   GraduationCap,
   Users,
@@ -131,6 +133,25 @@ const navGroups: NavGroup[] = [
         cap: 'information_asset.read',
       },
       { to: '/vendors', label: 'Suppliers', icon: Building2, cap: 'vendor.read' },
+    ],
+  },
+  {
+    // QMS. Separate from Information Security even though the two share the incident link: a quality
+    // finding is against a REQUIREMENT and a security finding is against an asset, and one list holding
+    // both is how a non-conformance gets triaged by the security rota.
+    label: 'Quality',
+    items: [
+      // `nonconformance.read` gates the REGISTER. Raising a finding needs no permission at all — the same
+      // reasoning as incident reporting — so that action lives on the page, not behind this entry.
+      {
+        to: '/nonconformances',
+        label: 'Non-conformances',
+        icon: ClipboardX,
+        cap: 'nonconformance.read',
+      },
+      // The CAPA list is gated on `nonconformance.read` too, by the API: a corrective action is only
+      // readable to somebody who may read the finding it answers.
+      { to: '/capas', label: 'Corrective actions', icon: ListChecks, cap: 'nonconformance.read' },
     ],
   },
   {

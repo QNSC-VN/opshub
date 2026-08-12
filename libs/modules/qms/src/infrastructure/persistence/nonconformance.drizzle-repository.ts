@@ -81,6 +81,28 @@ export class NonconformanceDrizzleRepository implements INonconformanceRepositor
     return row ?? null;
   }
 
+  /**
+   * One finding WITH the grade's rules and its CAPA counts — the same projection the register lists.
+   *
+   * Separate from `findById`, which returns the bare row and is what the service's transitions read.
+   * This exists because a detail view needs exactly the fields a list row has: `requiresCapa` and
+   * `verifiedCapaCount` ARE the closure gate, and a detail endpoint that omitted them left the screen
+   * unable to say whether the finding it was showing could close. Measured in the browser: the drawer
+   * read `undefined of undefined CAPA(s) verified` and offered a closure the API would have refused.
+   */
+  async findRowById(id: string): Promise<NonconformanceRow | null> {
+    const [row] = await this.db
+      .select(rowSelection())
+      .from(nonconformances)
+      .innerJoin(
+        nonconformanceSeverities,
+        eq(nonconformanceSeverities.code, nonconformances.severity),
+      )
+      .where(eq(nonconformances.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
   async findByReference(reference: string): Promise<Nonconformance | null> {
     const [row] = await this.db
       .select()
@@ -111,28 +133,7 @@ export class NonconformanceDrizzleRepository implements INonconformanceRepositor
     );
 
     const rows = await this.db
-      .select({
-        ...nonconformanceColumns(),
-        severityRank: nonconformanceSeverities.rank,
-        requiresCapa: nonconformanceSeverities.requiresCapa,
-        containmentDueDays: nonconformanceSeverities.containmentDueDays,
-        // Explicit qualification, not Drizzle interpolation — see the note in
-        // `internal-audit.drizzle-repository.ts`. Correct today only because this query joins the
-        // severities table; spelled out so removing that join cannot silently zero these counts.
-        capaCount: sql<number>`(
-          SELECT count(*)::int FROM qms.capas c
-          WHERE c.nonconformance_id = qms.nonconformances.id
-        )`,
-        verifiedCapaCount: sql<number>`(
-          SELECT count(*)::int FROM qms.capas c
-          WHERE c.nonconformance_id = qms.nonconformances.id AND c.status = 'verified'
-        )`,
-        // Null once contained: a deadline that has been met is not a deadline any more, and leaving
-        // it populated is how a screen shows a red date next to a finished job.
-        containmentDueOn: sql<string | null>`CASE
-          WHEN ${nonconformances.containedAt} IS NULL
-          THEN to_char(${CONTAINMENT_DUE}, 'YYYY-MM-DD') END`,
-      })
+      .select(rowSelection())
       .from(nonconformances)
       // INNER, and it cannot drop a row: `severity` is an FK to this table and NOT NULL.
       .innerJoin(
@@ -301,6 +302,31 @@ export class NonconformanceDrizzleRepository implements INonconformanceRepositor
  * `list` projects extra columns alongside them, and Drizzle's `select()` with no argument would
  * return the joined shape nested under table keys instead.
  */
+function rowSelection() {
+  return {
+    ...nonconformanceColumns(),
+    severityRank: nonconformanceSeverities.rank,
+    requiresCapa: nonconformanceSeverities.requiresCapa,
+    containmentDueDays: nonconformanceSeverities.containmentDueDays,
+    // Explicit qualification, not Drizzle interpolation — see the note in
+    // `internal-audit.drizzle-repository.ts`. Correct today only because these queries join the
+    // severities table; spelled out so removing that join cannot silently zero these counts.
+    capaCount: sql<number>`(
+      SELECT count(*)::int FROM qms.capas c
+      WHERE c.nonconformance_id = qms.nonconformances.id
+    )`,
+    verifiedCapaCount: sql<number>`(
+      SELECT count(*)::int FROM qms.capas c
+      WHERE c.nonconformance_id = qms.nonconformances.id AND c.status = 'verified'
+    )`,
+    // Null once contained: a deadline that has been met is not a deadline any more, and leaving it
+    // populated is how a screen shows a red date next to a finished job.
+    containmentDueOn: sql<string | null>`CASE
+      WHEN ${nonconformances.containedAt} IS NULL
+      THEN to_char(${CONTAINMENT_DUE}, 'YYYY-MM-DD') END`,
+  };
+}
+
 function nonconformanceColumns() {
   return {
     id: nonconformances.id,

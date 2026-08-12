@@ -20194,7 +20194,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NonconformanceResponseDto'];
+          'application/json': components['schemas']['NonconformanceRowResponseDto'];
         };
       };
       /** @description Unauthorized — missing or invalid authentication */

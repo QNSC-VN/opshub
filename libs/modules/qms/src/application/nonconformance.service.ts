@@ -25,6 +25,7 @@ import type {
   ContainmentOverdue,
   Nonconformance,
   NonconformanceFilters,
+  NonconformanceRow,
   NonconformanceSeverityLevel,
   NonconformanceStatus,
   RaiseNonconformanceInput,
@@ -138,6 +139,20 @@ export class NonconformanceService {
       throw new NotFoundException(ErrorCodes.NOT_FOUND, `Non-conformance ${id} not found`);
     }
     return finding;
+  }
+
+  /**
+   * One finding as the register sees it — grade rules and CAPA counts included.
+   *
+   * The read path for a detail view. Transitions keep using `getById`: they need the row they are about to
+   * guard, not the counts, and reading the heavier projection there would compute two subqueries per move.
+   */
+  async getRowById(id: string): Promise<NonconformanceRow> {
+    const row = await this.repo.findRowById(id);
+    if (!row) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND, `Non-conformance ${id} not found`);
+    }
+    return row;
   }
 
   async list(filters: NonconformanceFilters, limit: number, offset: number) {

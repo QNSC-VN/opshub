@@ -97,10 +97,17 @@ export function isoDaysFromNow(days: number): string {
  * for anybody west of Greenwich, so a contract signed on the 11th shows as signed on the 10th. Local
  * midday survives being read in any timezone within twelve hours of the writer's.
  *
+ * TODAY IS SENT AS NOW, not as midday. Midday today is in the PAST for anybody filling a form after lunch,
+ * and several APIs refuse an instant that predates one they already hold: containing a non-conformance
+ * detected at 14:35 was rejected with "containment cannot predate detection" every single time, because the
+ * form sent midday. An event recorded as happening today happened at some point today, and now is the only
+ * instant that is both truthful and never earlier than something else recorded earlier the same day.
+ *
  * Returns an empty string for an empty input, so a caller can send `undefined` for "not stated".
  */
 export function isoInstantFromDate(date: string): string {
   if (!date) return '';
+  if (date === todayIso()) return new Date().toISOString();
   const instant = new Date(`${date}T12:00:00`);
   return Number.isNaN(instant.getTime()) ? '' : instant.toISOString();
 }
