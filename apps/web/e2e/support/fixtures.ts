@@ -80,6 +80,35 @@ export async function csrfHeaders(request: APIRequestContext): Promise<Record<st
 }
 
 /**
+ * Act as somebody ELSE for one API call, without disturbing the browser session.
+ *
+ * Some flows can only be advanced by a different person: a performance review moves to the reviewer
+ * only when its SUBJECT submits a self-assessment, and the API keys that on the caller's own id. Driving
+ * it in the browser would mean a second signed-in context and a logout, for a step the spec is not
+ * testing.
+ *
+ * A BEARER TOKEN, not a session cookie: `/v1/auth/dev-login` returns one, the API accepts it, and it
+ * carries no cookie so it cannot interfere with the storage state every other call in the spec uses.
+ * Non-production only, exactly like the BFF dev-login the global setup uses.
+ */
+export async function actingAs(
+  request: APIRequestContext,
+  email: string,
+): Promise<Record<string, string>> {
+  // CSRF applies here too: the request context carries the saved SESSION cookie, so the API treats this
+  // as a browser call and the hook demands the header — a bearer login is still a mutation.
+  const res = await request.post('/v1/auth/dev-login', {
+    headers: await csrfHeaders(request),
+    data: { email },
+  });
+  expect(res.ok(), `dev-login failed for ${email}: ${await res.text()}`).toBe(true);
+  const body = (await res.json()) as { accessToken?: string; data?: { accessToken?: string } };
+  const token = body.accessToken ?? body.data?.accessToken;
+  expect(token, `dev-login returned no access token for ${email}`).toBeTruthy();
+  return { authorization: `Bearer ${token}` };
+}
+
+/**
  * Put one real item in the request engine, and return its id.
  *
  * Specs that assert on the inbox need a request to exist. A FRESH database has none — CI's does not,

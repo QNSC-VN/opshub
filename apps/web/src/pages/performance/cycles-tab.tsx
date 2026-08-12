@@ -1,0 +1,305 @@
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { CalendarRange, Plus, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  DataTable,
+  EntityDetailPanel,
+  PaginationFooter,
+  PanelAction,
+  RowActions,
+  SegmentedControl,
+  SlideOverSection,
+  StatusBadge,
+  TabToolbar,
+  humanizeStatus,
+  statusTone,
+  type DataTableColumn,
+} from '@/shared/ui';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { formatDate } from '@/shared/lib/format';
+import { CreateCycleModal } from './cycle-modals';
+import { CreateReviewModal } from './review-modals';
+import { CYCLE_STATUS_FILTERS } from './performance.types';
+import { useCycleCoverage, useCycleProgress, useCycles } from './use-performance';
+import type { Cycle } from './performance.types';
+
+/**
+ * Review cycles: the period, its deadlines, and whether it actually covered everybody.
+ *
+ * A CYCLE DOES NOT CLOSE OVER REVIEWS IN FLIGHT — a count across rows, enforced by the service, and the
+ * reason the close confirmation says so rather than just asking twice. Closing regardless would make the
+ * coverage report claim a cycle finished that nobody finished.
+ *
+ * THE COVERAGE REPORT IS THE POINT OF THE DRAWER. "Did everybody get reviewed" cannot be answered from
+ * the review list, because the people missing from it are the answer — so the API computes who has no
+ * review, or one that never reached `shared`, and this shows it next to the progress counts.
+ */
+export function CyclesTab() {
+  const qc = useQueryClient();
+  const list = useListState();
+  const [status, setStatus] = useState('all');
+  const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<Cycle | null>(null);
+  const [addingReviewTo, setAddingReviewTo] = useState<Cycle | null>(null);
+  const [transition, setTransition] = useState<{ cycle: Cycle; to: 'open' | 'close' } | null>(null);
+
+  const cycles = useCycles(status, list.limit, list.offset);
+  const progress = useCycleProgress(selected?.id ?? null);
+  const coverage = useCycleCoverage(selected?.id ?? null);
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['performance'] });
+
+  async function runTransition() {
+    if (!transition) return;
+    const { cycle, to } = transition;
+    const path =
+      to === 'open' ? '/v1/performance/cycles/{id}/open' : '/v1/performance/cycles/{id}/close';
+    const { error } = await api.POST(path, { params: { path: { id: cycle.id } } });
+    setTransition(null);
+    if (error) {
+      toast.error(apiErrorMessage(error, `Failed to ${to} the cycle.`));
+      return;
+    }
+    toast.success(to === 'open' ? 'Cycle opened' : 'Cycle closed');
+    invalidate();
+  }
+
+  const columns: DataTableColumn<Cycle>[] = [
+    {
+      key: 'reference',
+      header: 'Reference',
+      cell: (cycle) => (
+        <span className="font-mono text-xs font-medium text-fg">{cycle.reference}</span>
+      ),
+    },
+    {
+      key: 'name',
+      header: 'Cycle',
+      cell: (cycle) => (
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-fg">{cycle.name}</p>
+          <p className="truncate text-xs text-fg-subtle">
+            {formatDate(cycle.periodStart)} – {formatDate(cycle.periodEnd)}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'selfDue',
+      header: 'Self-assessment due',
+      // No self-assessment step is a property of the cycle, not a missing date.
+      cell: (cycle) =>
+        cycle.selfAssessmentDue ? (
+          formatDate(cycle.selfAssessmentDue)
+        ) : (
+          <span className="text-xs text-fg-subtle">Not required</span>
+        ),
+      hideOnMobile: true,
+    },
+    { key: 'reviewDue', header: 'Review due', cell: (cycle) => formatDate(cycle.reviewDue) },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (cycle) => (
+        <StatusBadge tone={statusTone(cycle.status)}>{humanizeStatus(cycle.status)}</StatusBadge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      cell: (cycle) => (
+        <RowActions>
+          {/* Reviews are added while the cycle is a DRAFT or OPEN: a closed cycle takes nobody new. */}
+          {cycle.status !== 'closed' && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Add a review to ${cycle.reference}`}
+              title="Add a review"
+              onClick={() => setAddingReviewTo(cycle)}
+            >
+              <UserPlus className="h-3.5 w-3.5" strokeWidth={2} />
+            </Button>
+          )}
+          {cycle.status === 'draft' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTransition({ cycle, to: 'open' })}
+            >
+              Open
+            </Button>
+          )}
+          {cycle.status === 'open' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTransition({ cycle, to: 'close' })}
+            >
+              Close
+            </Button>
+          )}
+        </RowActions>
+      ),
+    },
+  ];
+
+  const totalReviews = (progress.data ?? []).reduce((sum, row) => sum + row.count, 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <CreateCycleModal open={creating} onClose={() => setCreating(false)} onSuccess={invalidate} />
+      {addingReviewTo && (
+        <CreateReviewModal
+          cycle={addingReviewTo}
+          onClose={() => setAddingReviewTo(null)}
+          onSuccess={invalidate}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!transition}
+        onCancel={() => setTransition(null)}
+        onConfirm={runTransition}
+        title={transition?.to === 'open' ? 'Open this cycle?' : 'Close this cycle?'}
+        description={
+          transition?.to === 'open'
+            ? 'Employees and reviewers can start writing. Reviews can still be added afterwards.'
+            : 'Refused while any review is still in flight — a cycle that closed over unfinished reviews would make the coverage report claim it was completed.'
+        }
+        confirmLabel={transition?.to === 'open' ? 'Open cycle' : 'Close cycle'}
+      />
+
+      <TabToolbar
+        filter={
+          <SegmentedControl
+            label="Filter by status"
+            options={CYCLE_STATUS_FILTERS.map((option) => ({ ...option }))}
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              list.resetPaging();
+            }}
+          />
+        }
+        action={
+          <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            New cycle
+          </Button>
+        }
+      />
+
+      <DataTable
+        columns={columns}
+        rows={cycles.data?.data}
+        isLoading={cycles.isLoading}
+        isError={cycles.isError}
+        errorMessage="Failed to load review cycles."
+        emptyMessage="No review cycles yet"
+        emptyIcon={CalendarRange}
+        onRowClick={setSelected}
+        isRowActive={(cycle) => cycle.id === selected?.id}
+      />
+
+      <PaginationFooter
+        pageInfo={cycles.data?.pageInfo}
+        onOffsetChange={list.goToOffset}
+        noun="cycle"
+      />
+
+      <EntityDetailPanel
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.name ?? 'Cycle'}
+        description={selected?.reference}
+        headerActions={
+          selected && selected.status !== 'closed' ? (
+            <PanelAction tone="accent" onClick={() => setAddingReviewTo(selected)}>
+              Add a review
+            </PanelAction>
+          ) : undefined
+        }
+        items={
+          selected
+            ? [
+                {
+                  label: 'Status',
+                  value: (
+                    <StatusBadge tone={statusTone(selected.status)}>
+                      {humanizeStatus(selected.status)}
+                    </StatusBadge>
+                  ),
+                },
+                {
+                  label: 'Period',
+                  value: `${formatDate(selected.periodStart)} – ${formatDate(selected.periodEnd)}`,
+                },
+                {
+                  label: 'Self-assessment due',
+                  value: selected.selfAssessmentDue
+                    ? formatDate(selected.selfAssessmentDue)
+                    : 'Not required',
+                },
+                { label: 'Review due', value: formatDate(selected.reviewDue) },
+                { label: 'Opened', value: formatDate(selected.openedAt) },
+                { label: 'Closed', value: formatDate(selected.closedAt) },
+              ]
+            : []
+        }
+        activity={selected ? { resourceId: selected.id, resourceType: 'review_cycle' } : undefined}
+      >
+        {selected && (
+          <>
+            <SlideOverSection title={`Progress (${totalReviews})`}>
+              {progress.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
+              {!progress.isLoading && totalReviews === 0 && (
+                <p className="text-xs text-fg-subtle">No reviews in this cycle yet</p>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                {(progress.data ?? []).map((row) => (
+                  <Badge key={row.status} tone={statusTone(row.status)}>
+                    {humanizeStatus(row.status)} · {row.count}
+                  </Badge>
+                ))}
+              </div>
+            </SlideOverSection>
+
+            <SlideOverSection title={`Not covered (${coverage.data?.length ?? 0})`}>
+              {coverage.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
+              {/* An empty coverage report is the GOOD outcome, so it says so rather than showing an
+                  empty list that reads as a failed fetch. */}
+              {!coverage.isLoading && (coverage.data?.length ?? 0) === 0 && (
+                <p className="text-xs text-success">Everybody in scope has a completed review</p>
+              )}
+              <div className="flex flex-col gap-1.5">
+                {(coverage.data ?? []).map((gap) => (
+                  <div
+                    key={gap.employeeId}
+                    className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium text-fg">{gap.employeeName}</p>
+                      <p className="truncate text-xs text-fg-subtle">{gap.email}</p>
+                    </div>
+                    {/* `status: null` means NO review at all, which is a different problem from one that
+                        stalled — so it is named rather than shown as a dash. */}
+                    <Badge tone={gap.status ? 'amber' : 'red'}>
+                      {gap.status ? humanizeStatus(gap.status) : 'No review'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </SlideOverSection>
+          </>
+        )}
+      </EntityDetailPanel>
+    </div>
+  );
+}

@@ -120,13 +120,23 @@ export class RateLimitGuard implements CanActivate {
     if (!allowed) {
       const retryAfterSecs = Math.max(resetAt - Math.floor(Date.now() / 1000), 1);
       void res.header('Retry-After', retryAfterSecs);
+      /**
+       * A FLAT response body, because that is the only shape the exception filter reads.
+       *
+       * `GlobalExceptionFilter` builds the envelope itself:
+       *
+       *   message: typeof res === 'string' ? res : (res['message'] ?? 'Error')
+       *
+       * This threw a nested `{ error: { code, message } }`, so `res['message']` was undefined and EVERY
+       * rate-limited response in the product reached the caller as the message `"Error"` — measured on a
+       * 429 that surfaced in the SPA as a bare "Error" under an upload button, which cost real time to
+       * diagnose because it names nothing. The `code` is not lost by flattening: the filter derives it
+       * from the status, and `httpStatusToErrorCode(429)` is `RATE_LIMITED`.
+       */
       throw new HttpException(
         {
-          error: {
-            code: 'RATE_LIMITED',
-            message: `Too many requests — retry after ${retryAfterSecs}s.`,
-            retryAfter: retryAfterSecs,
-          },
+          message: `Too many requests — retry after ${retryAfterSecs}s.`,
+          retryAfter: retryAfterSecs,
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );

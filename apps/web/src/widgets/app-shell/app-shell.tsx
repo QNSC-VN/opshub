@@ -8,6 +8,7 @@ import {
   ShieldHalf,
   ScanLine,
   CalendarClock,
+  ClipboardCheck,
   GraduationCap,
   Users,
   Briefcase,
@@ -104,6 +105,9 @@ const navGroups: NavGroup[] = [
       // caller's OWN training, which is self-scoped and holds no permission code. Gating the nav
       // entry on `training.read` would hide an employee's own certificates from them.
       { to: '/training', label: 'Training', icon: GraduationCap },
+      // Also uncapped: the first tab is the caller's own review, which is self-scoped. Gating this on
+      // `performance.read` would hide an employee's own rating from them.
+      { to: '/performance', label: 'Performance', icon: ClipboardCheck },
     ],
   },
   {
