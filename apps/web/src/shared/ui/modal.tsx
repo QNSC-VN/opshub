@@ -7,15 +7,11 @@
  *  - Keyboard: Escape closes; click backdrop closes
  *  - Body scroll lock while open
  */
-import {
-  useEffect,
-  useRef,
-  useId,
-  type ReactNode,
-  type KeyboardEvent,
-} from 'react';
+import { useEffect, useRef, useId, type ReactNode, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { restoreFocus } from './restore-focus';
+import { useEscapeToClose } from './use-escape-to-close';
 
 export interface ModalProps {
   open: boolean;
@@ -51,6 +47,8 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
+  useEscapeToClose(open, panelRef, onClose);
+
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -59,16 +57,15 @@ export function Modal({
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
-      previouslyFocused?.focus();
+      // Not `previouslyFocused.focus()`: the control that opened this modal is often gone, because the
+      // action it performed removed it. See `restoreFocus`.
+      restoreFocus(previouslyFocused, panel);
     };
   }, [open]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-      return;
-    }
+    // Escape is handled by `useEscapeToClose` on the document, because focus is not reliably inside this
+    // panel by the time somebody presses it.
     if (e.key !== 'Tab') return;
     const panel = panelRef.current;
     if (!panel) return;
@@ -133,9 +130,7 @@ export function Modal({
         <div className="max-h-[70vh] overflow-y-auto">{children}</div>
 
         {footer && (
-          <div className="border-t border-border bg-surface-muted px-5 py-3">
-            {footer}
-          </div>
+          <div className="border-t border-border bg-surface-muted px-5 py-3">{footer}</div>
         )}
       </div>
     </div>

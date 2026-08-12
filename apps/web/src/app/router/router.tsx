@@ -22,6 +22,8 @@ import { InformationAssetsPage } from '@/pages/information-assets/information-as
 import { VendorsPage } from '@/pages/vendors/vendors-page';
 import { NonconformancesPage } from '@/pages/quality/nonconformances-page';
 import { CapasPage } from '@/pages/quality/capas-page';
+import { AuditsPage } from '@/pages/quality/audits-page';
+import { ReviewsPage } from '@/pages/quality/reviews-page';
 import { AccessPage } from '@/pages/access/access-page';
 import { CompliancePage } from '@/pages/compliance/compliance-page';
 import { WorkforcePage } from '@/pages/workforce/workforce-page';
@@ -149,6 +151,18 @@ const capasRoute = createRoute({
   component: CapasPage,
 });
 
+const internalAuditsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/internal-audits',
+  component: AuditsPage,
+});
+
+const managementReviewsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/management-reviews',
+  component: ReviewsPage,
+});
+
 const accessRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/access',
@@ -244,6 +258,8 @@ const routeTree = rootRoute.addChildren([
     vendorsRoute,
     nonconformancesRoute,
     capasRoute,
+    internalAuditsRoute,
+    managementReviewsRoute,
     accessRoute,
     complianceRoute,
     workforceRoute,

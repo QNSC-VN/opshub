@@ -12,6 +12,8 @@
 import { useEffect, useRef, useId, type ReactNode, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { restoreFocus } from './restore-focus';
+import { useEscapeToClose } from './use-escape-to-close';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,6 +62,8 @@ export function SlideOver({
   const titleId = useId();
   const descId = useId();
 
+  useEscapeToClose(open, panelRef, onClose);
+
   // ── Focus trap ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -75,8 +79,10 @@ export function SlideOver({
       first?.focus();
     }
 
+    // `panel`, captured above, not `panelRef.current`: the ref may already point elsewhere by cleanup, and
+    // this argument only has to name the overlay that is closing.
     return () => {
-      previouslyFocused?.focus();
+      restoreFocus(previouslyFocused, panel);
     };
   }, [open]);
 
@@ -96,11 +102,8 @@ export function SlideOver({
   // ── Keyboard handler ──────────────────────────────────────────────────────
 
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-      return;
-    }
+    // Escape is handled by `useEscapeToClose` on the document, because focus is not reliably inside this
+    // panel by the time somebody presses it.
 
     if (e.key !== 'Tab') return;
 
@@ -151,6 +154,9 @@ export function SlideOver({
       */}
       <div
         ref={panelRef}
+        // `-1` so the panel itself can hold focus when nothing inside it can — which is what keeps Escape
+        // working after a nested modal removed the control that opened it.
+        tabIndex={open ? -1 : undefined}
         role={open ? 'dialog' : undefined}
         aria-modal={open ? 'true' : undefined}
         aria-hidden={open ? undefined : true}

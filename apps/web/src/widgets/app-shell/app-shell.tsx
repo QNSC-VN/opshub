@@ -12,6 +12,8 @@ import {
   CalendarClock,
   ClipboardCheck,
   ClipboardX,
+  ClipboardList,
+  CalendarCheck,
   ListChecks,
   Database,
   GraduationCap,
@@ -152,6 +154,18 @@ const navGroups: NavGroup[] = [
       // The CAPA list is gated on `nonconformance.read` too, by the API: a corrective action is only
       // readable to somebody who may read the finding it answers.
       { to: '/capas', label: 'Corrective actions', icon: ListChecks, cap: 'nonconformance.read' },
+      {
+        to: '/internal-audits',
+        label: 'Internal audits',
+        icon: ClipboardList,
+        cap: 'internal_audit.read',
+      },
+      {
+        to: '/management-reviews',
+        label: 'Management reviews',
+        icon: CalendarCheck,
+        cap: 'management_review.read',
+      },
     ],
   },
   {

@@ -53,6 +53,10 @@ export class DocumentsDrizzleRepository implements IDocumentsRepository {
       filters.ownerId ? eq(documents.ownerId, filters.ownerId) : undefined,
       // Retired documents stay readable but are out of the way unless asked for.
       filters.includeRetired ? undefined : isNull(documents.retiredAt),
+      filters.search
+        ? sql`(${documents.code} ILIKE ${'%' + filters.search + '%'}
+            OR ${documents.title} ILIKE ${'%' + filters.search + '%'})`
+        : undefined,
     );
 
     const rows = await this.db

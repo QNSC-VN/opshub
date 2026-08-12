@@ -28,6 +28,7 @@ export const ListDocumentsQuerySchema = z
     category: category.optional(),
     ownerId: z.string().uuid().optional(),
     includeRetired: queryBoolean().optional(),
+    search: z.string().trim().min(1).max(200).optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListDocumentsQueryDto extends createZodDto(ListDocumentsQuerySchema) {}
