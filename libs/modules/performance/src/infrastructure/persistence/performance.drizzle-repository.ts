@@ -123,8 +123,15 @@ export class PerformanceDrizzleRepository implements IPerformanceRepository {
         .select()
         .from(performanceCycles)
         .where(where)
-        // Most recent period first. `id` last so the order is total — two cycles can share a period.
-        .orderBy(desc(performanceCycles.periodStart), asc(performanceCycles.id))
+        // Most recent period first, and within a period the most recently CREATED cycle first.
+        //
+        // The tiebreaker used to be `asc(id)`, which is oldest-first — and since `id` is a uuidv7, that
+        // put a cycle created today BEHIND every other cycle covering the same period. With several
+        // hundred cycles sharing one period (each API and browser suite adds some), a freshly created
+        // cycle landed on page thirteen, which is indistinguishable from "the create silently failed".
+        // `desc(id)` keeps the order total — the ratchet's requirement — and answers the question a
+        // reader is actually asking.
+        .orderBy(desc(performanceCycles.periodStart), desc(performanceCycles.id))
         .limit(limit)
         .offset(offset),
       this.db.select({ total: count() }).from(performanceCycles).where(where),
