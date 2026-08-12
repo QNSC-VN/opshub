@@ -68,7 +68,7 @@ module "iam_oidc" {
   # modules, not from a change to this one — its variables and role names are identical
   # to v2.0.1 (verified by diffing both). Taking it now rather than later because these
   # roles do not exist yet, so there is no trust-policy replacement to sequence.
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v3.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/iam-oidc?ref=iam-oidc-v3.0.1"
 
   product           = "opshub"
   github_org        = var.github_org
