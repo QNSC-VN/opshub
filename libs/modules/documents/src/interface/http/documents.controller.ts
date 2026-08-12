@@ -156,7 +156,12 @@ export class DocumentsController {
   @ApiCommonErrors(401, 403)
   async list(@Query() query: ListDocumentsQueryDto): Promise<PagedResult<DocumentResponseDto>> {
     const { rows, total } = await this.service.listDocuments(
-      { category: query.category, ownerId: query.ownerId, includeRetired: query.includeRetired },
+      {
+        category: query.category,
+        ownerId: query.ownerId,
+        includeRetired: query.includeRetired,
+        search: query.search,
+      },
       query.limit,
       query.offset,
     );

@@ -46,6 +46,14 @@ export interface DocumentFilters {
   ownerId?: string;
   /** Omit to hide retired documents; `true` includes them. Retirement is soft, never a delete. */
   includeRetired?: boolean;
+  /**
+   * Free text over `code` and `title`.
+   *
+   * Here because pickers select a document BY NAME — an audit report, a review's minutes — and a picker
+   * that can only offer the first page of a list is one that cannot find document 101. The same reason
+   * `positions` grew a search.
+   */
+  search?: string;
 }
 
 /**

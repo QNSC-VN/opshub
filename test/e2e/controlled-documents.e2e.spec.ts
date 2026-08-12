@@ -192,6 +192,38 @@ describe('controlled document approval', () => {
   });
 });
 
+describe('finding a document in the library', () => {
+  it('searches over the code and the title, which is what a picker needs', async () => {
+    /*
+     * WHY THIS EXISTS. Documents are cited BY NAME from other records — an audit's report, a review's
+     * minutes — through a picker. Without a server-side search a picker can only offer the first page, so
+     * document 101 is unreachable and the record cites nothing. Asserted on both fields because a picker
+     * user types whichever one they remember.
+     */
+    const byCode = await get<{ data: { id: string; code: string }[] }>(
+      `/v1/documents?search=${encodeURIComponent(CODE)}`,
+      security,
+    );
+    expect(byCode.status).toBe(200);
+    expect(byCode.body.data.map((row) => row.code)).toContain(CODE);
+
+    const byTitle = await get<{ data: { code: string }[] }>(
+      '/v1/documents?search=Information%20Security',
+      security,
+    );
+    expect(byTitle.status).toBe(200);
+    expect(byTitle.body.data.map((row) => row.code)).toContain(CODE);
+
+    // And it EXCLUDES: a search that matches nothing returns nothing, rather than the whole library.
+    const miss = await get<{ data: unknown[] }>(
+      '/v1/documents?search=zzz-no-such-document',
+      security,
+    );
+    expect(miss.status).toBe(200);
+    expect(miss.body.data).toHaveLength(0);
+  });
+});
+
 describe('superseding a published document', () => {
   it('publishes v2, supersedes v1, and leaves exactly one version in force', async () => {
     const draft = await post<{ id: string; version: number }>(

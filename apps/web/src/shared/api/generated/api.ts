@@ -12749,6 +12749,7 @@ export interface operations {
           | 'contract_template';
         ownerId?: string;
         includeRetired?: boolean | string;
+        search?: string;
         limit?: number;
         offset?: number;
       };

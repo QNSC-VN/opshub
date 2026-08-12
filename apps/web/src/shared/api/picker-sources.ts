@@ -101,3 +101,31 @@ export async function controlOptions(term: string): Promise<PickerOption[]> {
       hint: control.reference,
     }));
 }
+
+/**
+ * Controlled documents, for pointing a record at the document that evidences it — an audit report, a
+ * review's minutes.
+ *
+ * SERVER-SIDE SEARCH, unlike `controlOptions`. The documents register grows with every procedure, report and
+ * set of minutes an organisation issues, so a client-side filter over one page would stop finding things
+ * exactly when the register became useful. `search` was added to the API for this.
+ *
+ * Retired documents are excluded: a record cannot cite a document that has been withdrawn.
+ */
+export async function documentOptions(term: string): Promise<PickerOption[]> {
+  const { data } = await api.GET('/v1/documents', {
+    params: {
+      query: {
+        search: term || undefined,
+        includeRetired: false,
+        limit: PICKER_LIMIT,
+        offset: 0,
+      },
+    },
+  });
+  return (data?.data ?? []).map((document) => ({
+    value: document.id,
+    label: document.title,
+    hint: document.code,
+  }));
+}
