@@ -122,6 +122,14 @@ jobs:
       # global-setup signs in — OpsHub's login page is a single Entra SSO button, and CI has no
       # Entra tenant.
       NODE_ENV: test
+      # The suite drives ~50 specs through four seeded identities in three minutes, and each page load
+      # costs about fifteen calls — so the DEFAULT tier's 200/min per user is crossed and whichever
+      # request lands next fails a spec that was testing something else. Measured here twice after
+      # spreading the load across the seats already fixed it locally.
+      #
+      # The env schema REFUSES this value above 200 when NODE_ENV=production, so it cannot become a dial
+      # in a deployed environment — see `env.schema.ts` and its spec.
+      RATE_LIMIT_DEFAULT_LIMIT: '5000'
       LOG_LEVEL: warn
       OTEL_ENABLED: 'false'
       # Object storage points at LocalStack. `STORAGE_ENDPOINT` and not `AWS_ENDPOINT_URL`:

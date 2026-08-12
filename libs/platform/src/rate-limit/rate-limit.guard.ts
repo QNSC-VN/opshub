@@ -9,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { createHash } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { AppConfigService } from '../config/app-config.service';
 import { CacheService } from '@qnsc-vn/platform-cache';
 import {
   RATE_LIMIT_TIER,
@@ -41,7 +42,24 @@ export class RateLimitGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly cache: CacheService,
+    /**
+     * Optional so the guard can still be constructed in a unit test with two arguments — and so a host
+     * that never registers the config module keeps the shipped ceiling rather than failing to boot.
+     */
+    private readonly config?: AppConfigService,
   ) {}
+
+  /**
+   * The tier's ceiling, with the DEFAULT tier's read from config.
+   *
+   * Only the DEFAULT tier is configurable, and only downwards in production (the env schema refuses a
+   * higher value there). Every other tier — AUTH_LOGIN, UPLOAD, AI — is fixed in code, because those
+   * protect specific abuse paths rather than absorbing ordinary traffic.
+   */
+  private limitFor(tierName: RateLimitTierName, tier: { limit: number }): number {
+    if (tierName !== 'DEFAULT') return tier.limit;
+    return this.config?.get('RATE_LIMIT_DEFAULT_LIMIT') ?? tier.limit;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const skip = this.reflector.getAllAndOverride<boolean>(SKIP_RATE_LIMIT, [
@@ -99,7 +117,7 @@ export class RateLimitGuard implements CanActivate {
     try {
       ({ allowed, remaining, resetAt } = await this.cache.consumeRateLimit(
         rateLimitKey,
-        tier.limit,
+        this.limitFor(tierName, tier),
         Math.ceil(tier.windowMs / 1000),
       ));
     } catch (err) {
@@ -113,7 +131,7 @@ export class RateLimitGuard implements CanActivate {
     }
 
     // RFC 6585 headers on every response
-    void res.header('RateLimit-Limit', tier.limit);
+    void res.header('RateLimit-Limit', this.limitFor(tierName, tier));
     void res.header('RateLimit-Remaining', Math.max(0, remaining));
     void res.header('RateLimit-Reset', resetAt);
 
