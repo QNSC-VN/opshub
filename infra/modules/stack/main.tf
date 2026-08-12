@@ -202,7 +202,7 @@ locals {
 # signal — a task injected with an empty secret fails to boot, so a forgotten secret
 # is a failed deploy rather than an app running on a blank credential.
 module "secrets" {
-  source      = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/secrets?ref=secrets-v2.1.0"
+  source      = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/secrets?ref=secrets-v2.1.1"
   prefix      = "${var.product}/${var.env}"
   kms_key_arn = local.kms_key_arn
 
@@ -338,7 +338,7 @@ module "app_bucket" {
 
 # ── ECS cluster ───────────────────────────────────────────────────────────────
 module "ecs_cluster" {
-  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-cluster?ref=ecs-cluster-v1.0.0"
+  source = "git::https://github.com/QNSC-VN/qnsc-tf-modules.git//modules/ecs-cluster?ref=ecs-cluster-v2.0.0"
   name   = local.name
   tags   = local.tags
 
