@@ -1,30 +1,29 @@
 import { expect, request, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 /**
- * Where global-setup writes the signed-in session for every spec to reuse.
+ * ONE SIGNED-IN STATE PER SEAT, and the reason there is more than one.
  *
- * Relative to `apps/web`, which is Playwright's cwd, and imported by `playwright.config.ts` so
- * the path has exactly one definition — a config and a setup that each spelled it out would
- * drift into "storageState not found" the first time either moved.
+ * The DEFAULT rate-limit tier allows 200 requests a minute keyed on the USER id. Every spec used to sign
+ * in as the same admin: roughly fifteen API calls per page load, times fifty specs inside three minutes,
+ * crosses that line — and the refusal lands on whichever request is next, which is how it first arrived
+ * disguised as a broken upload.
+ *
+ * So the suite has four admin seats and spreads its spec FILES across them round-robin
+ * (`playwright.config.ts`). Round-robin rather than a hand-written list of "heavy" files: the hand-written
+ * version put two heavy files on one seat and 429'd again, and a rule nobody has to maintain cannot drift.
+ *
+ * Deliberately NOT solved by making the limiter configurable. A control tests can turn down stops
+ * describing production.
  */
-export const AUTH_STATE = 'e2e/.auth/state.json';
+export const AUTH_STATES = [
+  'e2e/.auth/state.json',
+  'e2e/.auth/state-2.json',
+  'e2e/.auth/state-3.json',
+  'e2e/.auth/state-4.json',
+] as const;
 
-/**
- * A SECOND signed-in state, and the reason it exists.
- *
- * The DEFAULT rate-limit tier is 200 requests per minute keyed on the USER id, and every spec used to
- * sign in as the same admin: around fifteen API calls per page load, times forty-odd specs inside two
- * minutes, crosses that line and fails whichever request lands next with a 429. It happened twice, and the
- * first time it arrived disguised as a broken upload.
- *
- * So the suite has two admin seats and splits its spec FILES between them (see `playwright.config.ts`).
- * Not one seat per spec: the point is to stay inside a limit that protects production, not to make the
- * limit irrelevant. If the suite doubles again, add a third seat rather than raising the tier.
- */
-export const AUTH_STATE_SECOND = 'e2e/.auth/state-2.json';
-
-/** A third seat. Training drives more requests than any other file — uploads, five pickers, two tabs. */
-export const AUTH_STATE_THIRD = 'e2e/.auth/state-3.json';
+/** The primary seat, for the global setup's own sanity check and anything not sharded. */
+export const AUTH_STATE = AUTH_STATES[0];
 
 /**
  * OPEN QUESTION, recorded rather than guessed at: roughly one full run in three, ONE spec on a
@@ -64,12 +63,19 @@ export const AUTH_STATE_THIRD = 'e2e/.auth/state-3.json';
  */
 export const FIXTURE = {
   ADMIN: { email: 'admin@opshub.local' },
-  /** The second admin seat — same role, separate rate-limit bucket. Seeded by `db/seed.ts`. */
-  ADMIN_SECOND: { email: 'admin2@opshub.local' },
-  /** The third seat, for the heaviest spec file. */
-  ADMIN_THIRD: { email: 'admin3@opshub.local' },
   EMPLOYEE: { email: 'employee@opshub.local' },
 } as const;
+
+/**
+ * The admin seats, in the same order as `AUTH_STATES`. All four hold the same role; only the identity —
+ * and therefore the rate-limit bucket — differs. Seeded by `db/seed.ts`.
+ */
+export const SEAT_EMAILS = [
+  'admin@opshub.local',
+  'admin2@opshub.local',
+  'admin3@opshub.local',
+  'admin4@opshub.local',
+] as const;
 
 /**
  * Give React Query a beat to settle.

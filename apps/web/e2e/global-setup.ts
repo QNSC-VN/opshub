@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { request } from '@playwright/test';
-import { AUTH_STATE, AUTH_STATE_SECOND, AUTH_STATE_THIRD, FIXTURE } from './support/fixtures';
+import { AUTH_STATES, SEAT_EMAILS } from './support/fixtures';
 
 /**
  * Sign in ONCE and save the session cookie for every spec to reuse.
@@ -21,11 +21,11 @@ import { AUTH_STATE, AUTH_STATE_SECOND, AUTH_STATE_THIRD, FIXTURE } from './supp
  * `GET /v1/auth/me`, so there is no client state to seed either.
  */
 export default async function globalSetup(): Promise<void> {
-  // THREE SEATS, all admins. The DEFAULT rate-limit tier is per user id, and one principal cannot carry the
-  // whole suite inside 200 requests a minute — see `AUTH_STATE_SECOND`.
-  await signIn(FIXTURE.ADMIN.email, AUTH_STATE);
-  await signIn(FIXTURE.ADMIN_SECOND.email, AUTH_STATE_SECOND);
-  await signIn(FIXTURE.ADMIN_THIRD.email, AUTH_STATE_THIRD);
+  // ONE SESSION PER SEAT. The suite spreads its spec files across these identities so no single one
+  // crosses the DEFAULT rate-limit tier — see `AUTH_STATES`.
+  for (const [index, email] of SEAT_EMAILS.entries()) {
+    await signIn(email, AUTH_STATES[index]);
+  }
 }
 
 async function signIn(email: string, statePath: string): Promise<void> {

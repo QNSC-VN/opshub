@@ -82,6 +82,8 @@ const ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000001';
 const E2E_ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000009';
 /** A third seat: the browser suite splits its spec files three ways. See `E2E_ADMIN_EMPLOYEE_ID`. */
 const E2E_ADMIN_THIRD_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000a';
+/** A fourth seat. The browser suite spreads its spec files across all of them, round-robin. */
+const E2E_ADMIN_FOURTH_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000b';
 const DEMO_EMPLOYEES: Array<{
   id: string;
   email: string;
@@ -104,6 +106,12 @@ const DEMO_EMPLOYEES: Array<{
     id: E2E_ADMIN_THIRD_EMPLOYEE_ID,
     email: 'admin3@opshub.local',
     displayName: 'Admin User (third seat)',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_FOURTH_EMPLOYEE_ID,
+    email: 'admin4@opshub.local',
+    displayName: 'Admin User (fourth seat)',
     roleKey: 'admin',
   },
   {
