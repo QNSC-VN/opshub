@@ -1,5 +1,6 @@
+import { readdirSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
-import { AUTH_STATE, AUTH_STATE_SECOND, AUTH_STATE_THIRD } from './e2e/support/fixtures';
+import { AUTH_STATE, AUTH_STATES } from './e2e/support/fixtures';
 
 /**
  * Playwright config for the OpsHub SPA.
@@ -14,28 +15,30 @@ import { AUTH_STATE, AUTH_STATE_SECOND, AUTH_STATE_THIRD } from './e2e/support/f
  * "the thing I just made appears in this list". Parallel workers would interleave writes into
  * each other's lists, and the failure would look like a UI bug.
  *
- * ONE SHARED LOGIN, unlike rally, which logs in per test. rally has to: its bearer flow rotates
- * the refresh token on every use and revokes the family on reuse, so a shared session trips that
- * protection. OpsHub's SPA holds no tokens at all — auth is an opaque `__Host-opshub_session`
- * cookie backed by Valkey, and nothing rotates it — so `global-setup.ts` signs in once and every
- * spec reuses the storage state. That also sidesteps the AUTH_LOGIN rate limit rally needs a
+ * SHARED LOGINS, FOUR OF THEM, unlike rally, which logs in per test. rally has to: its bearer flow
+ * rotates the refresh token on every use and revokes the family on reuse, so a shared session trips
+ * that protection. OpsHub's SPA holds no tokens at all — auth is an opaque `__Host-opshub_session`
+ * cookie backed by Valkey, and nothing rotates it — so `global-setup.ts` signs in once PER SEAT and
+ * the spec files are spread across those seats.
+ *
+ * Four rather than one because the DEFAULT rate-limit tier is keyed on the user id: fifty specs as a
+ * single principal exceeds 200 requests a minute and the next request comes back 429. That is also why
+ * the logins go through the BFF route, which sidesteps the AUTH_LOGIN tier rally needs a
  * `DISABLE_RATE_LIMIT` flag for.
  */
-/** The write-heavy specs, on the SECOND seat. */
-const SECOND_SEAT_SPECS = [
-  '**/performance.e2e.ts',
-  '**/isms-risks.e2e.ts',
-  '**/positions-contracts.e2e.ts',
-];
-
 /**
- * Training gets a seat of its own.
+ * SPEC FILES, SPREAD ACROSS THE SEATS ROUND-ROBIN.
  *
- * It is the heaviest file in the suite — two real uploads, five async pickers, five tabs — and it was the
- * one that kept losing a picker search to a 429 in the second full run of the day while passing alone.
- * A third bucket is cheaper than making the limiter configurable.
+ * Read from disk and sorted, so the assignment is deterministic and nobody maintains a list. The previous
+ * version WAS a hand-written list of "heavy" files, and it put two heavy ones on the same seat and hit the
+ * limiter again — the lesson being that a balance somebody has to remember is not a balance.
  */
-const THIRD_SEAT_SPECS = ['**/training.e2e.ts'];
+const SPEC_FILES = readdirSync('./e2e')
+  .filter((file) => file.endsWith('.e2e.ts'))
+  .sort();
+
+const seatFor = (seat: number): string[] =>
+  SPEC_FILES.filter((_, index) => index % AUTH_STATES.length === seat).map((file) => `**/${file}`);
 
 export default defineConfig({
   testDir: './e2e',
@@ -69,23 +72,11 @@ export default defineConfig({
    * Deliberately NOT solved by making the limit configurable: a control that tests can turn down is a
    * control that stops describing production. If the suite doubles again, seed a third seat.
    */
-  projects: [
-    {
-      name: 'chromium',
-      testIgnore: [...SECOND_SEAT_SPECS, ...THIRD_SEAT_SPECS],
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'chromium-second-seat',
-      testMatch: SECOND_SEAT_SPECS,
-      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE_SECOND },
-    },
-    {
-      name: 'chromium-third-seat',
-      testMatch: THIRD_SEAT_SPECS,
-      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE_THIRD },
-    },
-  ],
+  projects: AUTH_STATES.map((state, seat) => ({
+    name: seat === 0 ? 'chromium' : `chromium-seat-${seat + 1}`,
+    testMatch: seatFor(seat),
+    use: { ...devices['Desktop Chrome'], storageState: state },
+  })),
   webServer: {
     command: 'pnpm dev --port 5173',
     url: 'http://localhost:5173',

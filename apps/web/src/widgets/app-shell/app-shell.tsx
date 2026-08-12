@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   ShieldHalf,
   ScanLine,
+  AlertOctagon,
   CalendarClock,
   ClipboardCheck,
   GraduationCap,
@@ -118,6 +119,9 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/risks', label: 'Risk register', icon: ShieldAlert, cap: 'risk.read' },
       { to: '/controls', label: 'Controls & SoA', icon: ShieldCheck, cap: 'control.read' },
+      // `incident.read` gates the LIST. Reporting needs no permission at all, which is why the report
+      // action lives on the page rather than behind this entry.
+      { to: '/incidents', label: 'Incidents', icon: AlertOctagon, cap: 'incident.read' },
     ],
   },
   {
