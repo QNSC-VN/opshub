@@ -67,4 +67,27 @@ describe('isoInstantFromDate', () => {
     expect(isoInstantFromDate('')).toBe('');
     expect(isoInstantFromDate('not-a-date')).toBe('');
   });
+
+  it('sends TODAY as now, so it never predates something recorded earlier today', () => {
+    // The bug this exists to stop: a non-conformance detected at 14:35 could not be contained "today",
+    // because midday today is 14:35's past and the API refuses containment that predates detection.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-04T14:35:00'));
+    const detectedAt = new Date().toISOString();
+
+    vi.setSystemTime(new Date('2026-03-04T16:00:00'));
+    const containedAt = isoInstantFromDate(todayIso());
+
+    expect(containedAt >= detectedAt).toBe(true);
+    // Still the same calendar day, which is what the form's reader chose.
+    expect(formatDate(containedAt)).toBe(formatDate(todayIso()));
+  });
+
+  it('still sends midday for a day that is not today', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-04T16:00:00'));
+    // Midday LOCAL, so reading it back anywhere within twelve hours gives the day that was picked.
+    expect(formatDate(isoInstantFromDate('2026-03-01'))).toBe(formatDate('2026-03-01'));
+    expect(isoInstantFromDate('2026-03-01')).not.toBe(new Date().toISOString());
+  });
 });

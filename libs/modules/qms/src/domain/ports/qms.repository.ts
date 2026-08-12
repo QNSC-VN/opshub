@@ -57,6 +57,14 @@ export interface INonconformanceRepository {
     tx?: DbExecutor,
   ): Promise<Nonconformance>;
   findById(id: string, tx?: DbExecutor): Promise<Nonconformance | null>;
+  /**
+   * The same row the register lists, for one id.
+   *
+   * `findById` returns the bare row and is what the transitions read; this adds the grade's rules and the
+   * CAPA counts, because `requiresCapa` and `verifiedCapaCount` ARE the closure gate and a detail view
+   * cannot describe a finding without them.
+   */
+  findRowById(id: string): Promise<NonconformanceRow | null>;
   findByReference(reference: string): Promise<Nonconformance | null>;
   list(
     filters: NonconformanceFilters,

@@ -329,6 +329,29 @@ describe('the closure gate', () => {
     expect(errorCode(res.body)).toBe('NONCONFORMANCE_CAPA_REQUIRED');
   });
 
+  it('reads back the gate on the DETAIL endpoint, not only in the list', async () => {
+    /*
+     * A detail view has to answer "may this close", and that answer is `requiresCapa` against
+     * `verifiedCapaCount` — both computed, neither on the bare row. `GET :id` used to return the base
+     * shape, so the drawer read "undefined of undefined CAPA(s) verified" and offered a closure the API
+     * would have refused. Pinned here because the two endpoints returning DIFFERENT shapes for the same
+     * finding is the kind of drift nothing else notices.
+     */
+    const finding = await raiseAndContain({ severity: 'major' });
+    await openCapa(finding.id);
+
+    const res = await apiRequest(app, security, 'GET', `/nonconformances/${finding.id}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    // `NcListRow`, from the detail endpoint: that is the point of the case.
+    const row = unwrap<NcListRow>(res.body);
+    expect(row.requiresCapa).toBe(true);
+    expect(row.capaCount).toBe(1);
+    expect(row.verifiedCapaCount).toBe(0);
+    expect(row.containmentDueDays).toBeGreaterThan(0);
+    // Contained, so its deadline is gone: a met deadline is not a deadline.
+    expect(row.containmentDueOn).toBeNull();
+  });
+
   it('closes once a CAPA is verified effective', async () => {
     const finding = await raiseAndContain({ severity: 'major' });
     await verifiedCapa(finding.id);
