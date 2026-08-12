@@ -20,6 +20,7 @@ import {
   AuthzService,
   CurrentUser,
   PermissionDeniedException,
+  RateLimit,
   RequirePermission,
   SelfScoped,
   buildPageResult,
@@ -425,6 +426,10 @@ export class TrainingController {
     return (await this.service.listCertificates(id)).map(toCertificateDto);
   }
 
+  // UPLOAD tier: a presign hands out a signed PUT and a confirm does a HeadObject, so both cost S3
+  // requests rather than just database time. Assets carried this from the start; these three surfaces
+  // did not, which meant the tier existed and two thirds of the uploads in the product ignored it.
+  @RateLimit('UPLOAD')
   @Post('records/:id/certificates/presign')
   @AuthorizedInService(
     'an employee may attach evidence to their OWN record; anyone else needs training.manage',
@@ -447,6 +452,7 @@ export class TrainingController {
     return this.service.presignCertificate(id, dto, user);
   }
 
+  @RateLimit('UPLOAD')
   @Post('records/:id/certificates/:fileId/confirm')
   @HttpCode(HttpStatus.OK)
   @AuthorizedInService(

@@ -12281,7 +12281,7 @@ export interface operations {
   LicensesController_listAssignments: {
     parameters: {
       query?: {
-        includeRevoked?: boolean;
+        includeRevoked?: boolean | string;
       };
       header?: never;
       path: {
@@ -12748,7 +12748,7 @@ export interface operations {
           | 'hr_handbook'
           | 'contract_template';
         ownerId?: string;
-        includeRetired?: boolean;
+        includeRetired?: boolean | string;
         limit?: number;
         offset?: number;
       };
@@ -13245,9 +13245,10 @@ export interface operations {
   PositionsController_list: {
     parameters: {
       query?: {
+        search?: string;
         department?: string;
         status?: 'active' | 'frozen' | 'closed';
-        vacantOnly?: boolean;
+        vacantOnly?: boolean | string;
         limit?: number;
         offset?: number;
       };
@@ -14196,7 +14197,7 @@ export interface operations {
     parameters: {
       query?: {
         category?: string;
-        includeRetired?: boolean;
+        includeRetired?: boolean | string;
         limit?: number;
         offset?: number;
       };
@@ -14583,7 +14584,7 @@ export interface operations {
         courseId?: string;
         status?: 'valid' | 'expired' | 'revoked';
         expiringOnOrBefore?: string;
-        currentOnly?: boolean;
+        currentOnly?: boolean | string;
         limit?: number;
         offset?: number;
       };
@@ -15147,7 +15148,7 @@ export interface operations {
         employeeId?: string;
         positionId?: string;
         asOf?: string;
-        includeRecommended?: boolean;
+        includeRecommended?: boolean | string;
       };
       header?: never;
       path?: never;
@@ -16932,7 +16933,7 @@ export interface operations {
   ControlController_listSoa: {
     parameters: {
       query?: {
-        applicable?: boolean;
+        applicable?: boolean | string;
         status?: 'not_applicable' | 'not_implemented' | 'partially_implemented' | 'implemented';
         ownerId?: string;
         theme?: 'organizational' | 'people' | 'physical' | 'technological';
@@ -17205,7 +17206,7 @@ export interface operations {
       query?: {
         theme?: 'organizational' | 'people' | 'physical' | 'technological';
         source?: 'annex_a' | 'custom';
-        includeRetired?: boolean;
+        includeRetired?: boolean | string;
         limit?: number;
         offset?: number;
       };
@@ -17675,8 +17676,8 @@ export interface operations {
         category?: string;
         assignedTo?: string;
         riskId?: string;
-        openOnly?: boolean;
-        breachesOnly?: boolean;
+        openOnly?: boolean | string;
+        breachesOnly?: boolean | string;
         limit?: number;
         offset?: number;
       };
@@ -18507,9 +18508,9 @@ export interface operations {
           | 'other';
         classification?: 'public' | 'internal' | 'confidential' | 'restricted';
         ownerId?: string;
-        personalDataOnly?: boolean;
+        personalDataOnly?: boolean | string;
         reviewDueOnOrBefore?: string;
-        includeRetired?: boolean;
+        includeRetired?: boolean | string;
         search?: string;
         limit?: number;
         offset?: number;
@@ -19267,9 +19268,9 @@ export interface operations {
         status?: 'prospective' | 'active' | 'suspended' | 'terminated';
         criticality?: 'low' | 'medium' | 'high' | 'critical';
         ownerId?: string;
-        processorsOnly?: boolean;
+        processorsOnly?: boolean | string;
         reviewDueOnOrBefore?: string;
-        includeTerminated?: boolean;
+        includeTerminated?: boolean | string;
         search?: string;
         limit?: number;
         offset?: number;
@@ -20074,8 +20075,8 @@ export interface operations {
           | 'other';
         ownerId?: string;
         processArea?: string;
-        openOnly?: boolean;
-        capaRequiredOnly?: boolean;
+        openOnly?: boolean | string;
+        capaRequiredOnly?: boolean | string;
         search?: string;
         limit?: number;
         offset?: number;
@@ -20535,7 +20536,7 @@ export interface operations {
           | 'cancelled';
         ownerId?: string;
         nonconformanceId?: string;
-        openOnly?: boolean;
+        openOnly?: boolean | string;
         dueOnOrBefore?: string;
         limit?: number;
         offset?: number;
@@ -21223,7 +21224,7 @@ export interface operations {
         status?: 'planned' | 'in_progress' | 'reported' | 'closed' | 'cancelled';
         leadAuditorId?: string;
         auditorId?: string;
-        openOnly?: boolean;
+        openOnly?: boolean | string;
         plannedStartOnOrBefore?: string;
         search?: string;
         limit?: number;
@@ -21923,7 +21924,7 @@ export interface operations {
         category?: 'improvement' | 'qms_change' | 'resource_need';
         ownerId?: string;
         managementReviewId?: string;
-        openOnly?: boolean;
+        openOnly?: boolean | string;
         dueOnOrBefore?: string;
         limit?: number;
         offset?: number;
@@ -22005,7 +22006,7 @@ export interface operations {
       query?: {
         status?: 'scheduled' | 'held' | 'closed' | 'cancelled';
         chairId?: string;
-        openOnly?: boolean;
+        openOnly?: boolean | string;
         scheduledOnOrBefore?: string;
         search?: string;
         limit?: number;

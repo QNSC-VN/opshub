@@ -556,7 +556,7 @@ export class WorkforceService {
 
     // Soft-delete old document if replaced
     if (leave.documentStorageKey) {
-      const old = await this.storage.findById(leave.documentStorageKey);
+      const old = await this.storage.findByKey(leave.documentStorageKey);
       if (old) void this.storage.deleteFile(old.id, old.uploaderId);
     }
 

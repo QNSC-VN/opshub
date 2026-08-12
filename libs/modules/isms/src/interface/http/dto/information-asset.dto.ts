@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import { RATING_MAX, RATING_MIN } from '../../../domain/rating';
 import { informationAssetTypeEnum, informationClassificationEnum } from '@db/schema/enums';
@@ -82,10 +83,10 @@ export const ListInformationAssetsQuerySchema = z
     /** Matches the owner OR the custodian — one question to the person asking it. */
     ownerId: z.string().uuid().optional(),
     /** The personal-data holdings, which is the register a data-protection question starts from. */
-    personalDataOnly: z.coerce.boolean().optional(),
+    personalDataOnly: queryBoolean().optional(),
     /** Due for review on or before this date. Today's date gives the overdue report. */
     reviewDueOnOrBefore: z.string().date().optional(),
-    includeRetired: z.coerce.boolean().optional(),
+    includeRetired: queryBoolean().optional(),
     search: z.string().max(200).optional(),
   })
   .merge(PaginationQuerySchema);

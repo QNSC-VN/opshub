@@ -8,7 +8,7 @@ import {
   DataTable,
   EntityDetailPanel,
   ListPage,
-  PhotoUploadWidget,
+  FileUploadWidget,
   SegmentedControl,
   SlideOverSection,
   type DataTableColumn,
@@ -261,7 +261,7 @@ export function PeoplePage() {
       >
         {selected && (
           <SlideOverSection title="Photo">
-            <PhotoUploadWidget
+            <FileUploadWidget
               mode="image"
               currentUrl={avatarUrl}
               presignUrl={`/v1/employees/${selected.id}/avatar/presign`}

@@ -8,6 +8,7 @@ import {
   Button,
   ConfirmDialog,
   DataTable,
+  EntityPicker,
   FormField,
   Input,
   Modal,
@@ -15,6 +16,7 @@ import {
   statusTone,
   type DataTableColumn,
 } from '@/shared/ui';
+import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import { formatDateTime } from '@/shared/lib/format';
 import { SectionCard, SectionHeader } from './rbac-shared';
 import type { DelegationResponse } from '@/shared/api/types';
@@ -69,11 +71,13 @@ function CreateDelegationModal({
           required
           hint="They will be able to approve requests in your name until it ends."
         >
-          <Input
+          <EntityPicker
             id="deleg-to"
+            queryKey="active-employees"
             value={toUserId}
-            onChange={(e) => setToUserId(e.target.value)}
-            placeholder="UUID of the delegate"
+            onChange={setToUserId}
+            fetchOptions={activeEmployeeOptions}
+            placeholder="Search people…"
           />
         </FormField>
         <FormField

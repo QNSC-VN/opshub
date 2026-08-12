@@ -7,7 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, desc, lt } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB } from '../database/index';
 import { AppConfigService } from '../config/app-config.service';
 import { ResilienceService } from '../resilience/resilience.service';
@@ -388,6 +388,29 @@ export class StorageService {
       .select()
       .from(storedFiles)
       .where(eq(storedFiles.id, fileId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * The same, by S3 KEY — which is what the 1:1 surfaces actually hold.
+   *
+   * WHY THIS EXISTS. `employees.photo_storage_key`, `assets.photo_storage_key` and
+   * `leave_requests.document_storage_key` store the KEY, not the file id, and four call sites passed
+   * that key to `findById`. The column is a uuid, so Postgres answered
+   * `invalid input syntax for type uuid: "employee-avatar/…/019ff.png"` — a 500 on every REPLACEMENT
+   * upload, while the first upload for an entity worked because the old-file branch was skipped. Found by
+   * driving the widget twice against the running API.
+   *
+   * Newest first: the key is unique per object in practice, but nothing in the schema says so, and a
+   * cleanup that ever re-created one must not make this ambiguous.
+   */
+  async findByKey(key: string): Promise<StoredFile | null> {
+    const [row] = await this.db
+      .select()
+      .from(storedFiles)
+      .where(eq(storedFiles.key, key))
+      .orderBy(desc(storedFiles.createdAt), desc(storedFiles.id))
       .limit(1);
     return row ?? null;
   }

@@ -1,7 +1,6 @@
 import { test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import {
-  clickFirstRow,
   csrfHeaders,
   expect,
   expectRowSomewhere,
@@ -71,15 +70,24 @@ test.describe('positions', () => {
   });
 
   test('shows the assignment list in the drawer, empty and honest', async ({ page, request }) => {
-    await createPosition(request);
+    // Opens the position THIS test created, found by search, rather than whichever row sorts first.
+    //
+    // `clickFirstRow` was wrong here in a way that only showed up later: the first row eventually became
+    // a position holding an assignment that had already been ENDED, which is neither "nobody assigned"
+    // nor "current" — so the assertion failed against a drawer that was rendering correctly. A spec that
+    // asserts on state it did not create is asserting on the database's history.
+    const code = await createPosition(request);
     await gotoInShell(page, '/positions');
-    await clickFirstRow(page);
+    await page.getByRole('searchbox').fill(code);
+    const row = page.locator('tbody tr', { hasText: code });
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.click();
 
     const drawer = page.getByRole('dialog');
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole('heading', { name: 'Assignments' })).toBeVisible();
     // A position with nobody on it says so rather than rendering an empty table with no explanation.
-    await expect(drawer.getByText(/Nobody assigned yet|Current/)).toBeVisible();
+    await expect(drawer.getByText('Nobody assigned yet')).toBeVisible();
   });
 });
 
@@ -90,25 +98,27 @@ test.describe('contracts', () => {
   }) => {
     // The contract needs an employee that exists; create one rather than depending on the seed.
     const stamp = Date.now();
+    const employeeName = `Contract Probe ${stamp}`;
     const created = await request.post('/v1/employees', {
       headers: await csrfHeaders(request),
-      data: {
-        email: `contract.probe.${stamp}@opshub.local`,
-        displayName: `Contract Probe ${stamp}`,
-      },
+      data: { email: `contract.probe.${stamp}@opshub.local`, displayName: employeeName },
     });
     expect(created.status(), await created.text()).toBe(201);
-    // Read the body ONCE. Calling `.json()` twice inside a `??` chain is how `employeeId` came out
+    // The id is not typed into the form any more — the picker searches by name — but reading the body
+    // ONCE still matters here: calling `.json()` twice inside a `??` chain is how this came out
     // undefined and the draft silently failed validation, leaving a row that never appeared.
     const body = (await created.json()) as { data?: { id: string }; id?: string };
-    const employeeId = body.data?.id ?? body.id!;
+    expect(body.data?.id ?? body.id, 'the employee was created without an id').toBeTruthy();
 
     const reference = unique('PWC').toUpperCase();
     await gotoInShell(page, '/contracts');
 
     await page.getByRole('button', { name: /draft contract/i }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Employee ID').fill(employeeId);
+    // A PICKER, not a UUID box. The field used to be `Employee ID` with the placeholder "UUID", which
+    // meant opening the people screen and copying an id out of a URL to draft a contract.
+    await dialog.getByLabel('Employee').fill(employeeName);
+    await page.getByRole('option', { name: new RegExp(employeeName) }).click();
     await dialog.getByLabel('Reference').fill(reference);
     await dialog.getByLabel('Start date').fill('2030-02-04');
     await dialog.getByLabel('Base salary').fill('5000.00');

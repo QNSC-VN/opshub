@@ -13,6 +13,7 @@ import { AssetsPage } from '@/pages/assets/assets-page';
 import { PeoplePage } from '@/pages/people/people-page';
 import { PositionsPage } from '@/pages/positions/positions-page';
 import { ContractsPage } from '@/pages/contracts/contracts-page';
+import { TrainingPage } from '@/pages/training/training-page';
 import { AccessPage } from '@/pages/access/access-page';
 import { CompliancePage } from '@/pages/compliance/compliance-page';
 import { WorkforcePage } from '@/pages/workforce/workforce-page';
@@ -84,6 +85,12 @@ const contractsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/contracts',
   component: ContractsPage,
+});
+
+const trainingRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/training',
+  component: TrainingPage,
 });
 
 const accessRoute = createRoute({
@@ -172,6 +179,7 @@ const routeTree = rootRoute.addChildren([
     peopleRoute,
     positionsRoute,
     contractsRoute,
+    trainingRoute,
     accessRoute,
     complianceRoute,
     workforceRoute,

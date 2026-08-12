@@ -13,6 +13,7 @@ const mockEmployeeRepo = {
   create: vi.fn(),
   update: vi.fn(),
   updateStatus: vi.fn(),
+  updatePhoto: vi.fn(),
   list: vi.fn(),
 };
 const mockRefreshTokenRepo = { revokeAllForEmployee: vi.fn() };
@@ -27,6 +28,8 @@ const mockStorage = {
   confirmUpload: vi.fn(),
   getDownloadUrl: vi.fn(),
   deleteFile: vi.fn(),
+  findById: vi.fn(),
+  findByKey: vi.fn(),
 };
 const mockAudit = { record: vi.fn() };
 
@@ -162,5 +165,41 @@ describe('EmployeeService.updateStatus()', () => {
     await makeService().updateStatus('emp-1', 'offboarded', ACTOR);
     expect(mockRefreshTokenRepo.revokeAllForEmployee).toHaveBeenCalledWith('emp-1');
     expect(mockAuthCache.revokeUser).toHaveBeenCalledWith('emp-1', expect.any(Number));
+  });
+});
+
+describe('EmployeeService.confirmAvatar()', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  /**
+   * REPLACING an avatar looked up the previous file BY KEY through a by-ID finder.
+   *
+   * `employees.photo_storage_key` holds the S3 key; `findById` queries a uuid column. Postgres answered
+   * `invalid input syntax for type uuid: "employee-avatar/…png"`, so every second upload for the same
+   * employee was a 500 — while the first one worked, because the old-file branch was skipped. Measured
+   * from a browser, and invisible until a test uploaded twice.
+   */
+  it('finds the old file by KEY, not by id', async () => {
+    const key = 'employee-avatar/emp-1/019ff173-0a13-7395-8405-5a39fe44d8ff.png';
+    mockEmployeeRepo.findById.mockResolvedValue({ ...EMPLOYEE, photoStorageKey: key });
+    mockStorage.confirmUpload.mockResolvedValue({ key: 'new/key.png', url: 'https://x/new' });
+    mockStorage.findByKey.mockResolvedValue({ id: 'file-1', uploaderId: 'admin-1' });
+
+    await makeService().confirmAvatar('emp-1', 'file-2', ACTOR);
+
+    expect(mockStorage.findByKey).toHaveBeenCalledWith(key);
+    // The id finder must not be reached with a key — that call is the defect itself.
+    expect(mockStorage.findById).not.toHaveBeenCalled();
+    expect(mockStorage.deleteFile).toHaveBeenCalledWith('file-1', 'admin-1');
+  });
+
+  it('skips the old-file lookup for an employee with no avatar yet', async () => {
+    mockEmployeeRepo.findById.mockResolvedValue({ ...EMPLOYEE, photoStorageKey: null });
+    mockStorage.confirmUpload.mockResolvedValue({ key: 'new/key.png', url: 'https://x/new' });
+
+    await makeService().confirmAvatar('emp-1', 'file-2', ACTOR);
+
+    expect(mockStorage.findByKey).not.toHaveBeenCalled();
+    expect(mockStorage.deleteFile).not.toHaveBeenCalled();
   });
 });

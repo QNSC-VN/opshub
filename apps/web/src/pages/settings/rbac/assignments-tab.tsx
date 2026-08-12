@@ -9,6 +9,7 @@ import {
   Button,
   ConfirmDialog,
   DataTable,
+  EntityPicker,
   FormField,
   Input,
   Modal,
@@ -16,6 +17,7 @@ import {
   humanizeStatus,
   type DataTableColumn,
 } from '@/shared/ui';
+import { employeeOptions } from '@/shared/api/picker-sources';
 import { formatDate } from '@/shared/lib/format';
 import { SectionCard, SectionHeader } from './rbac-shared';
 import { useRoles } from './use-rbac';
@@ -61,12 +63,14 @@ function AssignRoleModal({
   return (
     <Modal open={open} onClose={onClose} title="Assign role" size="sm">
       <form onSubmit={submit} className="flex flex-col gap-3 p-5">
-        <FormField label="User ID" htmlFor="assign-user" required>
-          <Input
+        <FormField label="User" htmlFor="assign-user" required>
+          <EntityPicker
             id="assign-user"
+            queryKey="employees"
             value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            placeholder="UUID of the employee"
+            onChange={setUserId}
+            fetchOptions={employeeOptions}
+            placeholder="Search people…"
           />
         </FormField>
         <FormField

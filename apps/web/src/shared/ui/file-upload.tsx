@@ -1,15 +1,20 @@
 /**
- * PhotoUploadWidget — drag-or-click file upload with presigned S3.
+ * FileUploadWidget — drag-or-click upload of ONE file through a presigned URL.
  *
- * Calls presignUrl → PUT → confirmUrl, then invokes onSuccess.
- * Shows image preview for images; shows filename for other types.
+ * Named for what it does. It was `PhotoUploadWidget`, and one of its three call sites attaches a medical
+ * certificate to a leave request — a name that describes two thirds of the callers sends the next person
+ * off to write a second widget for the third.
+ *
+ * `mode` is the only difference between them: an image gets a thumbnail preview, a document gets its
+ * filename. Multi-file surfaces (training certificates) drive `useUpload` directly and render their own
+ * list — one file replacing another is a different interaction from a collection.
  */
 import { useRef, useState } from 'react';
 import { Upload, X, FileText, Loader2 } from 'lucide-react';
 import { useUpload } from '@/shared/api/use-upload';
 import { cn } from '@/shared/lib/utils';
 
-export interface PhotoUploadWidgetProps {
+export interface FileUploadWidgetProps {
   /** Current URL to display (null = no upload yet) */
   currentUrl?: string | null;
   /** Whether the file is a document (PDF) vs image */
@@ -20,14 +25,19 @@ export interface PhotoUploadWidgetProps {
   confirmUrl: string;
   /** Accepted MIME types, e.g. "image/jpeg,image/png,image/webp" */
   accept: string;
-  /** Called after a successful upload with the new download URL */
-  onSuccess: (url: string) => void;
+  /**
+   * Called after a successful upload with the new download URL.
+   *
+   * `null` where the confirm endpoint returns no URL — the caller then refetches rather than showing a
+   * preview it was not given.
+   */
+  onSuccess: (url: string | null) => void;
   /** Optional: disable the widget */
   disabled?: boolean;
   label?: string;
 }
 
-export function PhotoUploadWidget({
+export function FileUploadWidget({
   currentUrl,
   mode = 'image',
   presignUrl,
@@ -36,7 +46,7 @@ export function PhotoUploadWidget({
   onSuccess,
   disabled = false,
   label,
-}: PhotoUploadWidgetProps) {
+}: FileUploadWidgetProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -102,11 +112,7 @@ export function PhotoUploadWidget({
       >
         {/* Image preview */}
         {mode === 'image' && displayUrl && !uploading && (
-          <img
-            src={displayUrl}
-            alt="Preview"
-            className="h-full w-full rounded-lg object-cover"
-          />
+          <img src={displayUrl} alt="Preview" className="h-full w-full rounded-lg object-cover" />
         )}
 
         {/* Document display */}
@@ -131,9 +137,7 @@ export function PhotoUploadWidget({
         {!uploading && !displayUrl && mode === 'image' && (
           <div className="flex flex-col items-center gap-1 text-center">
             <Upload className="h-5 w-5 text-fg-subtle" />
-            <span className="text-[10px] text-fg-subtle leading-tight px-1">
-              Click or drag
-            </span>
+            <span className="text-[10px] text-fg-subtle leading-tight px-1">Click or drag</span>
           </div>
         )}
 
@@ -156,7 +160,7 @@ export function PhotoUploadWidget({
       {uploading && (
         <div className="h-1 w-full overflow-hidden rounded-full bg-surface-muted">
           <div
-            className="h-full rounded-full bg-accent-muted0 transition-all duration-200"
+            className="h-full rounded-full bg-accent transition-all duration-200"
             style={{ width: `${progress}%` }}
           />
         </div>

@@ -10,4 +10,5 @@ export * from './request-timing';
 export * from './http-logging.interceptor';
 export * from './idempotency.interceptor';
 export * from './pagination';
+export * from './query-boolean';
 export * from '../pipes/sanitization.pipe';

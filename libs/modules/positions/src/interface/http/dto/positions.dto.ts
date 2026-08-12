@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import { positionStatusEnum } from '@db/schema/enums';
 
@@ -37,9 +38,11 @@ export class UpdatePositionDto extends createZodDto(UpdatePositionSchema) {}
 
 export const ListPositionsQuerySchema = z
   .object({
+    /** Matches title, code or department. The SPA's search box sends this. */
+    search: z.string().max(120).optional(),
     department: z.string().max(120).optional(),
     status: status.optional(),
-    vacantOnly: z.coerce.boolean().optional(),
+    vacantOnly: queryBoolean().optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListPositionsQueryDto extends createZodDto(ListPositionsQuerySchema) {}

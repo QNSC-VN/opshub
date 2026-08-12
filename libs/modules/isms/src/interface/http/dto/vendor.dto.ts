@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import {
   vendorAssessmentOutcomeEnum,
@@ -86,9 +87,9 @@ export const ListVendorsQuerySchema = z
     criticality: criticality.optional(),
     ownerId: z.string().uuid().optional(),
     /** Data processors only — the Article 30 question. */
-    processorsOnly: z.coerce.boolean().optional(),
+    processorsOnly: queryBoolean().optional(),
     reviewDueOnOrBefore: isoDate.optional(),
-    includeTerminated: z.coerce.boolean().optional(),
+    includeTerminated: queryBoolean().optional(),
     search: z.string().max(200).optional(),
   })
   .merge(PaginationQuerySchema);

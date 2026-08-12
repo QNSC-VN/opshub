@@ -124,4 +124,53 @@ test.describe('people', () => {
     // three-step approval chain in a shared database.
     await page.keyboard.press('Escape');
   });
+
+  test('uploads an employee photo, all three steps of it', async ({ page }) => {
+    // THE UPLOAD PATH WAS DEAD IN EVERY ENVIRONMENT. `useUpload` sent no CSRF header, so presign
+    // answered `403 FORBIDDEN: Invalid csrf token` and this widget could not attach anything — and the
+    // bucket's CORS allow-list omitted `Content-Disposition`, which the presign SIGNS, so even a
+    // CSRF-correct PUT died as an opaque `net::ERR_FAILED`. Two separate faults, neither visible to any
+    // test, because no test had ever driven an upload.
+    //
+    // A 1×1 PNG is enough: this asserts the three-step handshake, not image handling.
+    const PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+
+    await gotoInShell(page, '/people');
+    await clickFirstRow(page);
+    const drawer = page.getByRole('dialog');
+    await expect(drawer).toBeVisible();
+
+    // WAITS ON THE THREE RESPONSES, not on the preview. The preview is drawn from the local file by
+    // `FileReader` before anything is sent, and "no error yet" is true a millisecond after the click —
+    // so both would pass against the broken version this test exists to catch. The PUT is the step that
+    // CORS killed and the confirm is the step CSRF killed; asserting all three is the only honest proof.
+    const presign = page.waitForResponse((r) => r.url().includes('/avatar/presign') && r.ok());
+    const put = page.waitForResponse((r) => r.request().method() === 'PUT' && r.ok());
+    const confirm = page.waitForResponse((r) => r.url().includes('/avatar/confirm') && r.ok());
+
+    await drawer
+      .locator('input[type=file]')
+      .setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: PNG });
+
+    await presign;
+    await put;
+    await confirm;
+    await expect(drawer.locator('.text-danger')).toHaveCount(0);
+    await expect(drawer.locator('img[alt="Preview"]')).toBeVisible();
+
+    // TWICE, because REPLACING was its own defect: `confirmAvatar` looked the previous file up by KEY
+    // through a by-id finder, so the second upload for any employee answered 500 while the first
+    // succeeded. One upload proves the handshake; two prove the replacement path.
+    const secondConfirm = page.waitForResponse(
+      (r) => r.url().includes('/avatar/confirm') && r.ok(),
+    );
+    await drawer
+      .locator('input[type=file]')
+      .setInputFiles({ name: 'photo-2.png', mimeType: 'image/png', buffer: PNG });
+    await secondConfirm;
+    await expect(drawer.locator('.text-danger')).toHaveCount(0);
+  });
 });

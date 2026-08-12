@@ -17,13 +17,14 @@ export { ConfirmDialog } from './confirm-dialog';
 export { DataTable, type DataTableColumn, type DataTableProps } from './data-table';
 export { DescriptionList, type DescriptionItem } from './description-list';
 export { EntityDetailPanel, type EntityDetailPanelProps } from './entity-detail-panel';
+export { EntityPicker, type EntityPickerProps, type PickerOption } from './entity-picker';
 export { FormField } from './form-field';
 export { Input, type InputProps } from './input';
 export { ListPage, type ListPageProps } from './list-page';
 export { Modal, type ModalProps } from './modal';
 export { PageHeader } from './page-header';
 export { PaginationFooter, type PageInfo } from './pagination-footer';
-export { PhotoUploadWidget } from './photo-upload';
+export { FileUploadWidget } from './file-upload';
 export { SegmentedControl, type SegmentedOption } from './segmented-control';
 export { Select, type SelectProps } from './select';
 export { SlideOver, SlideOverSection } from './slide-over';
@@ -37,6 +38,14 @@ export {
   statusTone,
 } from './status-tone';
 export { TabPanel, Tabs, type TabItem } from './tabs';
+export {
+  FormActions,
+  PanelAction,
+  RowAction,
+  RowActions,
+  TabToolbar,
+  type FormModalProps,
+} from './tab-scaffold';
 export { Textarea, type TextareaProps } from './textarea';
 export { ThemeToggle } from './theme-toggle';
 export { UpgradeGate } from './upgrade-gate';

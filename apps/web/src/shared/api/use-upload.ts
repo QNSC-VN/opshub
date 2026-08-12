@@ -1,34 +1,59 @@
-/**
- * useUpload — 3-step presigned S3 upload hook
- *
- * Step 1: POST {domain endpoint}/presign  → { fileId, uploadUrl }
- * Step 2: PUT  uploadUrl (direct to S3)   → 200 OK
- * Step 3: POST {domain endpoint}/confirm  → { url }
- *
- * Usage:
- *   const { upload, uploading } = useUpload();
- *   await upload({
- *     file,
- *     presignUrl: `/employees/${id}/avatar/presign`,
- *     confirmUrl: `/employees/${id}/avatar/confirm`,
- *   });
- */
-
 import { useState } from 'react';
-import type {} from './client'; // typed via fetch
+import { apiErrorMessage } from './errors';
+import { sessionFetch } from './session-fetch';
+
+/**
+ * The three-step presigned upload: presign with our API, PUT the bytes to storage, confirm.
+ *
+ * THIS WAS BROKEN IN EVERY ENVIRONMENT. It used bare `fetch`, so the presign POST carried no
+ * `X-CSRF-Token` and the server answered `403 FORBIDDEN: Invalid csrf token` — measured from a browser
+ * against the running API. Every upload surface in the SPA was dead: the employee avatar, the asset
+ * photo and the leave-request document. Nothing caught it because the failure is a toast on a widget no
+ * test drove, and 403 reads like a permission problem rather than a missing header.
+ *
+ * Going through `sessionFetch` is the fix and the guarantee: it is the one place that knows a
+ * cookie-authenticated request needs `credentials: 'include'` and a CSRF header on a mutation.
+ *
+ * THE PUT SENDS EXACTLY THE HEADERS THE SIGNATURE COVERS. `requiredHeaders` comes back from presign and
+ * the API's own docblock is emphatic: all of them, and nothing else. The old code always added
+ * `Content-Type`, which breaks the signature whenever the presign did not cover it — and the failure
+ * arrives from storage as a 403 with no CORS headers, which a browser reports as an opaque network
+ * error with nothing in it to diagnose.
+ */
 
 export interface UploadOptions {
   file: File;
-  /** e.g. "/employees/emp-1/avatar/presign" */
+  /** POST endpoint for the presign step, e.g. `/v1/employees/emp-1/avatar/presign`. */
   presignUrl: string;
-  /** e.g. "/employees/emp-1/avatar/confirm" */
-  confirmUrl: string;
+  /**
+   * POST endpoint for the confirm step.
+   *
+   * A function when the id belongs in the PATH — training certificates confirm at
+   * `…/certificates/{fileId}/confirm` — and a plain string for the endpoints that take it in the body.
+   * Both shapes exist in the API; pretending otherwise would mean one of the two call sites building
+   * its own upload.
+   */
+  confirmUrl: string | ((fileId: string) => string);
+  /** Overrides the confirm body. Defaults to `{ fileId }`, which is what the body-shaped ones take. */
+  confirmBody?: (fileId: string) => unknown;
+  /** Extra fields for the presign body — `checksumSha256`, for the endpoints that verify one. */
+  presignExtras?: Record<string, unknown>;
   onProgress?: (percent: number) => void;
 }
 
 export interface UploadResult {
   fileId: string;
-  url: string;
+  /** A download URL, where the confirm endpoint returns one. Certificates do not. */
+  url: string | null;
+  /** The confirm response, for callers that need the record it created. */
+  confirmed: unknown;
+}
+
+interface PresignResponse {
+  fileId: string;
+  uploadUrl: string;
+  /** Absent on the endpoints that sign nothing but the URL. */
+  requiredHeaders?: Record<string, string>;
 }
 
 export function useUpload() {
@@ -40,46 +65,55 @@ export function useUpload() {
     setError(null);
 
     try {
-      // Step 1 — request presigned URL from our API
-      // Step 1 — request presigned URL from our API
-      const presignResp = await fetch(opts.presignUrl, {
+      const presignRes = await sessionFetch(opts.presignUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fileName: opts.file.name,
           mimeType: opts.file.type,
           sizeBytes: opts.file.size,
+          ...opts.presignExtras,
         }),
-        credentials: 'include',
       });
-      if (!presignResp.ok) throw new Error(`Presign failed: ${presignResp.status}`);
-      const presignData = (await presignResp.json()) as { fileId: string; uploadUrl: string };
+      if (!presignRes.ok) {
+        // The API names the rule: the MIME allow-list, the size ceiling, the per-record quota.
+        throw new Error(
+          apiErrorMessage(await presignRes.json().catch(() => null), 'Could not start the upload.'),
+        );
+      }
+      const presigned = (await presignRes.json()) as PresignResponse;
 
+      // Coarse, not fake: `fetch` cannot report upload progress, and a bar that animates on a timer
+      // would be a lie about how far the transfer has got. These are the three real milestones.
       opts.onProgress?.(10);
 
-      // Step 2 — PUT file directly to S3
-      const putRes = await fetch(presignData.uploadUrl, {
+      const putRes = await fetch(presigned.uploadUrl, {
         method: 'PUT',
         body: opts.file,
-        headers: { 'Content-Type': opts.file.type },
+        headers: presigned.requiredHeaders ?? { 'Content-Type': opts.file.type },
       });
-      if (!putRes.ok) throw new Error(`S3 upload failed: ${putRes.status} ${putRes.statusText}`);
+      if (!putRes.ok) throw new Error(`Storage rejected the file (${putRes.status}).`);
 
       opts.onProgress?.(80);
 
-      // Step 3 — confirm upload in our API
-      const confirmResp = await fetch(opts.confirmUrl, {
+      const confirmUrl =
+        typeof opts.confirmUrl === 'function' ? opts.confirmUrl(presigned.fileId) : opts.confirmUrl;
+      const confirmRes = await sessionFetch(confirmUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileId: presignData.fileId }),
-        credentials: 'include',
+        body: JSON.stringify(opts.confirmBody?.(presigned.fileId) ?? { fileId: presigned.fileId }),
       });
-      if (!confirmResp.ok) throw new Error(`Confirm failed: ${confirmResp.status}`);
-      const confirmRes = (await confirmResp.json()) as { fileId: string; url: string };
+      if (!confirmRes.ok) {
+        throw new Error(
+          apiErrorMessage(
+            await confirmRes.json().catch(() => null),
+            'The file uploaded but could not be attached.',
+          ),
+        );
+      }
+      const confirmed = (await confirmRes.json().catch(() => null)) as { url?: string } | null;
 
       opts.onProgress?.(100);
 
-      return { fileId: confirmRes.fileId, url: confirmRes.url };
+      return { fileId: presigned.fileId, url: confirmed?.url ?? null, confirmed };
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       setError(e);

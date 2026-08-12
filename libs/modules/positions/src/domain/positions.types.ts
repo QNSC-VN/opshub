@@ -36,6 +36,8 @@ export interface CreatePositionInput {
 }
 
 export interface PositionFilters {
+  /** Free text over title, code and department. */
+  search?: string;
   department?: string;
   status?: PositionStatus;
   /** Only positions with at least one unfilled approved slot. */

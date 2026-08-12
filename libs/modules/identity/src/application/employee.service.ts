@@ -154,7 +154,9 @@ export class EmployeeService {
 
     // Soft-delete the old avatar if one exists
     if (employee.photoStorageKey) {
-      const old = await this.storage.findById(employee.photoStorageKey);
+      // The column holds the KEY, not the file id — passing it to `findById` made every replacement
+      // upload a 500.
+      const old = await this.storage.findByKey(employee.photoStorageKey);
       if (old) void this.storage.deleteFile(old.id, old.uploaderId);
     }
 
@@ -184,7 +186,7 @@ export class EmployeeService {
     const employee = await this.getById(employeeId);
     if (!employee.photoStorageKey) return; // already none — idempotent
 
-    const file = await this.storage.findById(employee.photoStorageKey);
+    const file = await this.storage.findByKey(employee.photoStorageKey);
     if (file) void this.storage.deleteFile(file.id, file.uploaderId);
 
     await this.employeeRepo.updatePhoto(employeeId, null);

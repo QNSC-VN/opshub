@@ -93,7 +93,12 @@ export class PositionsController {
     @Query() query: ListPositionsQueryDto,
   ): Promise<PagedResult<PositionOccupancyResponseDto>> {
     const { rows, total } = await this.service.listPositions(
-      { department: query.department, status: query.status, vacantOnly: query.vacantOnly },
+      {
+        search: query.search,
+        department: query.department,
+        status: query.status,
+        vacantOnly: query.vacantOnly,
+      },
       query.limit,
       query.offset,
     );

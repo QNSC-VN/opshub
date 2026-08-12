@@ -1,7 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
-import { RESOURCE_RULES } from '@platform';
+import { RESOURCE_RULES, queryBoolean } from '@platform';
 import { trainingRecordStatusEnum, trainingRequirementKindEnum } from '@db/schema/enums';
 
 const recordStatus = z.enum(trainingRecordStatusEnum.enumValues);
@@ -36,7 +36,7 @@ export class UpdateCourseDto extends createZodDto(UpdateCourseSchema) {}
 export const ListCoursesQuerySchema = z
   .object({
     category: z.string().max(64).optional(),
-    includeRetired: z.coerce.boolean().optional(),
+    includeRetired: queryBoolean().optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListCoursesQueryDto extends createZodDto(ListCoursesQuerySchema) {}
@@ -82,7 +82,7 @@ export const ListRecordsQuerySchema = z
     /** Live records lapsing on or before this date — the renewal queue. */
     expiringOnOrBefore: z.string().date().optional(),
     /** Drop superseded rows, which is what "their current training" means. */
-    currentOnly: z.coerce.boolean().optional(),
+    currentOnly: queryBoolean().optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListRecordsQueryDto extends createZodDto(ListRecordsQuerySchema) {}
@@ -92,7 +92,7 @@ export const CompetencyGapQuerySchema = z.object({
   positionId: z.string().uuid().optional(),
   /** Defaults to today. Explicit so "who lapses by quarter end" is one request. */
   asOf: z.string().date().optional(),
-  includeRecommended: z.coerce.boolean().optional(),
+  includeRecommended: queryBoolean().optional(),
 });
 export class CompetencyGapQueryDto extends createZodDto(CompetencyGapQuerySchema) {}
 

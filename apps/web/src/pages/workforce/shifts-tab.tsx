@@ -8,19 +8,21 @@ import {
   Button,
   DataTable,
   EntityDetailPanel,
+  FormActions,
   FormField,
   Input,
   Modal,
   PaginationFooter,
   SegmentedControl,
   Select,
+  TabToolbar,
   Textarea,
   type DataTableColumn,
+  type FormModalProps,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate, formatDateTime } from '@/shared/lib/format';
 import type { ShiftLogResponse, ShiftType } from '@/shared/api/types';
-import { FormActions, TabToolbar, type FormModalProps } from './workforce-shared';
 
 /**
  * Shift type is THIS screen's vocabulary, so its labels stay here.

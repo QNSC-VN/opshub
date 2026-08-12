@@ -8,28 +8,26 @@ import {
   Button,
   DataTable,
   EntityDetailPanel,
+  FormActions,
   FormField,
   Input,
   Modal,
   PaginationFooter,
+  PanelAction,
+  RowAction,
+  RowActions,
   SegmentedControl,
   StatusBadge,
+  TabToolbar,
   Textarea,
   humanizeStatus,
   statusTone,
   type DataTableColumn,
+  type FormModalProps,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate } from '@/shared/lib/format';
 import type { OvertimeResponse, OvertimeStatus } from '@/shared/api/types';
-import {
-  FormActions,
-  PanelAction,
-  RowAction,
-  RowActions,
-  TabToolbar,
-  type FormModalProps,
-} from './workforce-shared';
 
 const OT_FILTERS: { value: OvertimeStatus | ''; label: string }[] = [
   { value: '', label: 'All' },

@@ -105,5 +105,19 @@ test.describe('workforce leave', () => {
     await page.getByRole('tab', { name: 'Leave', exact: true }).click();
     await settle(page);
     await expectRowSomewhere(page, reason);
+
+    // CANCELS ITS OWN REQUEST, which is cleanup AND coverage.
+    //
+    // Cleanup, because a cancelled request releases its window — `overlappingLeaveCandidates` only
+    // considers live rows — and every run that leaves a live request behind shrinks the pool of free
+    // Mondays the helper above draws from. Rows accumulated over days until a run collided and failed
+    // with the dialog simply staying open, which reads like a broken form rather than a used date.
+    //
+    // Coverage, because cancelling is the one leave transition an employee can make themselves.
+    const row = page.locator('tbody tr', { hasText: reason });
+    await row.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('tbody tr', { hasText: reason })).toContainText('Cancelled', {
+      timeout: 15_000,
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { queryBoolean } from '@platform';
 import { PaginationQuerySchema } from '@shared-kernel';
 import { incidentEventTypeEnum, incidentSeverityEnum, incidentStatusEnum } from '@db/schema/enums';
 
@@ -91,8 +92,8 @@ export const ListIncidentsQuerySchema = z
     assignedTo: z.string().uuid().optional(),
     riskId: z.string().uuid().optional(),
     /** Everything not closed or dismissed — the response queue. */
-    openOnly: z.coerce.boolean().optional(),
-    breachesOnly: z.coerce.boolean().optional(),
+    openOnly: queryBoolean().optional(),
+    breachesOnly: queryBoolean().optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListIncidentsQueryDto extends createZodDto(ListIncidentsQuerySchema) {}

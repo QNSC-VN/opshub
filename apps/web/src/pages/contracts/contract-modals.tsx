@@ -3,7 +3,17 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, FormField, Input, Modal, Select, Textarea, humanizeStatus } from '@/shared/ui';
+import {
+  Button,
+  EntityPicker,
+  FormField,
+  Input,
+  Modal,
+  Select,
+  Textarea,
+  humanizeStatus,
+} from '@/shared/ui';
+import { activeEmployeeOptions, positionOptions } from '@/shared/api/picker-sources';
 import { isoInstantFromDate, todayIso } from '@/shared/lib/format';
 import { CONTRACT_TYPES, SALARY_PERIODS, type Contract } from './contract.types';
 
@@ -93,21 +103,26 @@ export function DraftContractModal({
         className="flex flex-col gap-4 p-5"
       >
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Employee ID" htmlFor="c-employee" required>
-            <Input
+          {/* Both were UUID text boxes. A contract is drafted about a PERSON and a POSITION, and
+              neither is something anybody can type from memory. */}
+          <FormField label="Employee" htmlFor="c-employee" required>
+            <EntityPicker
               id="c-employee"
-              required
+              queryKey="active-employees"
               value={form.employeeId}
-              onChange={(e) => set('employeeId', e.target.value)}
-              placeholder="UUID"
+              onChange={(v) => set('employeeId', v)}
+              fetchOptions={activeEmployeeOptions}
+              placeholder="Search people…"
             />
           </FormField>
-          <FormField label="Position ID" htmlFor="c-position" hint="Optional but recommended.">
-            <Input
+          <FormField label="Position" htmlFor="c-position" hint="Optional but recommended.">
+            <EntityPicker
               id="c-position"
+              queryKey="positions"
               value={form.positionId}
-              onChange={(e) => set('positionId', e.target.value)}
-              placeholder="UUID"
+              onChange={(v) => set('positionId', v)}
+              fetchOptions={positionOptions}
+              placeholder="Search positions…"
             />
           </FormField>
         </div>
