@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import {
   FIXTURE,
-  actingAs,
+  contextAs,
   csrfHeaders,
   expect,
   expectRowSomewhere,
@@ -131,10 +131,14 @@ test.describe('performance', () => {
     await expect(confirm.getByText(/still in flight/i)).toBeVisible();
     await confirm.getByRole('button', { name: /close cycle/i }).click();
 
-    // The API refuses, and the screen says WHY — that message is the API's own, not a guess.
-    await expect(page.getByText(/in flight|open review|cannot be closed/i).first()).toBeVisible({
-      timeout: 15_000,
-    });
+    // The API refuses, and the screen shows ITS OWN message. Matched on the wording the service actually
+    // sends ("N review(s) are neither acknowledged nor cancelled") rather than on the phrase this spec's
+    // prose uses — the first version grepped for "in flight", which appears in the CONFIRMATION text and
+    // not in the refusal, so it passed or failed on which of the two happened to still be on screen.
+    await expect(
+      page.getByText(/neither acknowledged nor cancelled/i).first(),
+      'the refusal should be shown with the reason the API gave',
+    ).toBeVisible({ timeout: 15_000 });
     // Still open, because the refusal was real rather than cosmetic.
     await expect(page.locator('tbody tr', { hasText: cycle.reference })).toContainText('Open');
   });
@@ -241,11 +245,13 @@ test.describe('performance', () => {
       ((await created.json()) as { id?: string; data?: { id: string } }).data?.id ??
       ((await created.json()) as { id: string }).id;
 
-    const submitted = await request.post(`/v1/performance/reviews/${reviewId}/self-assessment`, {
-      headers: await actingAs(request, FIXTURE.EMPLOYEE.email),
+    const asEmployee = await contextAs(FIXTURE.EMPLOYEE.email);
+    const submitted = await asEmployee.post(`/v1/performance/reviews/${reviewId}/self-assessment`, {
+      headers: await csrfHeaders(asEmployee),
       data: { selfAssessment: 'Written by the employee so the review reaches its reviewer.' },
     });
     expect(submitted.status(), await submitted.text()).toBe(200);
+    await asEmployee.dispose();
 
     await gotoInShell(page, '/performance');
     await page.getByRole('tab', { name: 'My reviews' }).click();

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { AUTH_STATE } from './e2e/support/fixtures';
+import { AUTH_STATE, AUTH_STATE_SECOND, AUTH_STATE_THIRD } from './e2e/support/fixtures';
 
 /**
  * Playwright config for the OpsHub SPA.
@@ -21,6 +21,22 @@ import { AUTH_STATE } from './e2e/support/fixtures';
  * spec reuses the storage state. That also sidesteps the AUTH_LOGIN rate limit rally needs a
  * `DISABLE_RATE_LIMIT` flag for.
  */
+/** The write-heavy specs, on the SECOND seat. */
+const SECOND_SEAT_SPECS = [
+  '**/performance.e2e.ts',
+  '**/isms-risks.e2e.ts',
+  '**/positions-contracts.e2e.ts',
+];
+
+/**
+ * Training gets a seat of its own.
+ *
+ * It is the heaviest file in the suite — two real uploads, five async pickers, five tabs — and it was the
+ * one that kept losing a picker search to a 429 in the second full run of the day while passing alone.
+ * A third bucket is cheaper than making the limiter configurable.
+ */
+const THIRD_SEAT_SPECS = ['**/training.e2e.ts'];
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.ts',
@@ -38,7 +54,38 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /**
+   * THREE PROJECTS, THREE ADMIN SEATS, and it is a rate-limit decision rather than a coverage one.
+   *
+   * The DEFAULT tier allows 200 requests a minute PER USER. Every spec signed in as the same admin, each
+   * page load costs roughly fifteen calls, and forty-odd specs run inside two minutes — so the suite
+   * crossed the line and whichever request landed next came back 429. It surfaced twice, the first time
+   * disguised as a broken upload.
+   *
+   * Splitting the spec FILES between two seeded admins halves each bucket. Both projects are the same
+   * browser with the same permissions; only the identity differs, so nothing about what is covered
+   * changes. The heavier, write-happy suites go on the second seat.
+   *
+   * Deliberately NOT solved by making the limit configurable: a control that tests can turn down is a
+   * control that stops describing production. If the suite doubles again, seed a third seat.
+   */
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: [...SECOND_SEAT_SPECS, ...THIRD_SEAT_SPECS],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium-second-seat',
+      testMatch: SECOND_SEAT_SPECS,
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE_SECOND },
+    },
+    {
+      name: 'chromium-third-seat',
+      testMatch: THIRD_SEAT_SPECS,
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE_THIRD },
+    },
+  ],
   webServer: {
     command: 'pnpm dev --port 5173',
     url: 'http://localhost:5173',

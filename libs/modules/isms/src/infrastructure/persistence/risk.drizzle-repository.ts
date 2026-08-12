@@ -81,7 +81,12 @@ export class RiskDrizzleRepository implements IRiskRepository {
       .where(where)
       // Worst first — the register's whole purpose. `id` last because `inherent_score` is very much
       // not unique: a 5x5 matrix has 25 possible values, so ties are the norm rather than the edge.
-      .orderBy(desc(risks.inherentScore), asc(risks.id))
+      //
+      // DESC on the tiebreaker, so that within one score the most recently RAISED risk is first. `id` is
+      // a uuidv7, so `asc` meant oldest-first: with dozens of risks sharing the top score, a risk raised
+      // today sorted behind every one of them and could be pages deep in its own band. Same fault, same
+      // fix, as the performance cycle list.
+      .orderBy(desc(risks.inherentScore), desc(risks.id))
       .limit(limit)
       .offset(offset);
 

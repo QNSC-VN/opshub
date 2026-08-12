@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { request } from '@playwright/test';
-import { AUTH_STATE, FIXTURE } from './support/fixtures';
+import { AUTH_STATE, AUTH_STATE_SECOND, AUTH_STATE_THIRD, FIXTURE } from './support/fixtures';
 
 /**
  * Sign in ONCE and save the session cookie for every spec to reuse.
@@ -21,12 +21,20 @@ import { AUTH_STATE, FIXTURE } from './support/fixtures';
  * `GET /v1/auth/me`, so there is no client state to seed either.
  */
 export default async function globalSetup(): Promise<void> {
+  // THREE SEATS, all admins. The DEFAULT rate-limit tier is per user id, and one principal cannot carry the
+  // whole suite inside 200 requests a minute — see `AUTH_STATE_SECOND`.
+  await signIn(FIXTURE.ADMIN.email, AUTH_STATE);
+  await signIn(FIXTURE.ADMIN_SECOND.email, AUTH_STATE_SECOND);
+  await signIn(FIXTURE.ADMIN_THIRD.email, AUTH_STATE_THIRD);
+}
+
+async function signIn(email: string, statePath: string): Promise<void> {
   const api = await request.newContext({ baseURL: 'http://localhost:5173' });
 
-  const res = await api.post('/v1/bff/dev-login', { data: { email: FIXTURE.ADMIN.email } });
+  const res = await api.post('/v1/bff/dev-login', { data: { email } });
   if (!res.ok()) {
     throw new Error(
-      `dev-login failed for ${FIXTURE.ADMIN.email}: ${res.status()} ${await res.text()}\n` +
+      `dev-login failed for ${email}: ${res.status()} ${await res.text()}\n` +
         'Is the API running on :3001, the database seeded (`pnpm db:migrate`), and NODE_ENV ' +
         'something other than production? `/v1/bff/dev-login` is refused in production by ' +
         'design.',
@@ -45,7 +53,7 @@ export default async function globalSetup(): Promise<void> {
     );
   }
 
-  await mkdir(dirname(AUTH_STATE), { recursive: true });
-  await api.storageState({ path: AUTH_STATE });
+  await mkdir(dirname(statePath), { recursive: true });
+  await api.storageState({ path: statePath });
   await api.dispose();
 }

@@ -80,3 +80,24 @@ export async function courseOptions(term: string): Promise<PickerOption[]> {
       hint: course.code,
     }));
 }
+
+/**
+ * Controls, for linking one to a risk.
+ *
+ * Filtered CLIENT-SIDE: `/v1/controls` has no `search` either, and the Annex A catalogue is 93 controls
+ * plus whatever an organisation adds — which fits one page today and is worth revisiting if a custom
+ * catalogue grows past the limit. Retired controls are left out: a retired control cannot be the answer
+ * to a live risk.
+ */
+export async function controlOptions(term: string): Promise<PickerOption[]> {
+  const { data } = await api.GET('/v1/controls', {
+    params: { query: { includeRetired: false, limit: PICKER_LIMIT, offset: 0 } },
+  });
+  return (data?.data ?? [])
+    .filter((control) => matches(term, control.title, control.reference, control.theme))
+    .map((control) => ({
+      value: control.id,
+      label: control.title,
+      hint: control.reference,
+    }));
+}
