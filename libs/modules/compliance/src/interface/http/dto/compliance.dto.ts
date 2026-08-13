@@ -25,19 +25,23 @@ export const UpdateSoftwareSchema = z.object({
 
 export class UpdateSoftwareDto extends createZodDto(UpdateSoftwareSchema) {}
 
-export const ListSoftwareQuerySchema = z.object({
-  listing: listing.optional(),
-  search: z.string().max(200).optional(),
-}).merge(PaginationQuerySchema);
+export const ListSoftwareQuerySchema = z
+  .object({
+    listing: listing.optional(),
+    search: z.string().max(200).optional(),
+  })
+  .merge(PaginationQuerySchema);
 
 export class ListSoftwareQueryDto extends createZodDto(ListSoftwareQuerySchema) {}
 
-export const ListFindingsQuerySchema = z.object({
-  status: findingStatus.optional(),
-  severity: severity.optional(),
-  assetId: z.string().uuid().optional(),
-  employeeId: z.string().uuid().optional(),
-}).merge(PaginationQuerySchema);
+export const ListFindingsQuerySchema = z
+  .object({
+    status: findingStatus.optional(),
+    severity: severity.optional(),
+    assetId: z.string().uuid().optional(),
+    employeeId: z.string().uuid().optional(),
+  })
+  .merge(PaginationQuerySchema);
 
 export class ListFindingsQueryDto extends createZodDto(ListFindingsQuerySchema) {}
 
@@ -71,4 +75,24 @@ export class FindingResponseDto {
   resolvedBy!: string | null;
   resolutionNote!: string | null;
   resolvedAt!: string | null;
+}
+
+/**
+ * The Shadow IT list and scan responses.
+ *
+ * WHY THEY EXIST NOW. Both routes returned an untyped object literal, so the OpenAPI document carried no
+ * schema for them and the generated client typed them as `unknown` — which is why the only consumer of
+ * `/shadow-it` was, until now, nothing. A response nobody can type is a response nobody can use.
+ */
+export class ShadowItListResponseDto {
+  findings!: FindingResponseDto[];
+  /** The number returned, which is capped — not the number that exists. */
+  total!: number;
+}
+
+export class ShadowItScanResponseDto {
+  /** Devices examined. `0` also means the integration is not configured: no Intune, nothing to scan. */
+  scanned!: number;
+  /** Findings the scan created. Re-detecting known software is not a new finding. */
+  newFindings!: number;
 }

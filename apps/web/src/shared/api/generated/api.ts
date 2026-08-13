@@ -5418,6 +5418,17 @@ export interface components {
       /** @default false */
       riskAccepted: boolean;
     };
+    ShadowItListResponseDto: {
+      findings: components['schemas']['FindingResponseDto'][];
+      /** @description The number returned, which is capped — not the number that exists. */
+      total: number;
+    };
+    ShadowItScanResponseDto: {
+      /** @description Devices examined. `0` also means the integration is not configured: no Intune, nothing to scan. */
+      scanned: number;
+      /** @description Findings the scan created. Re-detecting known software is not a new finding. */
+      newFindings: number;
+    };
     TimesheetResponseDto: {
       id: string;
       employeeId: string;
@@ -10034,7 +10045,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ShadowItListResponseDto'];
+        };
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {
@@ -10061,11 +10074,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ShadowItScanResponseDto'];
+        };
       };
       /** @description Unauthorized — missing or invalid authentication */
       401: {

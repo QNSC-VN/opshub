@@ -24,6 +24,7 @@ import {
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate } from '@/shared/lib/format';
 import { FEATURES } from '@/shared/config/features';
+import { ShadowItPanel } from './shadow-it-tab';
 import { ResolveModal } from './compliance-modals';
 import type { FindingResponse, SoftwareListing, FindingSeverity } from '@/shared/api/types';
 
@@ -368,7 +369,16 @@ function FindingsTab() {
   );
 }
 
+/**
+ * Shadow IT: the real panel when the integration is configured, the upgrade gate when it is not.
+ *
+ * WHY THE GATE IS NOW CONDITIONAL. It rendered unconditionally, so a tenant WITH Intune still saw a page
+ * telling them to buy Intune, and the two endpoints behind it had no consumer at all. The flag decides which
+ * of the two states a reader gets; it no longer decides whether the feature exists in the product.
+ */
 function ShadowItTab() {
+  if (FEATURES.SHADOW_IT) return <ShadowItPanel />;
+
   return (
     <UpgradeGate
       feature="Shadow IT Detection"
