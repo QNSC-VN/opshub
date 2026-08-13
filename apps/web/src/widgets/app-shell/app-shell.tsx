@@ -118,6 +118,15 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    // Its OWN group, above ISMS and Quality, because both cite it: an audit report, a review's minutes and a
+    // control's evidence are all rows in this library. Filing it under either system would hide it from the
+    // other.
+    label: 'Documentation',
+    items: [
+      { to: '/documents', label: 'Controlled documents', icon: FileText, cap: 'documents.read' },
+    ],
+  },
+  {
     // ISMS. Its own group rather than folded into IT Operations, where `/compliance` already means
     // endpoint findings — two different things called compliance in one list is how people click the
     // wrong one.
