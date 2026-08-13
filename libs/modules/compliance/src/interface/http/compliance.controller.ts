@@ -31,6 +31,8 @@ import {
   ResolveFindingDto,
   SoftwareResponseDto,
   FindingResponseDto,
+  ShadowItListResponseDto,
+  ShadowItScanResponseDto,
 } from './dto/compliance.dto';
 import type { ComplianceFinding, SoftwareCatalogEntry } from '../../domain/compliance.types';
 
@@ -207,17 +209,20 @@ export class ComplianceController {
   @ApiOperation({
     summary: 'List Shadow IT findings (non-whitelisted apps detected on managed devices)',
   })
+  @ApiOkResponse({ type: ShadowItListResponseDto })
   @ApiCommonErrors(401, 403)
-  async listShadowIt() {
+  async listShadowIt(): Promise<ShadowItListResponseDto> {
     const findings = await this.shadowIt.listShadowItFindings(100);
     return { findings: findings.map(toFindingDto), total: findings.length };
   }
 
   @Post('shadow-it/scan')
+  @HttpCode(HttpStatus.OK)
   @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Trigger an immediate Shadow IT detection scan' })
+  @ApiOkResponse({ type: ShadowItScanResponseDto })
   @ApiCommonErrors(401, 403)
-  async triggerShadowItScan(@CurrentUser() user: JwtPayload) {
+  async triggerShadowItScan(@CurrentUser() user: JwtPayload): Promise<ShadowItScanResponseDto> {
     const result = await this.shadowIt.detectShadowIt();
     void this.audit.record({
       actorId: user.sub,
