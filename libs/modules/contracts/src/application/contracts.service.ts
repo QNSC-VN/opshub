@@ -11,7 +11,7 @@ import {
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
-import { addDays, today } from '@shared-kernel';
+import { addDays, today, daysBetween } from '@shared-kernel';
 import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService, type AuditAction } from '@modules/audit';
 import { EmployeeService } from '@modules/identity';
 import {
@@ -522,10 +522,4 @@ export class ContractsService {
       tx,
     );
   }
-}
-
-/** Whole days from `from` to `to`, both ISO dates. Negative when `to` precedes `from`. */
-function daysBetween(from: string, to: string): number {
-  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
-  return Math.round(ms / 86_400_000);
 }

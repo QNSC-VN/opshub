@@ -6,6 +6,7 @@ import { ControlService } from './application/control.service';
 import { IncidentService } from './application/incident.service';
 import { InformationAssetService } from './application/information-asset.service';
 import { VendorService } from './application/vendor.service';
+import { ReviewReminderService } from './application/review-reminder.service';
 import { RiskAcceptanceTypeDef } from './application/risk-acceptance.type-def';
 import { RiskController } from './interface/http/risk.controller';
 import { ControlController, RiskControlController } from './interface/http/control.controller';
@@ -42,6 +43,7 @@ import { VENDOR_REPOSITORY } from './domain/ports/vendor.repository';
     IncidentService,
     InformationAssetService,
     VendorService,
+    ReviewReminderService,
     // The service submits the acceptance request and this definition calls back to apply the
     // outcome, so the pair is circular by construction. The `forwardRef` that resolves it lives on
     // the type-def's constructor, where the cycle actually is; the alternative — a second copy of
@@ -53,6 +55,13 @@ import { VENDOR_REPOSITORY } from './domain/ports/vendor.repository';
     { provide: INFORMATION_ASSET_REPOSITORY, useClass: InformationAssetDrizzleRepository },
     { provide: VENDOR_REPOSITORY, useClass: VendorDrizzleRepository },
   ],
-  exports: [RiskService, ControlService, IncidentService, InformationAssetService, VendorService],
+  exports: [
+    RiskService,
+    ControlService,
+    IncidentService,
+    InformationAssetService,
+    VendorService,
+    ReviewReminderService,
+  ],
 })
 export class IsmsModule {}

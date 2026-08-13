@@ -7,7 +7,7 @@ import {
   PreconditionFailedException,
   type DrizzleDB,
 } from '@platform';
-import type { Actor } from '@shared-kernel';
+import { REPORT_ROW_LIMIT, type Actor } from '@shared-kernel';
 import {
   AUDIT_ACTION,
   type AuditAction,
@@ -360,12 +360,12 @@ export class IncidentService {
   }
 
   /** Breaches past the 72-hour deadline with nothing recorded. */
-  async overdueBreaches(limit = 100): Promise<OverdueBreach[]> {
+  async overdueBreaches(limit = REPORT_ROW_LIMIT): Promise<OverdueBreach[]> {
     return this.repo.overdueBreaches(limit);
   }
 
   /** Open incidents nobody linked to a risk — the register's feedback loop. */
-  async unlinkedToRisk(limit = 100): Promise<Incident[]> {
+  async unlinkedToRisk(limit = REPORT_ROW_LIMIT): Promise<Incident[]> {
     return this.repo.unlinkedToRisk(limit);
   }
 
