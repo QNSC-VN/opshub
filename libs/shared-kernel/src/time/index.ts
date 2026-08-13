@@ -37,6 +37,22 @@ export function today(now: Date = new Date()): string {
   return toIsoDate(now);
 }
 
+/**
+ * The latest calendar date that is "today" SOMEWHERE on Earth, as `YYYY-MM-DD`.
+ *
+ * WHY A SECOND NOTION OF TODAY. A user-supplied date is a date in THEIR timezone, and the API only knows
+ * UTC. At 01:00 in UTC+7 the browser's "today" is already tomorrow in UTC, so a plain
+ * `date > today()` check rejects a completion somebody is recording on the day it happened — measured, at
+ * 01:54 local, as a 412 `TRAINING_INVALID_COMPLETION` for a form whose date field defaulted to today.
+ *
+ * UTC+14 IS THE REAL MAXIMUM (Kiribati), so this is the widest date any caller can honestly call today.
+ * Use it for validating a date a PERSON typed. Do NOT use it for computing due dates or windows: those are
+ * the system's own arithmetic and belong in UTC, where `today()` is correct.
+ */
+export function latestDateAnywhere(now: Date = new Date()): string {
+  return toIsoDate(new Date(now.getTime() + 14 * MS_PER_HOUR));
+}
+
 /** A `Date` as `YYYY-MM-DD` in UTC. The one place that conversion happens. */
 export function toIsoDate(at: Date): string {
   return at.toISOString().slice(0, 10);

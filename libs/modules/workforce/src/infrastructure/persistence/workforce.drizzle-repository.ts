@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, desc, eq, lte, gte, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import { newId } from '@shared-kernel';
 import { timesheets, leaveRequests, overtimeEntries, shiftLogs } from '../../../../../../db/schema';
 import type { IWorkforceRepository } from '../../domain/ports/workforce.repository';
@@ -76,8 +76,9 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
     id: string,
     status: TimesheetStatus,
     approvedBy: string | null,
+    tx?: DbExecutor,
   ): Promise<Timesheet | null> {
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(timesheets)
       .set({
         status,
@@ -152,9 +153,10 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
     id: string,
     status: LeaveStatus,
     reviewerId: string | null,
+    tx?: DbExecutor,
   ): Promise<LeaveRequest | null> {
     const reviewed = status === 'approved' || status === 'rejected';
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(leaveRequests)
       .set({
         status,
@@ -166,12 +168,19 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
     return row ?? null;
   }
 
-  async setLeaveRequestId(id: string, requestId: string): Promise<void> {
-    await this.db.update(leaveRequests).set({ requestId }).where(eq(leaveRequests.id, id));
+  async setLeaveRequestId(id: string, requestId: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db).update(leaveRequests).set({ requestId }).where(eq(leaveRequests.id, id));
   }
 
-  async updateLeaveDocument(id: string, documentStorageKey: string | null): Promise<void> {
-    await this.db.update(leaveRequests).set({ documentStorageKey }).where(eq(leaveRequests.id, id));
+  async updateLeaveDocument(
+    id: string,
+    documentStorageKey: string | null,
+    tx?: DbExecutor,
+  ): Promise<void> {
+    await (tx ?? this.db)
+      .update(leaveRequests)
+      .set({ documentStorageKey })
+      .where(eq(leaveRequests.id, id));
   }
 
   async overlappingLeaveCandidates(
@@ -252,9 +261,10 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
     id: string,
     status: OvertimeStatus,
     reviewerId: string | null,
+    tx?: DbExecutor,
   ): Promise<OvertimeEntry | null> {
     const reviewed = status === 'approved' || status === 'rejected';
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(overtimeEntries)
       .set({
         status,

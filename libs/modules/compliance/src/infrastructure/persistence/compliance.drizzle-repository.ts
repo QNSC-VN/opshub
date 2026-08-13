@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, desc, eq, ilike, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import { newId } from '@shared-kernel';
 import { softwareCatalog, complianceFindings } from '../../../../../../db/schema';
 import type { IComplianceRepository } from '../../domain/ports/compliance.repository';
@@ -18,8 +18,8 @@ import type {
 export class ComplianceDrizzleRepository implements IComplianceRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async createSoftware(input: UpsertSoftwareInput): Promise<SoftwareCatalogEntry> {
-    const [row] = await this.db
+  async createSoftware(input: UpsertSoftwareInput, tx?: DbExecutor): Promise<SoftwareCatalogEntry> {
+    const [row] = await (tx ?? this.db)
       .insert(softwareCatalog)
       .values({
         id: newId(),
@@ -38,7 +38,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(softwareCatalog)
       .where(eq(softwareCatalog.id, id))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async findSoftwareByName(name: string): Promise<SoftwareCatalogEntry | null> {
@@ -47,14 +47,15 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(softwareCatalog)
       .where(eq(softwareCatalog.name, name))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async updateSoftware(
     id: string,
     patch: Partial<UpsertSoftwareInput>,
+    tx?: DbExecutor,
   ): Promise<SoftwareCatalogEntry | null> {
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(softwareCatalog)
       .set({
         ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -65,7 +66,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       })
       .where(eq(softwareCatalog.id, id))
       .returning();
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listSoftware(
@@ -95,8 +96,8 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
     return { rows: rows, total: count };
   }
 
-  async createFinding(input: CreateFindingInput): Promise<ComplianceFinding> {
-    const [row] = await this.db
+  async createFinding(input: CreateFindingInput, tx?: DbExecutor): Promise<ComplianceFinding> {
+    const [row] = await (tx ?? this.db)
       .insert(complianceFindings)
       .values({
         id: newId(),
@@ -118,7 +119,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(complianceFindings)
       .where(eq(complianceFindings.id, id))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listFindings(
@@ -155,9 +156,10 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
     status: FindingStatus,
     resolvedBy: string | null,
     note: string | null,
+    tx?: DbExecutor,
   ): Promise<ComplianceFinding | null> {
     const resolved = status === 'resolved' || status === 'risk_accepted';
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(complianceFindings)
       .set({
         status,
@@ -167,6 +169,6 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       })
       .where(eq(complianceFindings.id, id))
       .returning();
-    return (row) ?? null;
+    return row ?? null;
   }
 }

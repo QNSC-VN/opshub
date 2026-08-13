@@ -2,12 +2,19 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   AuthzService,
   ConflictException,
+  InjectDrizzle,
   NotFoundException,
   PermissionDeniedException,
   ValidationException,
+  type DrizzleDB,
 } from '@platform';
 import type { Permission, RoleAssignment, RoleWithPermissions, ScopeType } from '@platform';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import {
   ROLE_REPOSITORY,
   type CreateRoleInput,
@@ -32,19 +39,37 @@ export interface AssignRoleCommand {
 }
 
 /**
- * Administrative RBAC operations: manage roles/permissions and grant/revoke
- * scoped role assignments. Every mutation writes an immutable audit record and
- * busts the affected user's permission cache so enforcement is immediate.
+ * Administrative RBAC operations: manage roles/permissions and grant/revoke scoped role assignments.
+ *
+ * THE AUDIT ENTRY SHARES THE MUTATION'S TRANSACTION. These were fire-and-forget, and of everything in this
+ * codebase these are the writes least able to afford it: who granted which role to whom, and who deleted a
+ * role, is the first question any access review asks. A grant that committed while its entry was lost left no
+ * answer.
+ *
+ * CACHE BUSTING HAPPENS AFTER THE COMMIT, and cannot be inside it: Valkey is not transactional, so
+ * invalidating before the commit would open a window where the cache is empty and the old row still current —
+ * a read then repopulates the cache with permissions that are about to change. Invalidating after means the
+ * worst case is a stale grant for the few milliseconds until the delete lands, which is the direction that
+ * fails safe for a REVOCATION only because the permission cache is also TTL-bounded.
  */
 @Injectable()
 export class AuthzAdminService {
+  private readonly roleTrail: ResourceAuditTrail;
+  private readonly assignmentTrail: ResourceAuditTrail;
+  private readonly employeeTrail: ResourceAuditTrail;
+
   constructor(
     @Inject(ROLE_REPOSITORY) private readonly roleRepo: IRoleRepository,
     @Inject(ROLE_ASSIGNMENT_REPOSITORY)
     private readonly assignmentRepo: IRoleAssignmentRepository,
     private readonly authz: AuthzService,
-    private readonly audit: AuditService,
-  ) {}
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    audit: AuditService,
+  ) {
+    this.roleTrail = audit.forResource(AUDIT_RESOURCE.ROLE);
+    this.assignmentTrail = audit.forResource(AUDIT_RESOURCE.ROLE_ASSIGNMENT);
+    this.employeeTrail = audit.forResource(AUDIT_RESOURCE.EMPLOYEE);
+  }
 
   // ── Catalog ────────────────────────────────────────────────────────────────
 
@@ -69,16 +94,13 @@ export class AuthzAdminService {
       throw new ConflictException('ROLE_KEY_TAKEN', `Role key '${input.key}' already exists`);
     }
     await this.assertPermissionsExist(input.permissions);
-    const role = await this.roleRepo.create(input);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ROLE_CREATED,
-      resourceType: AUDIT_RESOURCE.ROLE,
-      resourceId: role.id,
-      metadata: { key: role.key, permissions: role.permissions },
+    return this.db.transaction(async (tx) => {
+      const role = await this.roleRepo.create(input, tx);
+      await this.roleTrail.record(AUDIT_ACTION.ROLE_CREATED, role.id, actor, tx, {
+        after: { key: role.key, permissions: role.permissions },
+      });
+      return role;
     });
-    return role;
   }
 
   async setRolePermissions(
@@ -88,14 +110,12 @@ export class AuthzAdminService {
   ): Promise<RoleWithPermissions> {
     const role = await this.getRole(roleId);
     await this.assertPermissionsExist(permissionKeys);
-    await this.roleRepo.setPermissions(roleId, permissionKeys);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ROLE_PERMISSIONS_UPDATED,
-      resourceType: AUDIT_RESOURCE.ROLE,
-      resourceId: roleId,
-      changes: { before: role.permissions, after: permissionKeys },
+    await this.db.transaction(async (tx) => {
+      await this.roleRepo.setPermissions(roleId, permissionKeys, tx);
+      await this.roleTrail.record(AUDIT_ACTION.ROLE_PERMISSIONS_UPDATED, roleId, actor, tx, {
+        before: { permissions: role.permissions },
+        after: { permissions: permissionKeys },
+      });
     });
     // Editing a role changes what every HOLDER can do, so their cached resolutions
     // are stale the moment this commits. This used to rely on the 300s cache TTL —
@@ -122,14 +142,12 @@ export class AuthzAdminService {
     // ON DELETE CASCADE, so afterwards there is nothing left to enumerate.
     const holders = await this.assignmentRepo.listUserIdsForRole(roleId);
 
-    await this.roleRepo.delete(roleId);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ROLE_DELETED,
-      resourceType: AUDIT_RESOURCE.ROLE,
-      resourceId: roleId,
-      metadata: { key: role.key, holders: holders.length },
+    await this.db.transaction(async (tx) => {
+      await this.roleRepo.delete(roleId, tx);
+      // The entry is the only remaining record of the role and of how many people held it.
+      await this.roleTrail.record(AUDIT_ACTION.ROLE_DELETED, roleId, actor, tx, {
+        before: { key: role.key, permissions: role.permissions, holders: holders.length },
+      });
     });
 
     // Both caches are now wrong for every holder: the permission cache still grants
@@ -199,33 +217,35 @@ export class AuthzAdminService {
       );
     }
 
-    const assignment = await this.assignmentRepo.assign({
-      userId: command.userId,
-      roleId: command.roleId,
-      scopeType,
-      scopeId,
-      grantedBy: actor.sub,
-      expiresAt: command.expiresAt ?? null,
+    const assignment = await this.db.transaction(async (tx) => {
+      const created = await this.assignmentRepo.assign(
+        {
+          userId: command.userId,
+          roleId: command.roleId,
+          scopeType,
+          scopeId,
+          grantedBy: actor.sub,
+          expiresAt: command.expiresAt ?? null,
+        },
+        tx,
+      );
+      // The grant and the record of who made it commit together — the pair an access review reads.
+      await this.assignmentTrail.record(AUDIT_ACTION.ROLE_ASSIGNED, created.id, actor, tx, {
+        after: {
+          userId: command.userId,
+          roleKey: role.key,
+          scopeType,
+          scopeId,
+          expiresAt: created.expiresAt?.toISOString() ?? null,
+        },
+      });
+      return created;
     });
 
-    // Keep the JWT roles[] claim cache in sync with the RBAC source of truth,
-    // then bust the permission cache so enforcement is immediate.
+    // Keep the JWT roles[] claim cache in sync with the RBAC source of truth, then bust the permission
+    // cache so enforcement is immediate. After the commit: neither is transactional.
     await this.assignmentRepo.syncEmployeeRoleClaims(command.userId);
     await this.authz.invalidate(command.userId);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ROLE_ASSIGNED,
-      resourceType: AUDIT_RESOURCE.ROLE_ASSIGNMENT,
-      resourceId: assignment.id,
-      metadata: {
-        userId: command.userId,
-        roleKey: role.key,
-        scopeType,
-        scopeId,
-        expiresAt: assignment.expiresAt?.toISOString() ?? null,
-      },
-    });
     return assignment;
   }
 
@@ -254,38 +274,39 @@ export class AuthzAdminService {
     const currentGlobal = current.filter((a) => a.scopeType === 'global');
     const currentRoleIds = new Set(currentGlobal.map((a) => a.roleId));
 
-    // Grant desired roles that are missing
-    for (const roleId of desiredRoleIds) {
-      if (!currentRoleIds.has(roleId)) {
-        await this.assignmentRepo.assign({
-          userId,
-          roleId,
-          scopeType: 'global',
-          scopeId: null,
-          grantedBy: actor.sub,
-          expiresAt: null,
-        });
+    const granted = [...desiredRoleIds].map((id) => keyById.get(id)).filter(Boolean);
+
+    // ONE transaction for the whole reconciliation and its entry: an SSO login that granted three roles and
+    // revoked one is a single event, and a partially applied one would misrepresent what the IdP asserted.
+    await this.db.transaction(async (tx) => {
+      for (const roleId of desiredRoleIds) {
+        if (!currentRoleIds.has(roleId)) {
+          await this.assignmentRepo.assign(
+            {
+              userId,
+              roleId,
+              scopeType: 'global',
+              scopeId: null,
+              grantedBy: actor.sub,
+              expiresAt: null,
+            },
+            tx,
+          );
+        }
       }
-    }
-    // Revoke global roles no longer desired
-    for (const a of currentGlobal) {
-      if (!desiredRoleIds.has(a.roleId)) {
-        await this.assignmentRepo.revoke(a.id);
+      for (const a of currentGlobal) {
+        if (!desiredRoleIds.has(a.roleId)) {
+          await this.assignmentRepo.revoke(a.id, tx);
+        }
       }
-    }
+      await this.employeeTrail.record(AUDIT_ACTION.ROLE_SYNCED, userId, actor, tx, {
+        before: { roleIds: [...currentRoleIds] },
+        after: { requestedKeys: roleKeys, appliedRoles: granted },
+      });
+    });
 
     const finalKeys = await this.assignmentRepo.syncEmployeeRoleClaims(userId);
     await this.authz.invalidate(userId);
-
-    const granted = [...desiredRoleIds].map((id) => keyById.get(id)).filter(Boolean);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ROLE_SYNCED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: userId,
-      metadata: { requestedKeys: roleKeys, appliedRoles: granted, effectiveClaims: finalKeys },
-    });
     return finalKeys;
   }
 
@@ -294,17 +315,15 @@ export class AuthzAdminService {
     if (!assignment) {
       throw new NotFoundException('ROLE_ASSIGNMENT_NOT_FOUND', `Assignment ${id} not found`);
     }
-    await this.assignmentRepo.revoke(id);
+    await this.db.transaction(async (tx) => {
+      await this.assignmentRepo.revoke(id, tx);
+      await this.assignmentTrail.record(AUDIT_ACTION.ROLE_REVOKED, id, actor, tx, {
+        before: { userId: assignment.userId, roleId: assignment.roleId },
+      });
+    });
+
     await this.assignmentRepo.syncEmployeeRoleClaims(assignment.userId);
     await this.authz.invalidate(assignment.userId);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ROLE_REVOKED,
-      resourceType: AUDIT_RESOURCE.ROLE_ASSIGNMENT,
-      resourceId: id,
-      metadata: { userId: assignment.userId, roleId: assignment.roleId },
-    });
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────

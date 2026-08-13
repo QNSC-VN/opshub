@@ -1,17 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { eq, asc } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { catalogItems } from '../../../../../../db/schema';
 import type { ICatalogRepository } from '../../domain/ports/catalog.repository';
-import type { CatalogItem, CreateCatalogItemInput, UpdateCatalogItemInput } from '../../domain/catalog.types';
+import type {
+  CatalogItem,
+  CreateCatalogItemInput,
+  UpdateCatalogItemInput,
+} from '../../domain/catalog.types';
 
 @Injectable()
 export class CatalogDrizzleRepository implements ICatalogRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async create(input: CreateCatalogItemInput): Promise<CatalogItem> {
-    const [row] = await this.db
+  async create(input: CreateCatalogItemInput, tx?: DbExecutor): Promise<CatalogItem> {
+    const [row] = await (tx ?? this.db)
       .insert(catalogItems)
       .values({
         id: newId(),
@@ -28,34 +32,38 @@ export class CatalogDrizzleRepository implements ICatalogRepository {
   }
 
   async findById(id: string): Promise<CatalogItem | null> {
-    const [row] = await this.db
-      .select()
-      .from(catalogItems)
-      .where(eq(catalogItems.id, id))
-      .limit(1);
+    const [row] = await this.db.select().from(catalogItems).where(eq(catalogItems.id, id)).limit(1);
     return row ?? null;
   }
 
   async list(includeInactive: boolean): Promise<CatalogItem[]> {
-    const query = this.db.select().from(catalogItems).orderBy(asc(catalogItems.sortOrder), asc(catalogItems.name), asc(catalogItems.id));
+    const query = this.db
+      .select()
+      .from(catalogItems)
+      .orderBy(asc(catalogItems.sortOrder), asc(catalogItems.name), asc(catalogItems.id));
     if (!includeInactive) {
       return query.where(eq(catalogItems.isActive, true));
     }
     return query;
   }
 
-  async update(id: string, input: UpdateCatalogItemInput): Promise<CatalogItem | null> {
+  async update(
+    id: string,
+    input: UpdateCatalogItemInput,
+    tx?: DbExecutor,
+  ): Promise<CatalogItem | null> {
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.name !== undefined) patch['name'] = input.name;
     if ('description' in input) patch['description'] = input.description;
     if (input.category !== undefined) patch['category'] = input.category;
     if ('iconEmoji' in input) patch['iconEmoji'] = input.iconEmoji;
-    if (input.approvalPermission !== undefined) patch['approvalPermission'] = input.approvalPermission;
+    if (input.approvalPermission !== undefined)
+      patch['approvalPermission'] = input.approvalPermission;
     if ('slaHours' in input) patch['slaHours'] = input.slaHours;
     if (input.isActive !== undefined) patch['isActive'] = input.isActive;
     if (input.sortOrder !== undefined) patch['sortOrder'] = input.sortOrder;
 
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(catalogItems)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
       .set(patch as any)
@@ -64,7 +72,7 @@ export class CatalogDrizzleRepository implements ICatalogRepository {
     return row ?? null;
   }
 
-  async delete(id: string): Promise<void> {
-    await this.db.delete(catalogItems).where(eq(catalogItems.id, id));
+  async delete(id: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db).delete(catalogItems).where(eq(catalogItems.id, id));
   }
 }

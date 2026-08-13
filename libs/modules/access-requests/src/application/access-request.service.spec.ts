@@ -1,6 +1,7 @@
 /**
  * Unit tests — AccessRequestService (focused on submit, getById, approve, reject)
  */
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ActorScope } from '@platform';
 import { AccessRequestService } from './access-request.service';
@@ -14,10 +15,21 @@ const mockRepo = {
   listActiveGrants: vi.fn(),
 };
 
-const mockDb = {
+/**
+ * The db fake, now with a transaction.
+ *
+ * `submit` backlinks the engine's request id and records the entry in ONE transaction, so the fake hands the
+ * same `tx` to both — and the callback's `tx` has to support the chained `update().set().where()` the
+ * backlink uses, which is why the transaction resolves to the same object.
+ */
+const TX = {
   update: vi.fn().mockReturnThis(),
   set: vi.fn().mockReturnThis(),
   where: vi.fn().mockResolvedValue(undefined),
+};
+const mockDb = {
+  ...TX,
+  transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX)),
 };
 
 const mockEngine = {
@@ -26,7 +38,7 @@ const mockEngine = {
   reject: vi.fn(),
 };
 
-const mockAudit = { record: vi.fn() };
+const mockAudit = createFakeAudit();
 
 const ACTOR = { sub: 'user-1', email: 'user@test.com' };
 const ADMIN = { sub: 'admin-1', email: 'admin@test.com' };
@@ -92,9 +104,13 @@ describe('AccessRequestService.submit()', () => {
       ACTOR,
       expect.any(Object),
     );
+    // The backlink and the entry share one transaction: a request that says it reached the engine and an
+    // entry saying so are the same fact, and they commit together.
     expect(mockAudit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'access_request.submitted' }),
+      TX,
     );
+    expect(TX.update).toHaveBeenCalled();
     expect(result.requestId).toBe('req-1');
   });
 });

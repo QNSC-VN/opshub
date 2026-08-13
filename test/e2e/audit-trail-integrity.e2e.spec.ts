@@ -20,6 +20,13 @@
  * The ratchet (`test/audit-write.ratchet.spec.ts`) stops a controller audit call being ADDED.
  * This proves the ones removed are actually gone from the output.
  *
+ * NO POLLING ANY MORE, AND THAT IS THE POINT. This file used to need a `settledEntriesFor` helper that
+ * waited for two identical readings, because `void audit.record(...)` resolved after the response and a
+ * reader could legitimately see nothing yet. Every service write now shares its mutation's transaction, so
+ * the entry is visible exactly when the change is, and reading straight away is what makes a regression to
+ * fire-and-forget observable rather than tolerated. Visibility alone is not proof of atomicity — the
+ * rollback case below is — but a poll would have hidden the difference either way.
+ *
  * Prereqs: `docker compose -f docker-compose.dev.yml up -d` and `pnpm db:seed`.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -49,43 +56,6 @@ async function entriesFor(resourceId: string): Promise<{ action: string; count: 
     action: r.action,
     count: Number(r.count),
   }));
-}
-
-/**
- * Read the entries for a resource once the count has STOPPED CHANGING, for the sites that are
- * still fire-and-forget.
- *
- * The need for this function is the defect. `void this.audit.record(...)` resolves after the
- * response is sent, so a reader immediately afterwards can legitimately see nothing — proven
- * here: the first version of this spec read straight away and found an empty result for
- * `software.added` while the row was in the table moments later.
- *
- * WAITING FOR STABILITY, NOT FOR THE FIRST ROW. The first version of this helper returned as
- * soon as any row appeared, and that made the duplicate assertions worthless: a mutation that
- * recorded `employee.created` TWICE still passed, because the helper returned after the first
- * of the two writes landed and counted 1. Requiring two consecutive identical readings is
- * what makes a second row observable.
- *
- * The transactional case below deliberately does NOT use this. That is the whole difference:
- * an entry written inside the mutation's transaction is visible exactly when the mutation is,
- * so polling there would hide a regression rather than tolerate a race.
- */
-async function settledEntriesFor(resourceId: string): Promise<{ action: string; count: number }[]> {
-  let previous = '';
-  let stable = 0;
-  let entries: { action: string; count: number }[] = [];
-
-  for (let i = 0; i < 60; i++) {
-    entries = await entriesFor(resourceId);
-    const reading = JSON.stringify(entries);
-    // Only start counting stability once something is there, or an empty table would settle
-    // instantly and report "no entries" for a write that simply had not happened yet.
-    stable = entries.length > 0 && reading === previous ? stable + 1 : 0;
-    if (stable >= 2) return entries;
-    previous = reading;
-    await new Promise((r) => setTimeout(r, 25));
-  }
-  return entries;
 }
 
 beforeAll(async () => {
@@ -120,7 +90,10 @@ describe('audit trail integrity', () => {
     expect(res.statusCode, res.body).toBe(201);
     const employeeId = (JSON.parse(res.body) as { id: string }).id;
 
-    const entries = await settledEntriesFor(employeeId);
+    // NO SETTLE WINDOW. This write is now inside the mutation's transaction, so it is visible exactly
+    // when the employee is — polling here would tolerate a regression to fire-and-forget instead of
+    // showing it. (Visibility alone does not PROVE atomicity; the rollback case below does that.)
+    const entries = await entriesFor(employeeId);
 
     expect(
       entries,
@@ -147,7 +120,7 @@ describe('audit trail integrity', () => {
     expect(res.statusCode, res.body).toBe(201);
     const roleId = (JSON.parse(res.body) as { id: string }).id;
 
-    const entries = await settledEntriesFor(roleId);
+    const entries = await entriesFor(roleId);
 
     expect(entries).toEqual([{ action: AUDIT_ACTION.ROLE_CREATED, count: 1 }]);
     // Named explicitly: these are the codes that used to double up, and a regression would
@@ -171,7 +144,7 @@ describe('audit trail integrity', () => {
     expect(res.statusCode, res.body).toBe(201);
     const softwareId = (JSON.parse(res.body) as { id: string }).id;
 
-    const entries = await settledEntriesFor(softwareId);
+    const entries = await entriesFor(softwareId);
 
     expect(entries).toEqual([{ action: AUDIT_ACTION.SOFTWARE_ADDED, count: 1 }]);
     expect(entries.map((e) => e.action)).not.toContain('compliance.software_added');

@@ -4,9 +4,16 @@ import {
   NotFoundException,
   PreconditionFailedException,
   ErrorCodes,
+  InjectDrizzle,
+  type DrizzleDB,
 } from '@platform';
 import { type Actor } from '@shared-kernel';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { LICENSE_REPOSITORY, type ILicenseRepository } from '../domain/ports/license.repository';
 import type {
   SoftwareLicense,
@@ -17,24 +24,35 @@ import type {
   LicenseFilters,
 } from '../domain/license.types';
 
+/**
+ * Software licences and their seats.
+ *
+ * AUDIT ENTRIES SHARE THEIR MUTATION'S TRANSACTION. Every write here was fire-and-forget, and two of them
+ * matter more than most: a licence DELETE, where the entry is the only remaining record it existed, and a seat
+ * assignment, which is the row a true-up reconciles against a vendor invoice.
+ */
 @Injectable()
 export class LicenseService {
+  private readonly licenseTrail: ResourceAuditTrail;
+  private readonly seatTrail: ResourceAuditTrail;
+
   constructor(
     @Inject(LICENSE_REPOSITORY) private readonly repo: ILicenseRepository,
-    private readonly audit: AuditService,
-  ) {}
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    audit: AuditService,
+  ) {
+    this.licenseTrail = audit.forResource(AUDIT_RESOURCE.SOFTWARE_LICENSE);
+    this.seatTrail = audit.forResource(AUDIT_RESOURCE.LICENSE_ASSIGNMENT);
+  }
 
   async create(input: CreateLicenseInput, actor: Actor): Promise<SoftwareLicense> {
-    const license = await this.repo.create(input);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LICENSE_CREATED,
-      resourceType: AUDIT_RESOURCE.SOFTWARE_LICENSE,
-      resourceId: license.id,
-      metadata: { name: license.name, vendor: license.vendor },
+    return this.db.transaction(async (tx) => {
+      const license = await this.repo.create(input, tx);
+      await this.licenseTrail.record(AUDIT_ACTION.LICENSE_CREATED, license.id, actor, tx, {
+        after: { name: license.name, vendor: license.vendor },
+      });
+      return license;
     });
-    return license;
   }
 
   async getById(id: string): Promise<SoftwareLicense> {
@@ -53,16 +71,14 @@ export class LicenseService {
 
   async update(id: string, input: UpdateLicenseInput, actor: Actor): Promise<SoftwareLicense> {
     await this.getById(id);
-    const updated = await this.repo.update(id, input);
-    if (!updated) throw new NotFoundException(ErrorCodes.NOT_FOUND, 'License not found');
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LICENSE_UPDATED,
-      resourceType: AUDIT_RESOURCE.SOFTWARE_LICENSE,
-      resourceId: id,
+    return this.db.transaction(async (tx) => {
+      const updated = await this.repo.update(id, input, tx);
+      if (!updated) throw new NotFoundException(ErrorCodes.NOT_FOUND, 'License not found');
+      await this.licenseTrail.record(AUDIT_ACTION.LICENSE_UPDATED, id, actor, tx, {
+        after: input,
+      });
+      return updated;
     });
-    return updated;
   }
 
   async delete(id: string, actor: Actor): Promise<void> {
@@ -74,13 +90,10 @@ export class LicenseService {
         `Cannot delete license with ${usedSeats} active assignment(s). Revoke all seats first.`,
       );
     }
-    await this.repo.delete(id);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LICENSE_DELETED,
-      resourceType: AUDIT_RESOURCE.SOFTWARE_LICENSE,
-      resourceId: id,
+    // A hard delete: the entry is the only record the licence ever existed.
+    await this.db.transaction(async (tx) => {
+      await this.repo.delete(id, tx);
+      await this.licenseTrail.record(AUDIT_ACTION.LICENSE_DELETED, id, actor, tx, {});
     });
   }
 
@@ -110,26 +123,19 @@ export class LicenseService {
       }
     }
 
-    const assignment = await this.repo.assign(licenseId, employeeId, notes);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LICENSE_SEAT_ASSIGNED,
-      resourceType: AUDIT_RESOURCE.LICENSE_ASSIGNMENT,
-      resourceId: assignment.id,
-      metadata: { licenseId, employeeId },
+    return this.db.transaction(async (tx) => {
+      const assignment = await this.repo.assign(licenseId, employeeId, notes, tx);
+      await this.seatTrail.record(AUDIT_ACTION.LICENSE_SEAT_ASSIGNED, assignment.id, actor, tx, {
+        after: { licenseId, employeeId },
+      });
+      return assignment;
     });
-    return assignment;
   }
 
   async revoke(assignmentId: string, actor: Actor): Promise<void> {
-    await this.repo.revoke(assignmentId);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LICENSE_SEAT_REVOKED,
-      resourceType: AUDIT_RESOURCE.LICENSE_ASSIGNMENT,
-      resourceId: assignmentId,
+    await this.db.transaction(async (tx) => {
+      await this.repo.revoke(assignmentId, tx);
+      await this.seatTrail.record(AUDIT_ACTION.LICENSE_SEAT_REVOKED, assignmentId, actor, tx, {});
     });
   }
 

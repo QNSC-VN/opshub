@@ -1,3 +1,4 @@
+import type { DbExecutor } from '@platform';
 import type {
   ComplianceFinding,
   CreateFindingInput,
@@ -11,12 +12,13 @@ import type {
 export const COMPLIANCE_REPOSITORY = Symbol('COMPLIANCE_REPOSITORY');
 
 export interface IComplianceRepository {
-  createSoftware(input: UpsertSoftwareInput): Promise<SoftwareCatalogEntry>;
+  createSoftware(input: UpsertSoftwareInput, tx?: DbExecutor): Promise<SoftwareCatalogEntry>;
   findSoftwareById(id: string): Promise<SoftwareCatalogEntry | null>;
   findSoftwareByName(name: string): Promise<SoftwareCatalogEntry | null>;
   updateSoftware(
     id: string,
     patch: Partial<UpsertSoftwareInput>,
+    tx?: DbExecutor,
   ): Promise<SoftwareCatalogEntry | null>;
   listSoftware(
     filters: SoftwareFilters,
@@ -24,7 +26,7 @@ export interface IComplianceRepository {
     offset: number,
   ): Promise<{ rows: SoftwareCatalogEntry[]; total: number }>;
 
-  createFinding(input: CreateFindingInput): Promise<ComplianceFinding>;
+  createFinding(input: CreateFindingInput, tx?: DbExecutor): Promise<ComplianceFinding>;
   findFindingById(id: string): Promise<ComplianceFinding | null>;
   listFindings(
     filters: FindingFilters,
@@ -36,5 +38,6 @@ export interface IComplianceRepository {
     status: FindingStatus,
     resolvedBy: string | null,
     note: string | null,
+    tx?: DbExecutor,
   ): Promise<ComplianceFinding | null>;
 }

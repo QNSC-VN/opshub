@@ -1,9 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { NotFoundException, ConflictException, ErrorCodes, StorageService } from '@platform';
+import {
+  NotFoundException,
+  ConflictException,
+  ErrorCodes,
+  InjectDrizzle,
+  StorageService,
+  type DrizzleDB,
+} from '@platform';
 import { AuthTokenCache } from '@qnsc-vn/identity';
 import type { PresignUploadResult } from '@platform';
 import { SEC_PER_DAY } from '@shared-kernel';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../domain/ports/employee.repository';
 import {
   REFRESH_TOKEN_REPOSITORY,
@@ -23,33 +35,53 @@ export interface Actor {
   email: string;
 }
 
+/**
+ * Employees, and the sessions that follow from their status.
+ *
+ * EVERY AUDIT ENTRY SHARES ITS MUTATION'S TRANSACTION. These calls used to be
+ * a fire-and-forget `audit.record` call: outside any transaction, with the failure swallowed, so an employee could
+ * be created, renamed or offboarded with nothing in the trail and nothing anywhere saying so. The entry now
+ * commits with the row or not at all.
+ *
+ * WHAT STAYS OUTSIDE THE TRANSACTION, deliberately: revoking sessions in Valkey and deleting an old avatar
+ * from S3. Neither can be rolled back by Postgres, so holding them inside a transaction would buy nothing and
+ * would keep the row locked across a network call. They run after it commits, in the order that fails safe —
+ * revoking a session for a change that did not happen is recoverable; the reverse is not.
+ */
 @Injectable()
 export class EmployeeService {
+  private readonly trail: ResourceAuditTrail;
+
   constructor(
     @Inject(EMPLOYEE_REPOSITORY) private readonly employeeRepo: IEmployeeRepository,
     @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokenRepo: IRefreshTokenRepository,
     private readonly authCache: AuthTokenCache,
     private readonly storage: StorageService,
-    private readonly audit: AuditService,
-  ) {}
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    audit: AuditService,
+  ) {
+    this.trail = audit.forResource(AUDIT_RESOURCE.EMPLOYEE);
+  }
 
   async create(input: CreateEmployeeInput, actor: Actor): Promise<Employee> {
     const existing = await this.employeeRepo.findByEmail(input.email.toLowerCase());
     if (existing) {
       throw new ConflictException(ErrorCodes.CONFLICT, `Employee ${input.email} already exists`);
     }
-    const employee = await this.employeeRepo.create({ ...input, email: input.email.toLowerCase() });
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.EMPLOYEE_CREATED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: employee.id,
-      changes: { email: employee.email, displayName: employee.displayName, roles: employee.roles },
+    return this.db.transaction(async (tx) => {
+      const employee = await this.employeeRepo.create(
+        { ...input, email: input.email.toLowerCase() },
+        tx,
+      );
+      await this.trail.record(AUDIT_ACTION.EMPLOYEE_CREATED, employee.id, actor, tx, {
+        after: {
+          email: employee.email,
+          displayName: employee.displayName,
+          roles: employee.roles,
+        },
+      });
+      return employee;
     });
-
-    return employee;
   }
 
   async getById(id: string): Promise<Employee> {
@@ -62,18 +94,11 @@ export class EmployeeService {
     const employee = await this.employeeRepo.findById(id);
     if (!employee) throw new NotFoundException(ErrorCodes.EMPLOYEE_NOT_FOUND, 'Employee not found');
 
-    const updated = await this.employeeRepo.update(id, input);
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.EMPLOYEE_UPDATED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: id,
-      changes: input,
+    return this.db.transaction(async (tx) => {
+      const updated = await this.employeeRepo.update(id, input, tx);
+      await this.trail.record(AUDIT_ACTION.EMPLOYEE_UPDATED, id, actor, tx, { after: input });
+      return updated;
     });
-
-    return updated;
   }
 
   /**
@@ -88,8 +113,16 @@ export class EmployeeService {
     if (!employee) throw new NotFoundException(ErrorCodes.EMPLOYEE_NOT_FOUND, 'Employee not found');
     if (employee.status === status) return employee;
 
-    const updated = await this.employeeRepo.updateStatus(id, status);
+    const updated = await this.db.transaction(async (tx) => {
+      const row = await this.employeeRepo.updateStatus(id, status, tx);
+      await this.trail.record(AUDIT_ACTION.EMPLOYEE_STATUS_CHANGED, id, actor, tx, {
+        before: { status: employee.status },
+        after: { status },
+      });
+      return row;
+    });
 
+    // AFTER the commit, and outside it: Valkey and the session table cannot be rolled back with the row.
     if (status === 'offboarded') {
       // Revoke all DB sessions immediately
       await this.refreshTokenRepo.revokeAllForEmployee(id);
@@ -100,15 +133,6 @@ export class EmployeeService {
       // Clear revocation if re-activating an offboarded employee
       await this.authCache.unrevokeUser(id);
     }
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.EMPLOYEE_STATUS_CHANGED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: id,
-      changes: { from: employee.status, to: status },
-    });
 
     return updated;
   }
@@ -160,14 +184,9 @@ export class EmployeeService {
       if (old) void this.storage.deleteFile(old.id, old.uploaderId);
     }
 
-    await this.employeeRepo.updatePhoto(employeeId, result.key);
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.EMPLOYEE_AVATAR_UPDATED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: employeeId,
+    await this.db.transaction(async (tx) => {
+      await this.employeeRepo.updatePhoto(employeeId, result.key, tx);
+      await this.trail.record(AUDIT_ACTION.EMPLOYEE_AVATAR_UPDATED, employeeId, actor, tx, {});
     });
 
     return { avatarUrl: result.url };
@@ -189,14 +208,9 @@ export class EmployeeService {
     const file = await this.storage.findByKey(employee.photoStorageKey);
     if (file) void this.storage.deleteFile(file.id, file.uploaderId);
 
-    await this.employeeRepo.updatePhoto(employeeId, null);
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.EMPLOYEE_AVATAR_DELETED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: employeeId,
+    await this.db.transaction(async (tx) => {
+      await this.employeeRepo.updatePhoto(employeeId, null, tx);
+      await this.trail.record(AUDIT_ACTION.EMPLOYEE_AVATAR_DELETED, employeeId, actor, tx, {});
     });
   }
 }

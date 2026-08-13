@@ -59,11 +59,57 @@ function build(overrides: { holders?: string[]; system?: boolean } = {}) {
     resolve: vi.fn(),
   } as unknown as AuthzService & { invalidate: ReturnType<typeof vi.fn> };
   const audit = createFakeAudit();
+  /** The transaction each mutation and its audit entry now share. */
+  const TX = { tx: true };
+  const db = { transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX)) };
 
-  const service = new AuthzAdminService(roleRepo, assignmentRepo, authz, audit as never);
+  const service = new AuthzAdminService(
+    roleRepo,
+    assignmentRepo,
+    authz,
+    db as never,
+    audit as never,
+  );
 
-  return { service, roleRepo, assignmentRepo, authz, holders };
+  return { service, roleRepo, assignmentRepo, authz, holders, audit, TX };
 }
+
+describe('AuthzAdminService — the audit entry rides the mutation', () => {
+  /*
+   * WHY THIS IS ASSERTED HERE OF ALL PLACES. "Who granted which role to whom" is the first question an
+   * access review asks, and these writes were fire-and-forget: the grant could commit while the entry was
+   * lost, leaving the review with no answer. The `tx` in the assertion IS the guarantee.
+   */
+  it('records a permission change inside the transaction that made it', async () => {
+    const { service, audit, TX } = build();
+
+    await service.setRolePermissions('role-1', ['asset.read'], actor);
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'role.permissions_updated' }),
+      TX,
+    );
+  });
+
+  it('records a revocation inside its transaction', async () => {
+    const { service, assignmentRepo, audit, TX } = build();
+    assignmentRepo.findById.mockResolvedValue({
+      id: 'assign-1',
+      userId: 'user-9',
+      roleId: 'role-1',
+      scopeType: 'global',
+      scopeId: null,
+    });
+
+    await service.revokeAssignment('assign-1', actor);
+
+    expect(assignmentRepo.revoke).toHaveBeenCalledWith('assign-1', TX);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'role.revoked' }),
+      TX,
+    );
+  });
+});
 
 describe('AuthzAdminService — role-definition changes', () => {
   it('invalidates every holder when a role’s permissions change', async () => {

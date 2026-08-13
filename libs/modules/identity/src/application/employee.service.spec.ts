@@ -2,6 +2,7 @@
  * Unit tests — EmployeeService
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 import { EmployeeService } from './employee.service';
 import { ConflictException, NotFoundException } from '@platform';
 
@@ -31,7 +32,16 @@ const mockStorage = {
   findById: vi.fn(),
   findByKey: vi.fn(),
 };
-const mockAudit = { record: vi.fn() };
+const mockAudit = createFakeAudit();
+
+/**
+ * A transaction that just runs its callback.
+ *
+ * The service now wraps each mutation and its audit write in one, so a spec that did not fake this would
+ * construct fine and then fail at the first call — and faking it as a no-op would silently skip the body.
+ */
+const TX = { tx: true };
+const mockDb = { transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX)) };
 
 const ACTOR = { sub: 'admin-1', email: 'admin@acme.com' };
 
@@ -54,6 +64,7 @@ function makeService() {
     mockRefreshTokenRepo as never,
     mockAuthCache as never,
     mockStorage as never,
+    mockDb as never,
     mockAudit as never,
   );
 }
@@ -72,9 +83,12 @@ describe('EmployeeService.create()', () => {
       ACTOR,
     );
     expect(result.email).toBe('jane@acme.com');
+    // WITH THE TRANSACTION, which is the point: the entry commits with the row or not at all.
     expect(mockAudit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'employee.created' }),
+      TX,
     );
+    expect(mockEmployeeRepo.create).toHaveBeenCalledWith(expect.anything(), TX);
   });
 
   it('lowercases email before checking uniqueness', async () => {
@@ -125,6 +139,7 @@ describe('EmployeeService.update()', () => {
     expect(result.displayName).toBe('Jane Smith');
     expect(mockAudit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'employee.updated' }),
+      TX,
     );
   });
 
@@ -147,6 +162,7 @@ describe('EmployeeService.updateStatus()', () => {
     expect(result.status).toBe('on_leave');
     expect(mockAudit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'employee.status_changed' }),
+      TX,
     );
   });
 

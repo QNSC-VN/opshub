@@ -9,20 +9,40 @@ import {
   StorageService,
 } from '@platform';
 import type { PresignUploadResult } from '@platform';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { EmployeeService } from '@modules/identity';
 import { ASSET_REPOSITORY, type IAssetRepository } from '../domain/ports/asset.repository';
 import type { Asset, AssetAssignment, AssetFilters, CreateAssetInput } from '../domain/asset.types';
 
+/**
+ * Assets, their assignments, and their photos.
+ *
+ * EVERY AUDIT ENTRY SHARES ITS MUTATION'S TRANSACTION — assign and unassign already did, and create, retire
+ * and the photo writes now do too. They were a fire-and-forget `audit.record` call, which meant an asset could be
+ * created or retired with nothing in the trail. The entry commits with the row or not at all.
+ *
+ * DELETING THE OLD PHOTO FROM S3 STAYS OUTSIDE, because Postgres cannot roll back an S3 delete: the object is
+ * soft-deleted first and the column is updated in the transaction, so the worst case is an orphaned object
+ * rather than a row pointing at nothing.
+ */
 @Injectable()
 export class AssetService {
+  private readonly trail: ResourceAuditTrail;
+
   constructor(
     @Inject(ASSET_REPOSITORY) private readonly assetRepo: IAssetRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly storage: StorageService,
-    private readonly audit: AuditService,
+    audit: AuditService,
     private readonly employees: EmployeeService,
-  ) {}
+  ) {
+    this.trail = audit.forResource(AUDIT_RESOURCE.ASSET);
+  }
 
   async create(input: CreateAssetInput, actor: { sub: string; email: string }): Promise<Asset> {
     const existing = await this.assetRepo.findByTag(input.assetTag);
@@ -32,16 +52,13 @@ export class AssetService {
         `Asset tag ${input.assetTag} is taken`,
       );
     }
-    const asset = await this.assetRepo.create(input);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ASSET_CREATED,
-      resourceType: AUDIT_RESOURCE.ASSET,
-      resourceId: asset.id,
-      metadata: { assetTag: asset.assetTag, type: asset.type },
+    return this.db.transaction(async (tx) => {
+      const asset = await this.assetRepo.create(input, tx);
+      await this.trail.record(AUDIT_ACTION.ASSET_CREATED, asset.id, actor, tx, {
+        after: { assetTag: asset.assetTag, type: asset.type },
+      });
+      return asset;
     });
-    return asset;
   }
 
   async getById(id: string): Promise<Asset> {
@@ -76,17 +93,9 @@ export class AssetService {
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.assign(assetId, employeeId, notes, tx);
-      await this.audit.record(
-        {
-          actorId: actor.sub,
-          actorEmail: actor.email,
-          action: AUDIT_ACTION.ASSET_ASSIGNED,
-          resourceType: AUDIT_RESOURCE.ASSET,
-          resourceId: assetId,
-          metadata: { employeeId },
-        },
-        tx,
-      );
+      await this.trail.record(AUDIT_ACTION.ASSET_ASSIGNED, assetId, actor, tx, {
+        after: { assignedTo: employeeId },
+      });
     });
     return this.getById(assetId);
   }
@@ -99,16 +108,9 @@ export class AssetService {
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.unassign(assetId, tx);
-      await this.audit.record(
-        {
-          actorId: actor.sub,
-          actorEmail: actor.email,
-          action: AUDIT_ACTION.ASSET_UNASSIGNED,
-          resourceType: AUDIT_RESOURCE.ASSET,
-          resourceId: assetId,
-        },
-        tx,
-      );
+      await this.trail.record(AUDIT_ACTION.ASSET_UNASSIGNED, assetId, actor, tx, {
+        before: { assignedTo: asset.assignedTo },
+      });
     });
     return this.getById(assetId);
   }
@@ -124,13 +126,12 @@ export class AssetService {
         'Cannot retire an assigned asset — unassign it first',
       );
     }
-    await this.assetRepo.retire(assetId);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ASSET_RETIRED,
-      resourceType: AUDIT_RESOURCE.ASSET,
-      resourceId: assetId,
+    await this.db.transaction(async (tx) => {
+      await this.assetRepo.retire(assetId, tx);
+      await this.trail.record(AUDIT_ACTION.ASSET_RETIRED, assetId, actor, tx, {
+        before: { status: asset.status },
+        after: { status: 'retired' },
+      });
     });
     return this.getById(assetId);
   }
@@ -177,14 +178,9 @@ export class AssetService {
       if (old) void this.storage.deleteFile(old.id, old.uploaderId);
     }
 
-    await this.assetRepo.updatePhoto(assetId, result.key);
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ASSET_PHOTO_UPDATED,
-      resourceType: AUDIT_RESOURCE.ASSET,
-      resourceId: assetId,
+    await this.db.transaction(async (tx) => {
+      await this.assetRepo.updatePhoto(assetId, result.key, tx);
+      await this.trail.record(AUDIT_ACTION.ASSET_PHOTO_UPDATED, assetId, actor, tx, {});
     });
 
     return { photoUrl: result.url };

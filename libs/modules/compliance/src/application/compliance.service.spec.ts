@@ -1,23 +1,24 @@
 /**
  * Unit tests — ComplianceService
  */
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ComplianceService } from './compliance.service';
 import { ConflictException, NotFoundException, PreconditionFailedException } from '@platform';
 
 const mockRepo = {
-  findSoftwareByName:   vi.fn(),
-  findSoftwareById:     vi.fn(),
-  createSoftware:       vi.fn(),
-  updateSoftware:       vi.fn(),
-  listSoftware:         vi.fn(),
-  createFinding:        vi.fn(),
-  findFindingById:      vi.fn(),
-  listFindings:         vi.fn(),
-  setFindingStatus:     vi.fn(),
+  findSoftwareByName: vi.fn(),
+  findSoftwareById: vi.fn(),
+  createSoftware: vi.fn(),
+  updateSoftware: vi.fn(),
+  listSoftware: vi.fn(),
+  createFinding: vi.fn(),
+  findFindingById: vi.fn(),
+  listFindings: vi.fn(),
+  setFindingStatus: vi.fn(),
 };
 
-const mockAudit = { record: vi.fn() };
+const mockAudit = createFakeAudit();
 const ACTOR = { sub: 'admin-1', email: 'admin@test.com' };
 
 const SOFTWARE = {
@@ -45,8 +46,12 @@ const FINDING = {
   updatedAt: new Date(),
 };
 
+/** The transaction every write and its audit entry now share. */
+const TX = { tx: true };
+const mockDb = { transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX)) };
+
 function makeService() {
-  return new ComplianceService(mockRepo, mockAudit as never);
+  return new ComplianceService(mockRepo, mockDb as never, mockAudit as never);
 }
 
 describe('ComplianceService.addSoftware()', () => {
@@ -56,15 +61,22 @@ describe('ComplianceService.addSoftware()', () => {
     mockRepo.findSoftwareByName.mockResolvedValue(null);
     mockRepo.createSoftware.mockResolvedValue(SOFTWARE);
 
-    const result = await makeService().addSoftware({ name: 'Slack', listing: 'whitelisted' }, ACTOR);
+    const result = await makeService().addSoftware(
+      { name: 'Slack', listing: 'whitelisted' },
+      ACTOR,
+    );
     expect(result.name).toBe('Slack');
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'software.added' }));
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'software.added' }),
+      TX,
+    );
   });
 
   it('throws ConflictException when software name already exists', async () => {
     mockRepo.findSoftwareByName.mockResolvedValue(SOFTWARE);
-    await expect(makeService().addSoftware({ name: 'Slack', listing: 'whitelisted' }, ACTOR))
-      .rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      makeService().addSoftware({ name: 'Slack', listing: 'whitelisted' }, ACTOR),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(mockRepo.createSoftware).not.toHaveBeenCalled();
   });
 });
@@ -89,23 +101,33 @@ describe('ComplianceService.acknowledgeFinding()', () => {
 
   it('acknowledges an open finding', async () => {
     mockRepo.findFindingById.mockResolvedValue(FINDING);
-    mockRepo.setFindingStatus.mockResolvedValue({ ...FINDING, status: 'acknowledged', acknowledgedAt: new Date() });
+    mockRepo.setFindingStatus.mockResolvedValue({
+      ...FINDING,
+      status: 'acknowledged',
+      acknowledgedAt: new Date(),
+    });
 
     const result = await makeService().acknowledgeFinding('f-1', ACTOR);
     expect(result.status).toBe('acknowledged');
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'finding.acknowledged' }));
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'finding.acknowledged' }),
+      TX,
+    );
   });
 
   it('throws PreconditionFailedException when finding is already acknowledged', async () => {
     mockRepo.findFindingById.mockResolvedValue({ ...FINDING, status: 'acknowledged' });
-    await expect(makeService().acknowledgeFinding('f-1', ACTOR))
-      .rejects.toBeInstanceOf(PreconditionFailedException);
+    await expect(makeService().acknowledgeFinding('f-1', ACTOR)).rejects.toBeInstanceOf(
+      PreconditionFailedException,
+    );
     expect(mockRepo.setFindingStatus).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when finding does not exist', async () => {
     mockRepo.findFindingById.mockResolvedValue(null);
-    await expect(makeService().acknowledgeFinding('ghost', ACTOR)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(makeService().acknowledgeFinding('ghost', ACTOR)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -114,11 +136,18 @@ describe('ComplianceService.resolveFinding()', () => {
 
   it('resolves an open finding', async () => {
     mockRepo.findFindingById.mockResolvedValue(FINDING);
-    mockRepo.setFindingStatus.mockResolvedValue({ ...FINDING, status: 'resolved', resolvedAt: new Date() });
+    mockRepo.setFindingStatus.mockResolvedValue({
+      ...FINDING,
+      status: 'resolved',
+      resolvedAt: new Date(),
+    });
 
     const result = await makeService().resolveFinding('f-1', 'Patched', false, ACTOR);
     expect(result.status).toBe('resolved');
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'finding.resolved' }));
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'finding.resolved' }),
+      TX,
+    );
   });
 
   it('resolves an acknowledged finding', async () => {
@@ -129,7 +158,8 @@ describe('ComplianceService.resolveFinding()', () => {
 
   it('throws PreconditionFailedException when finding is already resolved', async () => {
     mockRepo.findFindingById.mockResolvedValue({ ...FINDING, status: 'resolved' });
-    await expect(makeService().resolveFinding('f-1', null, false, ACTOR))
-      .rejects.toBeInstanceOf(PreconditionFailedException);
+    await expect(makeService().resolveFinding('f-1', null, false, ACTOR)).rejects.toBeInstanceOf(
+      PreconditionFailedException,
+    );
   });
 });

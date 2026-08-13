@@ -11,7 +11,7 @@ import {
   type DrizzleDB,
   type EntityAttachment,
 } from '@platform';
-import { addMonths, newId, today, type Actor } from '@shared-kernel';
+import { addMonths, newId, today, type Actor, latestDateAnywhere } from '@shared-kernel';
 import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
 import { TRAINING_REPOSITORY, type ITrainingRepository } from '../domain/ports/training.repository';
 import type {
@@ -239,7 +239,9 @@ export class TrainingService {
         `Course ${course.code} is retired and accepts no new completions`,
       );
     }
-    if (input.completedOn > today()) {
+    // `latestDateAnywhere`, not `today()`: the date came from a person in an unknown timezone, and UTC
+    // midnight is already tomorrow for a third of the planet. See the helper for the measurement.
+    if (input.completedOn > latestDateAnywhere()) {
       throw new PreconditionFailedException(
         ErrorCodes.TRAINING_INVALID_COMPLETION,
         `A completion cannot be dated in the future (${input.completedOn})`,
