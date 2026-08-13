@@ -64,7 +64,9 @@ export type FindingStatus = 'open' | 'acknowledged' | 'resolved' | 'risk_accepte
 // Unified requests inbox
 export type RequestItemResponse = components['schemas']['RequestItemResponseDto'];
 export type RequestApprovalResponse = components['schemas']['RequestApprovalResponseDto'];
-export type RequestStatus = 'pending' | 'in_review' | 'approved' | 'rejected' | 'cancelled' | 'expired';
+export type RequestCommentResponse = components['schemas']['RequestCommentResponseDto'];
+export type RequestStatus =
+  'pending' | 'in_review' | 'approved' | 'rejected' | 'cancelled' | 'expired';
 export type RequestPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 // Audit logs
