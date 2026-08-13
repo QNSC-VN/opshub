@@ -5,6 +5,7 @@ import type {
   ClassificationChange,
   ClassificationLevel,
   ClassificationSummary,
+  DeviceHolding,
 } from './asset.types';
 
 /**
@@ -19,11 +20,19 @@ export function useInformationAssets(params: {
   classification: string;
   type: string;
   personalDataOnly: boolean;
+  /**
+   * Whether RETIRED assets are in the answer.
+   *
+   * Off by default, matching the API: the register means the CURRENT inventory. It has to be reachable
+   * all the same — retiring an asset otherwise looks like a delete, because the row simply leaves the
+   * list, and the retired rows are what a risk assessment from last year still points at.
+   */
+  includeRetired: boolean;
   search: string;
   limit: number;
   offset: number;
 }) {
-  const { classification, type, personalDataOnly, search, limit, offset } = params;
+  const { classification, type, personalDataOnly, includeRetired, search, limit, offset } = params;
   return useQuery({
     queryKey: [
       'information-assets',
@@ -31,6 +40,7 @@ export function useInformationAssets(params: {
       classification,
       type,
       personalDataOnly,
+      includeRetired,
       search,
       limit,
       offset,
@@ -42,6 +52,7 @@ export function useInformationAssets(params: {
             classification: (classification || undefined) as never,
             type: (type || undefined) as never,
             personalDataOnly: personalDataOnly || undefined,
+            includeRetired: includeRetired || undefined,
             search: search || undefined,
             limit,
             offset,
@@ -124,6 +135,36 @@ export function useAssetDevices(assetId: string | null) {
         params: { path: { id: assetId! } },
       });
       if (error || !data) throw new Error('Failed to load the devices holding this asset');
+      return data;
+    },
+  });
+}
+
+/**
+ * What one DEVICE holds, worst classification first.
+ *
+ * THE SAME LINK, READ BACKWARDS. `useAssetDevices` answers "where does this data live"; this answers
+ * "what was on that machine" — the question asked the moment a laptop is reported lost, and the one that
+ * decides whether the loss is an incident. Retired assets are included, because a device disposed of last
+ * year still held them.
+ *
+ * AN EMPTY LIST IS AN ANSWER, not a 404: the API deliberately does not validate the id against the
+ * hardware register, so "nothing registered was on it" stays distinguishable from "that is not a device"
+ * for the caller who most needs the difference.
+ *
+ * Keyed under `['information-assets', …]` like every other read here, so linking or unlinking a device
+ * refreshes this too — it is a third view of the same table.
+ */
+export function useDeviceHoldings(deviceAssetId: string) {
+  return useQuery<DeviceHolding[]>({
+    queryKey: ['information-assets', 'device-holdings', deviceAssetId],
+    enabled: !!deviceAssetId,
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        '/v1/information-assets/reports/device-holdings/{deviceAssetId}',
+        { params: { path: { deviceAssetId } } },
+      );
+      if (error || !data) throw new Error('Failed to load what this device holds');
       return data;
     },
   });

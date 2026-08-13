@@ -16,6 +16,7 @@
 import { useEffect, useRef, useId, type ReactNode } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { OVERLAY_LAYER } from './use-escape-to-close';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,14 +35,16 @@ export interface ConfirmDialogProps {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const ICON = {
-  danger:  <AlertTriangle className="h-5 w-5 text-danger" strokeWidth={1.75} />,
+  danger: <AlertTriangle className="h-5 w-5 text-danger" strokeWidth={1.75} />,
   warning: <AlertTriangle className="h-5 w-5 text-warning" strokeWidth={1.75} />,
   default: <Info className="h-5 w-5 text-accent" strokeWidth={1.75} />,
 } as const;
 
 const CONFIRM_BTN: Record<NonNullable<ConfirmDialogProps['variant']>, string> = {
-  danger:  'bg-red-600 text-white hover:bg-red-700 dark:hover:bg-red-500 focus-visible:ring-red-500/40',
-  warning: 'bg-amber-600 text-white hover:bg-amber-700 dark:hover:bg-amber-500 focus-visible:ring-amber-500/40',
+  danger:
+    'bg-red-600 text-white hover:bg-red-700 dark:hover:bg-red-500 focus-visible:ring-red-500/40',
+  warning:
+    'bg-amber-600 text-white hover:bg-amber-700 dark:hover:bg-amber-500 focus-visible:ring-amber-500/40',
   default: 'bg-accent text-accent-fg hover:bg-accent-hover focus-visible:ring-accent/40',
 };
 
@@ -58,7 +61,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const titleId  = useId();
+  const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   // Focus cancel button on open (safe default for destructive actions)
@@ -78,10 +81,21 @@ export function ConfirmDialog({
 
   return (
     <>
-      {/* Backdrop */}
+      {/*
+       * ABOVE THE SLIDE-OVER, at the same layer as `Modal` and for the same reason. Both this and the
+       * drawer panel used `z-50`, so stacking fell to DOM order — and a page renders its dialogs before its
+       * drawer, which put every confirmation opened FROM a drawer UNDER the drawer panel.
+       *
+       * WHAT THAT ACTUALLY BROKE, measured rather than assumed: the drawer stayed lit and fully
+       * interactive behind an open confirmation, so the modal backdrop guarded nothing and the drawer's own
+       * buttons could still be clicked while a decision was pending. Whether the drawer also covered part
+       * of the dialog was down to the viewport — this dialog is centred and the drawer is on the right, so
+       * a narrow window hid the confirm button and a wide one did not. A stacking bug that depends on the
+       * window size is the kind that reaches production.
+       */}
       <div
         aria-hidden="true"
-        className="fixed inset-0 z-50 bg-[var(--overlay)] backdrop-blur-[2px]"
+        className="fixed inset-0 z-[60] bg-[var(--overlay)] backdrop-blur-[2px]"
         onClick={onCancel}
       />
 
@@ -90,8 +104,11 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        // Above any drawer this was opened from, so Escape closes the confirmation ALONE. Without it the
+        // drawer's own document-level handler fired too, and one keypress took both.
+        data-overlay-layer={OVERLAY_LAYER.dialog}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2',
+          'fixed left-1/2 top-1/2 z-[60] w-full max-w-sm -translate-x-1/2 -translate-y-1/2',
           'rounded-xl bg-surface shadow-2xl ring-1 ring-border',
           'animate-in fade-in-0 zoom-in-95 duration-150',
         )}
@@ -102,15 +119,10 @@ export function ConfirmDialog({
           <div className="flex items-start gap-3">
             <div className="mt-0.5 shrink-0">{ICON[variant]}</div>
             <div className="flex-1 min-w-0">
-              <h3
-                id={titleId}
-                className="text-sm font-semibold text-fg"
-              >
+              <h3 id={titleId} className="text-sm font-semibold text-fg">
                 {title}
               </h3>
-              {description && (
-                <p className="mt-1 text-sm text-fg-muted">{description}</p>
-              )}
+              {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
             </div>
           </div>
 

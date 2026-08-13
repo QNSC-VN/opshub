@@ -16,15 +16,26 @@ function Overlay({
   id,
   open = true,
   onClose,
+  layer,
+  role = 'dialog',
 }: {
   id: string;
   open?: boolean;
   onClose: () => void;
+  layer?: number;
+  role?: 'dialog' | 'alertdialog';
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEscapeToClose(open, ref, onClose);
   return (
-    <div ref={ref} data-testid={id} role="dialog" aria-modal="true" tabIndex={-1}>
+    <div
+      ref={ref}
+      data-testid={id}
+      data-overlay-layer={layer}
+      role={role}
+      aria-modal="true"
+      tabIndex={-1}
+    >
       {id}
     </div>
   );
@@ -65,6 +76,54 @@ describe('useEscapeToClose', () => {
     pressEscape();
     // One keypress, one overlay: the modal closes and the drawer behind it stays.
     expect(closeModal).toHaveBeenCalledTimes(1);
+    expect(closeDrawer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * THE ORDER ABOVE IS THE ONE PAGES DO NOT USE, which is how this went unnoticed.
+   *
+   * Every screen in the SPA renders its dialogs at page level and its drawer last — deliberately, because a
+   * dialog rendered inside the drawer's subtree dies with the drawer. So the DRAWER is the last
+   * `aria-modal` element in the document while a modal sits on top of it, and a document-order tie-break
+   * handed Escape to the thing underneath: the modal stayed open over a drawer that had just closed.
+   *
+   * The layer decides, and it mirrors the `z-` class each overlay already carries. Document order is still
+   * the tie-break, for two overlays on the same layer.
+   */
+  it('gives Escape to the higher LAYER even when it renders first', () => {
+    const closeDrawer = vi.fn();
+    const closeModal = vi.fn();
+    render(
+      <>
+        <Overlay id="modal" layer={60} onClose={closeModal} />
+        <Overlay id="drawer" layer={50} onClose={closeDrawer} />
+      </>,
+    );
+
+    pressEscape();
+    expect(closeModal).toHaveBeenCalledTimes(1);
+    expect(closeDrawer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A `ConfirmDialog` is an `alertdialog`, and it was invisible to this hook.
+   *
+   * It closes itself on Escape through its own key handler, so the keypress used to close BOTH it and the
+   * drawer it was opened from — one keypress, two overlays, and the drawer gone from under a decision that
+   * had not been made yet.
+   */
+  it('lets an alertdialog above a drawer keep Escape to itself', () => {
+    const closeDrawer = vi.fn();
+    const closeConfirm = vi.fn();
+    render(
+      <>
+        <Overlay id="confirm" role="alertdialog" layer={60} onClose={closeConfirm} />
+        <Overlay id="drawer" layer={50} onClose={closeDrawer} />
+      </>,
+    );
+
+    pressEscape();
+    expect(closeConfirm).toHaveBeenCalledTimes(1);
     expect(closeDrawer).not.toHaveBeenCalled();
   });
 

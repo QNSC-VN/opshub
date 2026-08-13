@@ -9,6 +9,7 @@ export type ClassificationLevel = components['schemas']['ClassificationLevelResp
 export type ClassificationChange = components['schemas']['ClassificationChangeResponseDto'];
 export type ClassificationSummary = components['schemas']['ClassificationSummaryResponseDto'];
 export type AssetDevice = components['schemas']['InformationAssetDeviceResponseDto'];
+export type DeviceHolding = components['schemas']['DeviceHoldingResponseDto'];
 
 /** What kind of thing the asset is. A fixed vocabulary, so a `<select>` is right for it. */
 export const ASSET_TYPES = [

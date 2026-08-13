@@ -1,5 +1,11 @@
-import { ArrowRight, Laptop, ShieldAlert } from 'lucide-react';
-import { Badge, humanizeStatus } from '@/shared/ui';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ArrowRight, Laptop, Link2, ScanSearch, ShieldAlert, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
+import { assetOptions } from '@/shared/api/picker-sources';
+import { Badge, Button, EntityPicker, RowActions, humanizeStatus } from '@/shared/ui';
 import { formatDateTime, orDash } from '@/shared/lib/format';
 import { classificationTone } from './asset.types';
 import { useAssetDevices, useClassificationHistory } from './use-assets';
@@ -57,22 +63,70 @@ export function ClassificationHistoryPanel({ assetId }: { assetId: string }) {
 }
 
 /**
- * The devices this asset is held on.
+ * The devices this asset is held on, and the link itself.
  *
  * WHY THIS PANEL EXISTS. Classifying data answers "how sensitive is it"; this answers "where is it" — and
  * the finding lives in the pair. A restricted dataset on a laptop is not visible from either register
  * alone, which is why the link exists at all and why the count is on the list row too.
+ *
+ * LINKING IS A `PUT` ON THE PAIR, like `PUT /risks/:id/controls/:controlId` and for the same reason: the
+ * two ids ARE the fact, so the route is idempotent and linking twice is still one link. Nothing here has to
+ * check whether the link already exists.
+ *
+ * A RETIRED ASSET TAKES NO NEW LINKS BUT WILL STILL GIVE ONE UP, and that asymmetry is the API's, not a
+ * choice made here: `InformationAssetService.linkDevice` asserts the asset is not retired, `unlinkDevice`
+ * does not. Retirement freezes what the asset holds as historical evidence; correcting a link that was
+ * always wrong is a different act. So the picker goes away and the unlink buttons stay.
  */
 export function AssetDevicesPanel({
   assetId,
   encryptionRequired,
+  canManage,
+  retired,
+  onInspectDevice,
 }: {
   assetId: string;
   /** From the classification level, so the warning below states policy rather than opinion. */
   encryptionRequired: boolean;
+  canManage: boolean;
+  /** Set when the asset is retired — the API refuses a new link, so the screen does not offer one. */
+  retired: boolean;
+  /** Opens the lost-laptop report for one device. Owned by the page: the report is a modal. */
+  onInspectDevice: (deviceAssetId: string, assetTag: string) => void;
 }) {
+  const qc = useQueryClient();
   const devices = useAssetDevices(assetId);
+  const [linking, setLinking] = useState('');
   const rows = devices.data ?? [];
+
+  // One key for the whole register: a link moves the device list, the row's `deviceCount` and the
+  // holdings report, which are three views of one write.
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['information-assets'] });
+
+  async function link(deviceAssetId: string) {
+    const { error } = await api.PUT('/v1/information-assets/{id}/devices/{deviceAssetId}', {
+      params: { path: { id: assetId, deviceAssetId } },
+    });
+    setLinking('');
+    if (error) {
+      toast.error(apiErrorMessage(error, 'Failed to record the device.'));
+      return;
+    }
+    toast.success('Device linked');
+    invalidate();
+  }
+
+  async function unlink(deviceAssetId: string, assetTag: string) {
+    const { error } = await api.DELETE('/v1/information-assets/{id}/devices/{deviceAssetId}', {
+      params: { path: { id: assetId, deviceAssetId } },
+    });
+    if (error) {
+      toast.error(apiErrorMessage(error, 'Failed to remove the device.'));
+      return;
+    }
+    toast.success(`${assetTag} unlinked`);
+    invalidate();
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -107,8 +161,61 @@ export function AssetDevicesPanel({
           <span className="shrink-0 text-xs text-fg-subtle">
             {device.assignedTo ? orDash(device.assignedTo) : 'Unassigned'}
           </span>
+          <RowActions>
+            {/* The link read backwards, from the row that names the device: what ELSE is on this
+                machine. Available to anybody who can read the register — it is a report, not a change. */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`What ${device.assetTag} holds`}
+              title="What this device holds"
+              onClick={() => onInspectDevice(device.deviceAssetId, device.assetTag)}
+            >
+              <ScanSearch className="h-3.5 w-3.5" strokeWidth={2} />
+            </Button>
+            {canManage && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Unlink ${device.assetTag}`}
+                title="Unlink"
+                onClick={() => void unlink(device.deviceAssetId, device.assetTag)}
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} />
+              </Button>
+            )}
+          </RowActions>
         </div>
       ))}
+
+      {canManage && retired && (
+        <p className="text-xs text-fg-subtle">
+          Retired, so no new device can be recorded — what it held is now historical evidence.
+        </p>
+      )}
+
+      {canManage && !retired && (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <EntityPicker
+              ariaLabel="Device to link"
+              queryKey="assets"
+              value={linking}
+              onChange={(value) => {
+                setLinking(value);
+                if (value) void link(value);
+              }}
+              fetchOptions={assetOptions}
+              placeholder="Link a device…"
+            />
+          </div>
+          <Link2
+            className="h-4 w-4 shrink-0 text-fg-subtle"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+        </div>
+      )}
     </div>
   );
 }
