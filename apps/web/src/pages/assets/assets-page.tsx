@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Laptop, Plus } from 'lucide-react';
-import { api } from '@/shared/api/client';
 import {
   Button,
+  ConfirmDialog,
   DataTable,
   EntityDetailPanel,
   ListPage,
   FileUploadWidget,
+  PanelAction,
+  RowAction,
+  RowActions,
+  SegmentedControl,
   SlideOverSection,
   StatusBadge,
   humanizeStatus,
@@ -15,9 +19,12 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
+import { usePermissions } from '@/shared/hooks/use-permissions';
 import { formatDate } from '@/shared/lib/format';
 import { AddAssetModal } from './add-asset-modal';
-import type { AssetResponse } from '@/shared/api/types';
+import { AssignAssetModal, AssignmentHistoryPanel } from './asset-lifecycle';
+import { ASSET_NEXT_ACTIONS, ASSET_STATUS_FILTERS, type Asset } from './asset.types';
+import { useAssetTransition, useAssets } from './use-assets';
 
 /*
  * WHAT THIS SCREEN NO LONGER CARRIES
@@ -29,30 +36,58 @@ import type { AssetResponse } from '@/shared/api/types';
  * `limit: 50` with no paging.
  */
 
-function useAssets(search: string, limit: number, offset: number) {
-  return useQuery({
-    queryKey: ['assets', 'list', search, limit, offset],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/assets', {
-        params: { query: { search: search || undefined, limit, offset } },
-      });
-      if (error || !data) throw new Error('Failed to load assets');
-      return data;
-    },
-  });
-}
-
+/**
+ * The hardware register, and the custody chain over it.
+ *
+ * THE LIFECYCLE IS THE POINT OF AN INVENTORY. Listing what exists is the easy half; the half that answers
+ * "who had this laptop when the data on it leaked" is the assignment history, and until now none of it was
+ * reachable from the product — assign, unassign, retire and the history were API-only.
+ *
+ * TWO PERMISSIONS, MIRRORED. Handing an asset over and taking it back are `asset.reassign`; creating and
+ * retiring are `asset.write`. Custody and existence are different decisions, and the API separates them.
+ *
+ * NO ACTION IS OFFERED THAT THE API WOULD ONLY REFUSE — `ASSET_NEXT_ACTIONS` mirrors the service, so a
+ * retired asset offers nothing, and an assigned one offers a return rather than a retirement it would refuse
+ * until the hardware is back.
+ */
 export function AssetsPage() {
   const qc = useQueryClient();
+  const { can } = usePermissions();
+  const canReassign = can('asset.reassign');
+  const canWrite = can('asset.write');
+
   const [showAdd, setShowAdd] = useState(false);
-  const [selected, setSelected] = useState<AssetResponse | null>(null);
+  const [status, setStatus] = useState('');
+  const [assigning, setAssigning] = useState<Asset | null>(null);
+  const [confirming, setConfirming] = useState<{
+    asset: Asset;
+    action: 'unassign' | 'retire';
+  } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const list = useListState();
 
-  const assets = useAssets(list.search, list.limit, list.offset);
+  const assets = useAssets({
+    status,
+    type: '',
+    search: list.search,
+    limit: list.limit,
+    offset: list.offset,
+  });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['assets'] });
+  const transition = useAssetTransition(() => setConfirming(null));
 
-  const columns: DataTableColumn<AssetResponse>[] = [
+  // Re-read from the page's own list, so assigning or retiring moves the drawer with the row.
+  const selected = selectedId
+    ? (assets.data?.data?.find((asset) => asset.id === selectedId) ?? null)
+    : null;
+
+  function applyFilter(apply: () => void) {
+    apply();
+    list.resetPaging();
+  }
+
+  const columns: DataTableColumn<Asset>[] = [
     {
       key: 'tag',
       header: 'Tag',
@@ -78,11 +113,64 @@ export function AssetsPage() {
       cell: (a) => a.assignedTo ?? '—',
       hideOnMobile: true,
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      cell: (asset) => {
+        const steps = ASSET_NEXT_ACTIONS[asset.status] ?? [];
+        return (
+          <RowActions>
+            {canReassign && steps.includes('assign') && (
+              <RowAction tone="accent" onClick={() => setAssigning(asset)}>
+                Assign
+              </RowAction>
+            )}
+            {canReassign && steps.includes('unassign') && (
+              <RowAction onClick={() => setConfirming({ asset, action: 'unassign' })}>
+                Return
+              </RowAction>
+            )}
+            {/* Withheld while the asset is out: the service refuses to retire an assigned one, because
+                retiring it in place leaves the holder responsible for something the register says is gone. */}
+            {canWrite && steps.includes('retire') && (
+              <RowAction tone="danger" onClick={() => setConfirming({ asset, action: 'retire' })}>
+                Retire
+              </RowAction>
+            )}
+          </RowActions>
+        );
+      },
+    },
   ];
 
   return (
     <>
       <AddAssetModal open={showAdd} onClose={() => setShowAdd(false)} onSuccess={invalidate} />
+      {assigning && (
+        <AssignAssetModal
+          asset={assigning}
+          onClose={() => setAssigning(null)}
+          onSuccess={invalidate}
+        />
+      )}
+
+      {/* Both transitions take no input, so a confirmation rather than a form — and each dialog carries the
+          consequence, which is the part somebody needs before clicking. */}
+      <ConfirmDialog
+        open={!!confirming}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => confirming && transition.mutate(confirming)}
+        title={
+          confirming?.action === 'unassign' ? 'Return this asset to stock?' : 'Retire this asset?'
+        }
+        description={
+          confirming?.action === 'unassign'
+            ? 'Closes the open custody row with today as the return date. The assignment stays on the history.'
+            : 'Takes it out of the assignable pool for good. Its history stays, because who held it is still the answer to a later question.'
+        }
+        confirmLabel={confirming?.action === 'unassign' ? 'Return to stock' : 'Retire asset'}
+      />
 
       <ListPage
         title="Assets"
@@ -98,29 +186,37 @@ export function AssetsPage() {
           onChange: list.setSearch,
           placeholder: 'Search tag, model or serial…',
         }}
+        filters={
+          <SegmentedControl
+            label="Filter by status"
+            options={ASSET_STATUS_FILTERS.map((option) => ({ ...option }))}
+            value={status}
+            onChange={(value) => applyFilter(() => setStatus(value))}
+          />
+        }
         pageInfo={assets.data?.pageInfo}
         onOffsetChange={list.goToOffset}
         noun="assets"
       >
         <DataTable
           columns={columns}
-          rows={assets.data?.data as AssetResponse[] | undefined}
+          rows={assets.data?.data}
           isLoading={assets.isLoading}
           isError={assets.isError}
           errorMessage="Failed to load assets."
           emptyMessage={list.search ? 'No assets match that search' : 'No assets yet'}
           emptyIcon={Laptop}
           onRowClick={(a) => {
-            setSelected(a);
+            setSelectedId(a.id);
             setPhotoUrl(null);
           }}
-          isRowActive={(a) => a.id === selected?.id}
+          isRowActive={(a) => a.id === selectedId}
         />
       </ListPage>
 
       <EntityDetailPanel
-        open={!!selected}
-        onClose={() => setSelected(null)}
+        open={!!selectedId}
+        onClose={() => setSelectedId(null)}
         title={selected?.assetTag ?? 'Asset detail'}
         description={
           selected ? [selected.manufacturer, selected.model].filter(Boolean).join(' ') : undefined
@@ -151,8 +247,28 @@ export function AssetsPage() {
               ]
             : []
         }
+        headerActions={
+          selected &&
+          canReassign &&
+          (ASSET_NEXT_ACTIONS[selected.status] ?? []).includes('assign') ? (
+            <PanelAction tone="accent" onClick={() => setAssigning(selected)}>
+              Assign
+            </PanelAction>
+          ) : selected &&
+            canReassign &&
+            (ASSET_NEXT_ACTIONS[selected.status] ?? []).includes('unassign') ? (
+            <PanelAction onClick={() => setConfirming({ asset: selected, action: 'unassign' })}>
+              Return to stock
+            </PanelAction>
+          ) : undefined
+        }
         activity={selected ? { resourceId: selected.id, resourceType: 'asset' } : undefined}
       >
+        {selected && (
+          <SlideOverSection title="Custody history">
+            <AssignmentHistoryPanel assetId={selected.id} />
+          </SlideOverSection>
+        )}
         {selected && (
           <SlideOverSection title="Photo">
             <FileUploadWidget
