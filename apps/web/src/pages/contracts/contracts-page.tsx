@@ -8,7 +8,9 @@ import {
   DataTable,
   EntityDetailPanel,
   ListPage,
+  PanelAction,
   SegmentedControl,
+  SlideOverSection,
   StatusBadge,
   humanizeStatus,
   statusTone,
@@ -16,6 +18,7 @@ import {
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate, isoDaysFromNow } from '@/shared/lib/format';
+import { ContractHistoryPanel, RenewContractModal } from './contract-renewal';
 import {
   ActivateContractModal,
   DraftContractModal,
@@ -74,6 +77,7 @@ export function ContractsPage() {
   const [drafting, setDrafting] = useState(false);
   const [terminating, setTerminating] = useState<Contract | null>(null);
   const [activating, setActivating] = useState<Contract | null>(null);
+  const [renewing, setRenewing] = useState<Contract | null>(null);
   const [selected, setSelected] = useState<Contract | null>(null);
   const list = useListState();
 
@@ -161,6 +165,13 @@ export function ContractsPage() {
         <ActivateContractModal
           contract={activating}
           onClose={() => setActivating(null)}
+          onSuccess={invalidate}
+        />
+      )}
+      {renewing && (
+        <RenewContractModal
+          contract={renewing}
+          onClose={() => setRenewing(null)}
           onSuccess={invalidate}
         />
       )}
@@ -276,10 +287,25 @@ export function ContractsPage() {
               ]
             : []
         }
+        headerActions={
+          // Only an ACTIVE contract can be renewed — the service refuses any other outgoing status, and a
+          // renewal is a swap between two contracts rather than an edit to one.
+          selected && selected.status === 'active' ? (
+            <PanelAction tone="accent" onClick={() => setRenewing(selected)}>
+              Renew
+            </PanelAction>
+          ) : undefined
+        }
         activity={
           selected ? { resourceId: selected.id, resourceType: 'employment-contract' } : undefined
         }
-      />
+      >
+        {selected && (
+          <SlideOverSection title="Employment history">
+            <ContractHistoryPanel employeeId={selected.employeeId} />
+          </SlideOverSection>
+        )}
+      </EntityDetailPanel>
     </>
   );
 }
