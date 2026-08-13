@@ -4,32 +4,36 @@
  * All infrastructure dependencies (repository, DB, outbox, audit, employees)
  * are mocked via vi.fn() — no real DB required.
  */
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AssetService } from './asset.service';
-import {
-  ConflictException,
-  NotFoundException,
-  PreconditionFailedException,
-} from '@platform';
+import { ConflictException, NotFoundException, PreconditionFailedException } from '@platform';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 const mockAssetRepo = {
-  findByTag:      vi.fn(),
-  findById:       vi.fn(),
-  create:         vi.fn(),
-  assign:         vi.fn(),
-  unassign:       vi.fn(),
-  retire:         vi.fn(),
-  list:           vi.fn(),
-  listAssignments:vi.fn(),
+  findByTag: vi.fn(),
+  findById: vi.fn(),
+  create: vi.fn(),
+  assign: vi.fn(),
+  unassign: vi.fn(),
+  retire: vi.fn(),
+  list: vi.fn(),
+  listAssignments: vi.fn(),
 };
 
+/** The one transaction object every write should be handed, so a spec can assert they share it. */
+const TX = { tx: true };
 const mockDb = {
-  transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
+  transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX)),
 };
-const mockStorage = { presignUpload: vi.fn(), confirmUpload: vi.fn(), getDownloadUrl: vi.fn(), deleteFile: vi.fn() };
-const mockAudit   = { record: vi.fn() };
+const mockStorage = {
+  presignUpload: vi.fn(),
+  confirmUpload: vi.fn(),
+  getDownloadUrl: vi.fn(),
+  deleteFile: vi.fn(),
+};
+const mockAudit = createFakeAudit();
 const mockEmployees = { getById: vi.fn() };
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -79,15 +83,20 @@ describe('AssetService.create()', () => {
 
     expect(result.id).toBe('asset-1');
     expect(mockAssetRepo.create).toHaveBeenCalledOnce();
-    expect(mockAudit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'asset.created' }));
+    // WITH THE TRANSACTION: the entry and the row commit together, or neither does.
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'asset.created' }),
+      TX,
+    );
+    expect(mockAssetRepo.create).toHaveBeenCalledWith(expect.anything(), TX);
   });
 
   it('throws ConflictException when tag already exists', async () => {
     mockAssetRepo.findByTag.mockResolvedValue(ASSET_BASE);
     const svc = makeService();
-    await expect(
-      svc.create({ assetTag: 'TAG-001', type: 'laptop' }, ACTOR),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.create({ assetTag: 'TAG-001', type: 'laptop' }, ACTOR)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
     expect(mockAssetRepo.create).not.toHaveBeenCalled();
   });
 });
@@ -126,14 +135,20 @@ describe('AssetService.assign()', () => {
 
   it('throws PreconditionFailedException when asset is retired', async () => {
     mockAssetRepo.findById.mockResolvedValue({ ...ASSET_BASE, status: 'retired' });
-    await expect(makeService().assign('asset-1', 'emp-1', null, ACTOR))
-      .rejects.toBeInstanceOf(PreconditionFailedException);
+    await expect(makeService().assign('asset-1', 'emp-1', null, ACTOR)).rejects.toBeInstanceOf(
+      PreconditionFailedException,
+    );
   });
 
   it('throws ConflictException when asset is already assigned', async () => {
-    mockAssetRepo.findById.mockResolvedValue({ ...ASSET_BASE, status: 'assigned', assignedTo: 'emp-2' });
-    await expect(makeService().assign('asset-1', 'emp-1', null, ACTOR))
-      .rejects.toBeInstanceOf(ConflictException);
+    mockAssetRepo.findById.mockResolvedValue({
+      ...ASSET_BASE,
+      status: 'assigned',
+      assignedTo: 'emp-2',
+    });
+    await expect(makeService().assign('asset-1', 'emp-1', null, ACTOR)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 });
 
@@ -152,8 +167,9 @@ describe('AssetService.unassign()', () => {
 
   it('throws PreconditionFailedException when asset is not assigned', async () => {
     mockAssetRepo.findById.mockResolvedValue(ASSET_BASE); // in_stock, no assignedTo
-    await expect(makeService().unassign('asset-1', ACTOR))
-      .rejects.toBeInstanceOf(PreconditionFailedException);
+    await expect(makeService().unassign('asset-1', ACTOR)).rejects.toBeInstanceOf(
+      PreconditionFailedException,
+    );
   });
 });
 
@@ -164,16 +180,28 @@ describe('AssetService.retire()', () => {
     mockAssetRepo.findById.mockResolvedValue(ASSET_BASE);
     mockAssetRepo.retire.mockResolvedValue({ ...ASSET_BASE, status: 'retired' as const });
     await makeService().retire('asset-1', ACTOR);
-    expect(mockAssetRepo.retire).toHaveBeenCalledWith('asset-1');
+    expect(mockAssetRepo.retire).toHaveBeenCalledWith('asset-1', TX);
+    expect(mockAudit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'asset.retired' }),
+      TX,
+    );
   });
 
   it('throws PreconditionFailedException when asset is already retired', async () => {
     mockAssetRepo.findById.mockResolvedValue({ ...ASSET_BASE, status: 'retired' as const });
-    await expect(makeService().retire('asset-1', ACTOR)).rejects.toBeInstanceOf(PreconditionFailedException);
+    await expect(makeService().retire('asset-1', ACTOR)).rejects.toBeInstanceOf(
+      PreconditionFailedException,
+    );
   });
 
   it('throws PreconditionFailedException when asset is currently assigned', async () => {
-    mockAssetRepo.findById.mockResolvedValue({ ...ASSET_BASE, status: 'assigned' as const, assignedTo: 'emp-1' });
-    await expect(makeService().retire('asset-1', ACTOR)).rejects.toBeInstanceOf(PreconditionFailedException);
+    mockAssetRepo.findById.mockResolvedValue({
+      ...ASSET_BASE,
+      status: 'assigned' as const,
+      assignedTo: 'emp-1',
+    });
+    await expect(makeService().retire('asset-1', ACTOR)).rejects.toBeInstanceOf(
+      PreconditionFailedException,
+    );
   });
 });

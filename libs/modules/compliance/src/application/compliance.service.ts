@@ -4,8 +4,15 @@ import {
   NotFoundException,
   PreconditionFailedException,
   ErrorCodes,
+  InjectDrizzle,
+  type DrizzleDB,
 } from '@platform';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import {
   COMPLIANCE_REPOSITORY,
   type IComplianceRepository,
@@ -18,12 +25,26 @@ import type {
   UpsertSoftwareInput,
 } from '../domain/compliance.types';
 
+/**
+ * The software catalogue and the endpoint findings raised against it.
+ *
+ * AUDIT ENTRIES SHARE THEIR MUTATION'S TRANSACTION. Resolving or accepting the risk on a finding is a
+ * DECISION about a security exposure, and it was recorded fire-and-forget: the finding could move to
+ * `risk_accepted` with nothing saying who accepted it.
+ */
 @Injectable()
 export class ComplianceService {
+  private readonly softwareTrail: ResourceAuditTrail;
+  private readonly findingTrail: ResourceAuditTrail;
+
   constructor(
     @Inject(COMPLIANCE_REPOSITORY) private readonly repo: IComplianceRepository,
-    private readonly audit: AuditService,
-  ) {}
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    audit: AuditService,
+  ) {
+    this.softwareTrail = audit.forResource(AUDIT_RESOURCE.SOFTWARE_CATALOG);
+    this.findingTrail = audit.forResource(AUDIT_RESOURCE.COMPLIANCE_FINDING);
+  }
 
   // ── Software catalog ───────────────────────────────────────────────────────
 
@@ -35,16 +56,13 @@ export class ComplianceService {
     if (existing) {
       throw new ConflictException(ErrorCodes.CONFLICT, 'Software with this name already exists');
     }
-    const entry = await this.repo.createSoftware(input);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.SOFTWARE_ADDED,
-      resourceType: AUDIT_RESOURCE.SOFTWARE_CATALOG,
-      resourceId: entry.id,
-      metadata: { name: entry.name, listing: entry.listing },
+    return this.db.transaction(async (tx) => {
+      const entry = await this.repo.createSoftware(input, tx);
+      await this.softwareTrail.record(AUDIT_ACTION.SOFTWARE_ADDED, entry.id, actor, tx, {
+        after: { name: entry.name, listing: entry.listing },
+      });
+      return entry;
     });
-    return entry;
   }
 
   async getSoftware(id: string): Promise<SoftwareCatalogEntry> {
@@ -59,17 +77,15 @@ export class ComplianceService {
     actor: { sub: string; email: string },
   ): Promise<SoftwareCatalogEntry> {
     await this.getSoftware(id);
-    const updated = await this.repo.updateSoftware(id, patch);
-    if (!updated) throw new NotFoundException(ErrorCodes.SOFTWARE_NOT_FOUND, 'Software not found');
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.SOFTWARE_UPDATED,
-      resourceType: AUDIT_RESOURCE.SOFTWARE_CATALOG,
-      resourceId: id,
-      changes: patch,
+    return this.db.transaction(async (tx) => {
+      const updated = await this.repo.updateSoftware(id, patch, tx);
+      if (!updated)
+        throw new NotFoundException(ErrorCodes.SOFTWARE_NOT_FOUND, 'Software not found');
+      await this.softwareTrail.record(AUDIT_ACTION.SOFTWARE_UPDATED, id, actor, tx, {
+        after: patch,
+      });
+      return updated;
     });
-    return updated;
   }
 
   async listSoftware(
@@ -110,16 +126,19 @@ export class ComplianceService {
       );
     }
     const status = riskAccepted ? 'risk_accepted' : 'resolved';
-    const updated = await this.repo.setFindingStatus(id, status, actor.sub, note);
-    if (!updated) throw new NotFoundException(ErrorCodes.FINDING_NOT_FOUND, 'Finding not found');
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: `finding.${status}`,
-      resourceType: AUDIT_RESOURCE.COMPLIANCE_FINDING,
-      resourceId: id,
+    return this.db.transaction(async (tx) => {
+      const updated = await this.repo.setFindingStatus(id, status, actor.sub, note, tx);
+      if (!updated) throw new NotFoundException(ErrorCodes.FINDING_NOT_FOUND, 'Finding not found');
+      // Accepting a risk is a decision about an exposure, so the note travels with the entry.
+      await this.findingTrail.record(
+        riskAccepted ? AUDIT_ACTION.FINDING_RISK_ACCEPTED : AUDIT_ACTION.FINDING_RESOLVED,
+        id,
+        actor,
+        tx,
+        { after: { status, note } },
+      );
+      return updated;
     });
-    return updated;
   }
 
   async acknowledgeFinding(
@@ -133,15 +152,13 @@ export class ComplianceService {
         'Only open findings can be acknowledged',
       );
     }
-    const updated = await this.repo.setFindingStatus(id, 'acknowledged', null, null);
-    if (!updated) throw new NotFoundException(ErrorCodes.FINDING_NOT_FOUND, 'Finding not found');
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.FINDING_ACKNOWLEDGED,
-      resourceType: AUDIT_RESOURCE.COMPLIANCE_FINDING,
-      resourceId: id,
+    return this.db.transaction(async (tx) => {
+      const updated = await this.repo.setFindingStatus(id, 'acknowledged', null, null, tx);
+      if (!updated) throw new NotFoundException(ErrorCodes.FINDING_NOT_FOUND, 'Finding not found');
+      await this.findingTrail.record(AUDIT_ACTION.FINDING_ACKNOWLEDGED, id, actor, tx, {
+        after: { status: 'acknowledged' },
+      });
+      return updated;
     });
-    return updated;
   }
 }

@@ -1,3 +1,4 @@
+import type { DbExecutor } from '@platform';
 import type {
   CreateLeaveInput,
   CreateOvertimeInput,
@@ -32,6 +33,7 @@ export interface IWorkforceRepository {
     id: string,
     status: TimesheetStatus,
     approvedBy: string | null,
+    tx?: DbExecutor,
   ): Promise<Timesheet | null>;
 
   // Leave
@@ -46,11 +48,16 @@ export interface IWorkforceRepository {
     id: string,
     status: LeaveStatus,
     reviewerId: string | null,
+    tx?: DbExecutor,
   ): Promise<LeaveRequest | null>;
   /** Backlink the engine request_items id into the domain row. */
-  setLeaveRequestId(id: string, requestId: string): Promise<void>;
+  setLeaveRequestId(id: string, requestId: string, tx?: DbExecutor): Promise<void>;
   /** Update the S3 object key for the leave supporting document. Pass null to clear. */
-  updateLeaveDocument(id: string, documentStorageKey: string | null): Promise<void>;
+  updateLeaveDocument(
+    id: string,
+    documentStorageKey: string | null,
+    tx?: DbExecutor,
+  ): Promise<void>;
   /**
    * Live requests whose DATE RANGE touches this one — candidates for an overlap, not a verdict.
    *
@@ -78,6 +85,7 @@ export interface IWorkforceRepository {
     id: string,
     status: OvertimeStatus,
     reviewerId: string | null,
+    tx?: DbExecutor,
   ): Promise<OvertimeEntry | null>;
   /** Backlink the engine request_items id into the domain row. */
   setOvertimeRequestId(id: string, requestId: string): Promise<void>;

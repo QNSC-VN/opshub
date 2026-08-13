@@ -15,8 +15,8 @@ import type {
 export class AccessRequestDrizzleRepository implements IAccessRequestRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async create(input: CreateAccessRequestInput): Promise<AccessRequest> {
-    const [row] = await this.db
+  async create(input: CreateAccessRequestInput, tx?: DbExecutor): Promise<AccessRequest> {
+    const [row] = await (tx ?? this.db)
       .insert(accessRequests)
       .values({
         id: newId(),
@@ -37,7 +37,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .from(accessRequests)
       .where(eq(accessRequests.id, id))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async list(
@@ -95,8 +95,13 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
     });
   }
 
-  async reject(requestId: string, reviewerId: string, note: string | null): Promise<void> {
-    await this.db
+  async reject(
+    requestId: string,
+    reviewerId: string,
+    note: string | null,
+    tx?: DbExecutor,
+  ): Promise<void> {
+    await (tx ?? this.db)
       .update(accessRequests)
       .set({
         status: 'rejected',
@@ -108,8 +113,8 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .where(eq(accessRequests.id, requestId));
   }
 
-  async revokeGrant(grantId: string): Promise<void> {
-    await this.db
+  async revokeGrant(grantId: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db)
       .update(accessGrants)
       .set({ revokedAt: new Date() })
       .where(eq(accessGrants.id, grantId));
@@ -121,7 +126,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .from(accessGrants)
       .where(eq(accessGrants.id, grantId))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async listActiveGrants(granteeId: string): Promise<AccessGrant[]> {

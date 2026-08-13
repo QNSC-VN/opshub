@@ -12,6 +12,7 @@
  * directions — that the privileged tier is not narrowed, and that the unprivileged tier
  * cannot escape its own records.
  */
+import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PermissionDeniedException } from '@platform';
 import { ActorScope } from '@platform';
@@ -30,7 +31,7 @@ const mockRepo = {
   listShiftLogs: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
 };
 
-const mockAudit = { record: vi.fn() };
+const mockAudit = createFakeAudit();
 const mockEngine = { submit: vi.fn(), approve: vi.fn(), reject: vi.fn() };
 const mockStorage = { presignUpload: vi.fn(), confirmUpload: vi.fn() };
 const mockAuthz = { check: vi.fn() };

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, desc, eq, gt, isNull, or } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import type { RoleAssignment } from '@platform';
 import { newId } from '@shared-kernel';
 import { employees, roles as rolesTable, userRoleAssignments } from '../../../../../../db/schema';
@@ -54,13 +54,13 @@ export class RoleAssignmentDrizzleRepository implements IRoleAssignmentRepositor
     return row ? this.toDomain(row) : null;
   }
 
-  async assign(input: AssignRoleInput): Promise<RoleAssignment> {
+  async assign(input: AssignRoleInput, tx?: DbExecutor): Promise<RoleAssignment> {
     // Check-then-insert: the unique index guards non-null scopes, but Postgres
     // treats NULL scope_id as distinct, so global grants need an explicit check.
     const existing = await this.findEquivalent(input);
     if (existing) return existing;
 
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .insert(userRoleAssignments)
       .values({
         id: newId(),
@@ -93,8 +93,8 @@ export class RoleAssignmentDrizzleRepository implements IRoleAssignmentRepositor
     return row ? this.toDomain(row) : null;
   }
 
-  async revoke(id: string): Promise<void> {
-    await this.db.delete(userRoleAssignments).where(eq(userRoleAssignments.id, id));
+  async revoke(id: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db).delete(userRoleAssignments).where(eq(userRoleAssignments.id, id));
   }
 
   async syncEmployeeRoleClaims(userId: string): Promise<string[]> {

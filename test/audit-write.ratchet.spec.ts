@@ -30,6 +30,16 @@
  * services whose repositories do not accept a `tx` yet, so converting them is a repository
  * signature change per module rather than a one-line edit — tracked separately, and this
  * number is how progress is measured.
+ *
+ * 55 → 18: every SERVICE has been converted — identity, assets, access-requests, catalog, license,
+ * compliance, authz-admin and workforce. Their repository mutations take an optional `tx` and each service
+ * wraps the change and its entry in one transaction. What stays outside one is named at each site: Valkey
+ * session revocation, an S3 delete, and the `RequestEngine` submissions where the engine owns the only
+ * write and there is no transaction of ours to join.
+ *
+ * The 18 that remain are the 15 in the allowlisted controllers above, `AuditService`'s own write, and two
+ * more in the same controllers — all blocked on a service method that does not exist yet, not on this
+ * pattern.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -67,7 +77,7 @@ const CONTROLLER_AUDIT_SITES = new Set<string>([
  * MAY ONLY FALL. Every one is a mutation that can commit with no audit entry. Reaching 0
  * means every audit write shares its mutation's transaction.
  */
-const FIRE_AND_FORGET_BASELINE = 55;
+const FIRE_AND_FORGET_BASELINE = 18;
 
 function sourceFiles(): string[] {
   return (
@@ -81,11 +91,24 @@ function sourceFiles(): string[] {
   );
 }
 
+/**
+ * Count the two ways a service writes an audit entry.
+ *
+ * `this.audit.record(...)` is the direct call; `<name>Trail.record(...)` is the resource-bound form from
+ * `AuditService.forResource`, which is what a converted site looks like. Counting only the first was fine
+ * while every site used it — and would have quietly stopped guarding ANYTHING as sites converted, because a
+ * scanner that finds nothing reports no violations. Measured: 55 direct calls became 18 direct plus 37
+ * bound, and the "scanner is broken" floor below is what would have caught the omission.
+ */
+const TRAIL_WRITE = /\bthis\.\w*[Tt]rail\.record\(/g;
+
 function auditWriters(): { file: string; source: string; calls: number }[] {
   return sourceFiles()
     .map((file) => {
       const source = readFileSync(join(ROOT, file), 'utf8');
-      return { file, source, calls: source.split('this.audit.record(').length - 1 };
+      const direct = source.split('this.audit.record(').length - 1;
+      const bound = source.match(TRAIL_WRITE)?.length ?? 0;
+      return { file, source, calls: direct + bound };
     })
     .filter(({ calls }) => calls > 0);
 }

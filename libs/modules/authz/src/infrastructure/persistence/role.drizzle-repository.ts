@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import type { Permission, RoleWithPermissions } from '@platform';
 import { newId } from '@shared-kernel';
 import { permissions, rolePermissions, roles } from '../../../../../../db/schema';
@@ -57,8 +57,10 @@ export class RoleDrizzleRepository implements IRoleRepository {
     return rows.map((r) => r.key);
   }
 
-  async create(input: CreateRoleInput): Promise<RoleWithPermissions> {
-    return this.db.transaction(async (tx) => {
+  async create(input: CreateRoleInput, outer?: DbExecutor): Promise<RoleWithPermissions> {
+    // A SAVEPOINT when the caller already has a transaction: the role row and its permission rows still
+    // go in together, and the caller's audit entry joins the same unit of work.
+    return (outer ?? this.db).transaction(async (tx) => {
       const [row] = await tx
         .insert(roles)
         .values({ id: newId(), key: input.key, name: input.name, system: false })
@@ -72,8 +74,12 @@ export class RoleDrizzleRepository implements IRoleRepository {
     });
   }
 
-  async setPermissions(roleId: string, permissionKeys: string[]): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  async setPermissions(
+    roleId: string,
+    permissionKeys: string[],
+    outer?: DbExecutor,
+  ): Promise<void> {
+    await (outer ?? this.db).transaction(async (tx) => {
       await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
       if (permissionKeys.length > 0) {
         await tx
@@ -84,8 +90,8 @@ export class RoleDrizzleRepository implements IRoleRepository {
     });
   }
 
-  async delete(roleId: string): Promise<void> {
-    await this.db.delete(roles).where(eq(roles.id, roleId));
+  async delete(roleId: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db).delete(roles).where(eq(roles.id, roleId));
   }
 
   async listPermissions(): Promise<Permission[]> {

@@ -8,7 +8,12 @@ import {
   RequestEngine,
   ActorScope,
 } from '@platform';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { newId, MS_PER_HOUR } from '@shared-kernel';
 import { eq } from 'drizzle-orm';
 import { accessRequests } from '../../../../../db/schema';
@@ -24,15 +29,33 @@ import type {
 } from '../domain/access-request.types';
 import type { AccessRequestPayload } from './access-request.type-def';
 
+/**
+ * Access requests and the grants they produce.
+ *
+ * AUDIT ENTRIES SHARE THEIR MUTATION'S TRANSACTION. All three writes here were fire-and-forget, so a
+ * submitted request, a rejection or a REVOKED GRANT could leave nothing behind — and a revoked grant with no
+ * entry is the one an access review most needs to see.
+ *
+ * THE ENGINE IS NOT IN THE TRANSACTION, deliberately. `RequestEngine.submit` writes its own row and lives in
+ * `libs/platform`, so the domain row is created, the engine is asked, and the backlink plus the audit entry
+ * commit together. If the engine call fails, the domain row is left without a `requestId` — visible and
+ * repairable — which is a better failure than an approval item with nothing to approve.
+ */
 @Injectable()
 export class AccessRequestService {
+  private readonly requestTrail: ResourceAuditTrail;
+  private readonly grantTrail: ResourceAuditTrail;
+
   constructor(
     @Inject(ACCESS_REQUEST_REPOSITORY) private readonly repo: IAccessRequestRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly engine: RequestEngine,
-    private readonly audit: AuditService,
+    audit: AuditService,
     private readonly actorScope: ActorScope,
-  ) {}
+  ) {
+    this.requestTrail = audit.forResource(AUDIT_RESOURCE.ACCESS_REQUEST);
+    this.grantTrail = audit.forResource(AUDIT_RESOURCE.ACCESS_GRANT);
+  }
 
   async submit(
     input: Omit<CreateAccessRequestInput, 'requesterId'>,
@@ -54,23 +77,26 @@ export class AccessRequestService {
       expiresAt: new Date(Date.now() + 168 * MS_PER_HOUR), // 7-day default engine window
     });
 
-    // Backlink the engine request id into the domain row
-    await this.db
-      .update(accessRequests)
-      .set({ requestId: engineItem.id })
-      .where(eq(accessRequests.id, domainRow.id));
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ACCESS_REQUEST_SUBMITTED,
-      resourceType: AUDIT_RESOURCE.ACCESS_REQUEST,
-      resourceId: domainRow.id,
-      metadata: {
-        accessType: input.accessType,
-        target: input.target,
-        engineRequestId: engineItem.id,
-      },
+    // The backlink and the entry describing the submission commit together: a request that says it went to
+    // the engine and an entry saying it did are the same fact.
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(accessRequests)
+        .set({ requestId: engineItem.id })
+        .where(eq(accessRequests.id, domainRow.id));
+      await this.requestTrail.record(
+        AUDIT_ACTION.ACCESS_REQUEST_SUBMITTED,
+        domainRow.id,
+        actor,
+        tx,
+        {
+          after: {
+            accessType: input.accessType,
+            target: input.target,
+            engineRequestId: engineItem.id,
+          },
+        },
+      );
     });
 
     return { ...domainRow, requestId: engineItem.id };
@@ -170,16 +196,9 @@ export class AccessRequestService {
         await this.repo.approve(requestId, actor.sub, note, grant, tx);
         // Inside the transaction: an approval that issued a grant without recording it is
         // exactly the gap an access-request audit trail exists to close.
-        await this.audit.record(
-          {
-            actorId: actor.sub,
-            actorEmail: actor.email,
-            action: AUDIT_ACTION.ACCESS_REQUEST_APPROVED,
-            resourceType: AUDIT_RESOURCE.ACCESS_REQUEST,
-            resourceId: requestId,
-          },
-          tx,
-        );
+        await this.requestTrail.record(AUDIT_ACTION.ACCESS_REQUEST_APPROVED, requestId, actor, tx, {
+          after: { grantId: grant.id, expiresAt: grant.expiresAt },
+        });
       });
     }
 
@@ -205,13 +224,12 @@ export class AccessRequestService {
     if (request.requestId) {
       await this.engine.reject(request.requestId, note, actor);
     } else {
-      await this.repo.reject(requestId, actor.sub, note);
-      void this.audit.record({
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action: AUDIT_ACTION.ACCESS_REQUEST_REJECTED,
-        resourceType: AUDIT_RESOURCE.ACCESS_REQUEST,
-        resourceId: requestId,
+      await this.db.transaction(async (tx) => {
+        await this.repo.reject(requestId, actor.sub, note, tx);
+        await this.requestTrail.record(AUDIT_ACTION.ACCESS_REQUEST_REJECTED, requestId, actor, tx, {
+          before: { status: request.status },
+          after: { status: 'rejected' },
+        });
       });
     }
 
@@ -227,13 +245,11 @@ export class AccessRequestService {
         'Grant is already revoked',
       );
     }
-    await this.repo.revokeGrant(grantId);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ACCESS_GRANT_REVOKED,
-      resourceType: AUDIT_RESOURCE.ACCESS_GRANT,
-      resourceId: grantId,
+    await this.db.transaction(async (tx) => {
+      await this.repo.revokeGrant(grantId, tx);
+      await this.grantTrail.record(AUDIT_ACTION.ACCESS_GRANT_REVOKED, grantId, actor, tx, {
+        before: { granteeId: grant.granteeId, target: grant.target },
+      });
     });
   }
 

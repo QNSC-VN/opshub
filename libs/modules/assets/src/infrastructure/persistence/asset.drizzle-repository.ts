@@ -4,14 +4,19 @@ import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import { newId } from '@shared-kernel';
 import { assets, assetAssignments } from '../../../../../../db/schema';
 import type { IAssetRepository } from '../../domain/ports/asset.repository';
-import type { Asset, AssetAssignment, AssetFilters, CreateAssetInput } from '../../domain/asset.types';
+import type {
+  Asset,
+  AssetAssignment,
+  AssetFilters,
+  CreateAssetInput,
+} from '../../domain/asset.types';
 
 @Injectable()
 export class AssetDrizzleRepository implements IAssetRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async create(input: CreateAssetInput): Promise<Asset> {
-    const [row] = await this.db
+  async create(input: CreateAssetInput, tx?: DbExecutor): Promise<Asset> {
+    const [row] = await (tx ?? this.db)
       .insert(assets)
       .values({
         id: newId(),
@@ -32,12 +37,12 @@ export class AssetDrizzleRepository implements IAssetRepository {
   async findById(id: string, tx?: DbExecutor): Promise<Asset | null> {
     const exec = tx ?? this.db;
     const [row] = await exec.select().from(assets).where(eq(assets.id, id)).limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async findByTag(assetTag: string): Promise<Asset | null> {
     const [row] = await this.db.select().from(assets).where(eq(assets.assetTag, assetTag)).limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async list(
@@ -104,8 +109,8 @@ export class AssetDrizzleRepository implements IAssetRepository {
       .where(and(eq(assetAssignments.assetId, assetId), isNull(assetAssignments.returnedAt)));
   }
 
-  async retire(assetId: string): Promise<void> {
-    await this.db
+  async retire(assetId: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db)
       .update(assets)
       .set({ status: 'retired', assignedTo: null, updatedAt: new Date() })
       .where(eq(assets.id, assetId));
@@ -120,8 +125,12 @@ export class AssetDrizzleRepository implements IAssetRepository {
     return rows;
   }
 
-  async updatePhoto(assetId: string, photoStorageKey: string | null): Promise<void> {
-    await this.db
+  async updatePhoto(
+    assetId: string,
+    photoStorageKey: string | null,
+    tx?: DbExecutor,
+  ): Promise<void> {
+    await (tx ?? this.db)
       .update(assets)
       .set({ photoStorageKey, updatedAt: new Date() })
       .where(eq(assets.id, assetId));

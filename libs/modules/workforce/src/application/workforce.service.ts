@@ -13,7 +13,12 @@ import {
 } from '@platform';
 import type { DrizzleDB } from '@platform';
 import type { PresignUploadResult } from '@platform';
-import { AuditService, AUDIT_ACTION, AUDIT_RESOURCE } from '@modules/audit';
+import {
+  AuditService,
+  AUDIT_ACTION,
+  AUDIT_RESOURCE,
+  type ResourceAuditTrail,
+} from '@modules/audit';
 import { LeaveBalanceService, type LeaveBalance } from './leave-balance.service';
 import { MS_PER_HOUR, type Actor } from '@shared-kernel';
 import {
@@ -45,18 +50,42 @@ import type { OvertimePayload } from './overtime.type-def';
 import type { OnboardingPayload } from './onboarding.type-def';
 import type { OffboardingPayload } from './offboarding.type-def';
 
+/**
+ * Timesheets, leave, overtime, shifts and the on/offboarding submissions.
+ *
+ * AUDIT ENTRIES SHARE THEIR MUTATION'S TRANSACTION. Every write here was fire-and-forget, and these are the
+ * decisions people are paid on: an approved timesheet or an approved leave request with no entry leaves
+ * nothing to answer "who approved this" with.
+ *
+ * THE TWO EXCEPTIONS are the on/offboarding submissions, where `RequestEngine` owns the only write and its
+ * own row IS the request — so there is no transaction of ours to join. Named at each site.
+ */
 @Injectable()
 export class WorkforceService {
+  private readonly timesheetTrail: ResourceAuditTrail;
+  private readonly leaveTrail: ResourceAuditTrail;
+  private readonly overtimeTrail: ResourceAuditTrail;
+  private readonly employeeTrail: ResourceAuditTrail;
+  private readonly entitlementTrail: ResourceAuditTrail;
+  private readonly holidayTrail: ResourceAuditTrail;
+
   constructor(
     @Inject(WORKFORCE_REPOSITORY) private readonly repo: IWorkforceRepository,
-    private readonly audit: AuditService,
+    audit: AuditService,
     private readonly engine: RequestEngine,
     private readonly storage: StorageService,
     private readonly authz: AuthzService,
     private readonly actorScope: ActorScope,
     private readonly balances: LeaveBalanceService,
     @InjectDrizzle() private readonly db: DrizzleDB,
-  ) {}
+  ) {
+    this.timesheetTrail = audit.forResource(AUDIT_RESOURCE.TIMESHEET);
+    this.leaveTrail = audit.forResource(AUDIT_RESOURCE.LEAVE_REQUEST);
+    this.overtimeTrail = audit.forResource(AUDIT_RESOURCE.OVERTIME_ENTRY);
+    this.employeeTrail = audit.forResource(AUDIT_RESOURCE.EMPLOYEE);
+    this.entitlementTrail = audit.forResource(AUDIT_RESOURCE.LEAVE_ENTITLEMENT);
+    this.holidayTrail = audit.forResource(AUDIT_RESOURCE.HOLIDAY);
+  }
 
   // ── Access narrowing ───────────────────────────────────────────────────────
 
@@ -161,19 +190,22 @@ export class WorkforceService {
         'Only submitted timesheets can be reviewed',
       );
     }
-    const updated = await this.repo.setTimesheetStatus(
-      id,
-      approve ? 'approved' : 'rejected',
-      approve ? actor.sub : null,
-    );
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: approve ? AUDIT_ACTION.TIMESHEET_APPROVED : AUDIT_ACTION.TIMESHEET_REJECTED,
-      resourceType: AUDIT_RESOURCE.TIMESHEET,
-      resourceId: id,
+    return this.db.transaction(async (tx) => {
+      const updated = await this.repo.setTimesheetStatus(
+        id,
+        approve ? 'approved' : 'rejected',
+        approve ? actor.sub : null,
+        tx,
+      );
+      await this.timesheetTrail.record(
+        approve ? AUDIT_ACTION.TIMESHEET_APPROVED : AUDIT_ACTION.TIMESHEET_REJECTED,
+        id,
+        actor,
+        tx,
+        { before: { status: t.status }, after: { status: approve ? 'approved' : 'rejected' } },
+      );
+      return updated!;
     });
-    return updated!;
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────────
@@ -257,23 +289,19 @@ export class WorkforceService {
       expiresAt: new Date(Date.now() + 72 * MS_PER_HOUR), // 3-day review window
     });
 
-    await this.repo.setLeaveRequestId(leave.id, engineItem.id);
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LEAVE_REQUESTED,
-      resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
-      resourceId: leave.id,
-      metadata: {
-        leaveType: leave.leaveType,
-        startDate: leave.startDate,
-        endDate: leave.endDate,
-        startPortion: leave.startPortion,
-        endPortion: leave.endPortion,
-        workingDays,
-        engineRequestId: engineItem.id,
-      },
+    await this.db.transaction(async (tx) => {
+      await this.repo.setLeaveRequestId(leave.id, engineItem.id, tx);
+      await this.leaveTrail.record(AUDIT_ACTION.LEAVE_REQUESTED, leave.id, actor, tx, {
+        after: {
+          leaveType: leave.leaveType,
+          startDate: leave.startDate,
+          endDate: leave.endDate,
+          startPortion: leave.startPortion,
+          endPortion: leave.endPortion,
+          workingDays,
+          engineRequestId: engineItem.id,
+        },
+      });
     });
     return { ...leave, requestId: engineItem.id };
   }
@@ -311,19 +339,22 @@ export class WorkforceService {
       }
     } else {
       // Legacy path
-      const updated = await this.repo.setLeaveStatus(
-        id,
-        approve ? 'approved' : 'rejected',
-        actor.sub,
-      );
-      void this.audit.record({
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action: approve ? AUDIT_ACTION.LEAVE_APPROVED : AUDIT_ACTION.LEAVE_REJECTED,
-        resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
-        resourceId: id,
+      return this.db.transaction(async (tx) => {
+        const updated = await this.repo.setLeaveStatus(
+          id,
+          approve ? 'approved' : 'rejected',
+          actor.sub,
+          tx,
+        );
+        await this.leaveTrail.record(
+          approve ? AUDIT_ACTION.LEAVE_APPROVED : AUDIT_ACTION.LEAVE_REJECTED,
+          id,
+          actor,
+          tx,
+          { before: { status: l.status }, after: { status: approve ? 'approved' : 'rejected' } },
+        );
+        return updated!;
       });
-      return updated!;
     }
 
     return this.getLeave(id);
@@ -397,19 +428,22 @@ export class WorkforceService {
       }
     } else {
       // Legacy path
-      const updated = await this.repo.setOvertimeStatus(
-        id,
-        approve ? 'approved' : 'rejected',
-        actor.sub,
-      );
-      void this.audit.record({
-        actorId: actor.sub,
-        actorEmail: actor.email,
-        action: approve ? AUDIT_ACTION.OVERTIME_APPROVED : AUDIT_ACTION.OVERTIME_REJECTED,
-        resourceType: AUDIT_RESOURCE.OVERTIME_ENTRY,
-        resourceId: id,
+      return this.db.transaction(async (tx) => {
+        const updated = await this.repo.setOvertimeStatus(
+          id,
+          approve ? 'approved' : 'rejected',
+          actor.sub,
+          tx,
+        );
+        await this.overtimeTrail.record(
+          approve ? AUDIT_ACTION.OVERTIME_APPROVED : AUDIT_ACTION.OVERTIME_REJECTED,
+          id,
+          actor,
+          tx,
+          { before: { status: o.status }, after: { status: approve ? 'approved' : 'rejected' } },
+        );
+        return updated!;
       });
-      return updated!;
     }
 
     return this.getOvertime(id);
@@ -479,14 +513,14 @@ export class WorkforceService {
       ...(input.accessNeeds?.length && { accessNeeds: input.accessNeeds }),
     };
     const item = await this.engine.submit('onboarding', payload, actor);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.ONBOARDING_SUBMITTED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: input.employeeId,
-      metadata: { requestId: item.id, startDate: input.startDate },
-    });
+    // No transaction of ours: `RequestEngine` owns the only write, and its row is the request.
+    await this.employeeTrail.record(
+      AUDIT_ACTION.ONBOARDING_SUBMITTED,
+      input.employeeId,
+      actor,
+      undefined,
+      { after: { requestId: item.id, startDate: input.startDate } },
+    );
     return item.id;
   }
 
@@ -507,14 +541,13 @@ export class WorkforceService {
       ...(input.reason && { reason: input.reason }),
     };
     const item = await this.engine.submit('offboarding', payload, actor);
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.OFFBOARDING_SUBMITTED,
-      resourceType: AUDIT_RESOURCE.EMPLOYEE,
-      resourceId: input.employeeId,
-      metadata: { requestId: item.id, reason: input.reason },
-    });
+    await this.employeeTrail.record(
+      AUDIT_ACTION.OFFBOARDING_SUBMITTED,
+      input.employeeId,
+      actor,
+      undefined,
+      { after: { requestId: item.id, reason: input.reason } },
+    );
     return item.id;
   }
 
@@ -560,14 +593,9 @@ export class WorkforceService {
       if (old) void this.storage.deleteFile(old.id, old.uploaderId);
     }
 
-    await this.repo.updateLeaveDocument(leaveId, result.key);
-
-    void this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: AUDIT_ACTION.LEAVE_DOCUMENT_UPLOADED,
-      resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
-      resourceId: leaveId,
+    await this.db.transaction(async (tx) => {
+      await this.repo.updateLeaveDocument(leaveId, result.key, tx);
+      await this.leaveTrail.record(AUDIT_ACTION.LEAVE_DOCUMENT_UPLOADED, leaveId, actor, tx, {});
     });
 
     return { documentUrl: result.url };
@@ -640,20 +668,18 @@ export class WorkforceService {
       // The entry is the only record of the run — nothing on the rows distinguishes days carried by
       // this run from days HR typed in — so an audit write that silently failed would make a bulk
       // change to everyone's balance untraceable.
-      await this.audit.record(
+      await this.entitlementTrail.record(
+        AUDIT_ACTION.LEAVE_CARRY_OVER_RUN,
+        String(year),
+        actor,
+        tx,
         {
-          actorId: actor.sub,
-          actorEmail: actor.email,
-          action: AUDIT_ACTION.LEAVE_CARRY_OVER_RUN,
-          resourceType: AUDIT_RESOURCE.LEAVE_ENTITLEMENT,
-          resourceId: String(year),
-          metadata: {
+          after: {
             year,
             applied: result.applied.length,
             skippedNoTargetRow: result.skippedNoTargetRow.length,
           },
         },
-        tx,
       );
       return result;
     });
@@ -680,23 +706,19 @@ export class WorkforceService {
     // trail exists to close.
     await this.db.transaction(async (tx) => {
       await this.balances.setEntitlement(input, tx);
-      await this.audit.record(
+      await this.entitlementTrail.record(
+        AUDIT_ACTION.LEAVE_ENTITLEMENT_SET,
+        input.employeeId,
+        actor,
+        tx,
         {
-          actorId: actor.sub,
-          actorEmail: actor.email,
-          action: AUDIT_ACTION.LEAVE_ENTITLEMENT_SET,
-          resourceType: AUDIT_RESOURCE.LEAVE_ENTITLEMENT,
-          resourceId: input.employeeId,
-          changes: {
-            after: {
-              leaveType: input.leaveType,
-              year: input.year,
-              grantedDays: input.grantedDays,
-              carriedOverDays: input.carriedOverDays ?? 0,
-            },
+          after: {
+            leaveType: input.leaveType,
+            year: input.year,
+            grantedDays: input.grantedDays,
+            carriedOverDays: input.carriedOverDays ?? 0,
           },
         },
-        tx,
       );
     });
   }
@@ -711,17 +733,9 @@ export class WorkforceService {
   ): Promise<{ id: string }> {
     return this.db.transaction(async (tx) => {
       const created = await this.balances.addHoliday(input, tx);
-      await this.audit.record(
-        {
-          actorId: actor.sub,
-          actorEmail: actor.email,
-          action: AUDIT_ACTION.HOLIDAY_DECLARED,
-          resourceType: AUDIT_RESOURCE.HOLIDAY,
-          resourceId: created.id,
-          changes: { after: { date: input.date, name: input.name, region: input.region ?? 'ALL' } },
-        },
-        tx,
-      );
+      await this.holidayTrail.record(AUDIT_ACTION.HOLIDAY_DECLARED, created.id, actor, tx, {
+        after: { date: input.date, name: input.name, region: input.region ?? 'ALL' },
+      });
       return created;
     });
   }
@@ -734,16 +748,7 @@ export class WorkforceService {
         // did not happen — the throw rolls both back together.
         throw new NotFoundException(ErrorCodes.NOT_FOUND, `Holiday ${id} not found`);
       }
-      await this.audit.record(
-        {
-          actorId: actor.sub,
-          actorEmail: actor.email,
-          action: AUDIT_ACTION.HOLIDAY_REMOVED,
-          resourceType: AUDIT_RESOURCE.HOLIDAY,
-          resourceId: id,
-        },
-        tx,
-      );
+      await this.holidayTrail.record(AUDIT_ACTION.HOLIDAY_REMOVED, id, actor, tx, {});
     });
   }
 }

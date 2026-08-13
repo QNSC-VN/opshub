@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { employees } from '../../../../../../db/schema';
 import type { IEmployeeRepository } from '../../domain/ports/employee.repository';
@@ -16,8 +16,8 @@ import type {
 export class EmployeeDrizzleRepository implements IEmployeeRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async create(input: CreateEmployeeInput): Promise<Employee> {
-    const [row] = await this.db
+  async create(input: CreateEmployeeInput, tx?: DbExecutor): Promise<Employee> {
+    const [row] = await (tx ?? this.db)
       .insert(employees)
       .values({
         id: newId(),
@@ -35,7 +35,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
 
   async findById(id: string): Promise<Employee | null> {
     const [row] = await this.db.select().from(employees).where(eq(employees.id, id)).limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async findByEmail(email: string): Promise<Employee | null> {
@@ -44,7 +44,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(eq(employees.email, email.toLowerCase()))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async findByEntraOid(oid: string): Promise<Employee | null> {
@@ -53,18 +53,25 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(eq(employees.entraOid, oid))
       .limit(1);
-    return (row) ?? null;
+    return row ?? null;
   }
 
   async upsertByEntraOid(
     oid: string,
-    input: Partial<import('../../domain/employee.types').CreateEmployeeInput> & { email: string; displayName: string },
+    input: Partial<import('../../domain/employee.types').CreateEmployeeInput> & {
+      email: string;
+      displayName: string;
+    },
   ): Promise<Employee> {
     const existing = await this.findByEntraOid(oid);
     if (existing) {
       const [updated] = await this.db
         .update(employees)
-        .set({ displayName: input.displayName, email: input.email.toLowerCase(), updatedAt: new Date() })
+        .set({
+          displayName: input.displayName,
+          email: input.email.toLowerCase(),
+          updatedAt: new Date(),
+        })
         .where(eq(employees.entraOid, oid))
         .returning();
       return updated;
@@ -83,8 +90,8 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
     return this.create({ ...input, entraOid: oid, roles: [] });
   }
 
-  async update(id: string, input: UpdateEmployeeInput): Promise<Employee> {
-    const [updated] = await this.db
+  async update(id: string, input: UpdateEmployeeInput, tx?: DbExecutor): Promise<Employee> {
+    const [updated] = await (tx ?? this.db)
       .update(employees)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(employees.id, id))
@@ -92,8 +99,8 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
     return updated;
   }
 
-  async updateStatus(id: string, status: EmployeeStatus): Promise<Employee> {
-    const [updated] = await this.db
+  async updateStatus(id: string, status: EmployeeStatus, tx?: DbExecutor): Promise<Employee> {
+    const [updated] = await (tx ?? this.db)
       .update(employees)
       .set({ status, updatedAt: new Date() })
       .where(eq(employees.id, id))
@@ -134,8 +141,8 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
     return { rows: rows, total: count };
   }
 
-  async updatePhoto(id: string, photoStorageKey: string | null): Promise<void> {
-    await this.db
+  async updatePhoto(id: string, photoStorageKey: string | null, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db)
       .update(employees)
       .set({ photoStorageKey, updatedAt: new Date() })
       .where(eq(employees.id, id));

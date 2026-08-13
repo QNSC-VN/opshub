@@ -1,3 +1,4 @@
+import type { DbExecutor } from '@platform';
 import type { RoleAssignment, ScopeType } from '@platform';
 
 export const ROLE_ASSIGNMENT_REPOSITORY = Symbol('ROLE_ASSIGNMENT_REPOSITORY');
@@ -22,8 +23,8 @@ export interface IRoleAssignmentRepository {
   listUserIdsForRole(roleId: string): Promise<string[]>;
   findById(id: string): Promise<RoleAssignment | null>;
   /** Idempotent grant — returns the existing row when the scope already exists. */
-  assign(input: AssignRoleInput): Promise<RoleAssignment>;
-  revoke(id: string): Promise<void>;
+  assign(input: AssignRoleInput, tx?: DbExecutor): Promise<RoleAssignment>;
+  revoke(id: string, tx?: DbExecutor): Promise<void>;
   /**
    * Recompute the user's distinct active role keys from user_role_assignments
    * and write them to employees.roles (the JSONB cache used for the JWT claim).

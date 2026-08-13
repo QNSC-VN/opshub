@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, count, eq, ilike, isNull, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import { newId } from '@shared-kernel';
 import { softwareLicenses, licenseAssignments } from '../../../../../../db/schema';
 import type { ILicenseRepository } from '../../domain/ports/license.repository';
@@ -17,8 +17,8 @@ import type {
 export class LicenseDrizzleRepository implements ILicenseRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  async create(input: CreateLicenseInput): Promise<SoftwareLicense> {
-    const [row] = await this.db
+  async create(input: CreateLicenseInput, tx?: DbExecutor): Promise<SoftwareLicense> {
+    const [row] = await (tx ?? this.db)
       .insert(softwareLicenses)
       .values({
         id: newId(),
@@ -66,7 +66,11 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     return { rows, total: countRow?.total ?? 0 };
   }
 
-  async update(id: string, input: UpdateLicenseInput): Promise<SoftwareLicense | null> {
+  async update(
+    id: string,
+    input: UpdateLicenseInput,
+    tx?: DbExecutor,
+  ): Promise<SoftwareLicense | null> {
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.name !== undefined) patch['name'] = input.name;
     if (input.vendor !== undefined) patch['vendor'] = input.vendor;
@@ -79,7 +83,7 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     if ('notes' in input) patch['notes'] = input.notes;
     if ('externalId' in input) patch['externalId'] = input.externalId;
 
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .update(softwareLicenses)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
       .set(patch as any)
@@ -88,24 +92,25 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     return row ?? null;
   }
 
-  async delete(id: string): Promise<void> {
-    await this.db.delete(softwareLicenses).where(eq(softwareLicenses.id, id));
+  async delete(id: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db).delete(softwareLicenses).where(eq(softwareLicenses.id, id));
   }
 
   async assign(
     licenseId: string,
     employeeId: string,
     notes: string | null,
+    tx?: DbExecutor,
   ): Promise<LicenseAssignment> {
-    const [row] = await this.db
+    const [row] = await (tx ?? this.db)
       .insert(licenseAssignments)
       .values({ id: newId(), licenseId, employeeId, notes })
       .returning();
     return row;
   }
 
-  async revoke(assignmentId: string): Promise<void> {
-    await this.db
+  async revoke(assignmentId: string, tx?: DbExecutor): Promise<void> {
+    await (tx ?? this.db)
       .update(licenseAssignments)
       .set({ revokedAt: new Date() })
       .where(eq(licenseAssignments.id, assignmentId));
