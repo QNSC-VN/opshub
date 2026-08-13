@@ -1,3 +1,4 @@
+import { REPORT_ROW_LIMIT } from '@shared-kernel';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   ConflictException,
@@ -276,12 +277,12 @@ export class NonconformanceService {
   // ── Reports ──────────────────────────────────────────────────────────────────
 
   /** Findings past the containment deadline their grade allows. */
-  async containmentOverdue(limit = 200): Promise<ContainmentOverdue[]> {
+  async containmentOverdue(limit = REPORT_ROW_LIMIT): Promise<ContainmentOverdue[]> {
     return this.repo.containmentOverdue(limit);
   }
 
   /** Process areas where findings recur despite a CAPA already verified effective. */
-  async recurrenceSignals(limit = 200): Promise<RecurrenceSignal[]> {
+  async recurrenceSignals(limit = REPORT_ROW_LIMIT): Promise<RecurrenceSignal[]> {
     return this.repo.recurrenceSignals(limit);
   }
 

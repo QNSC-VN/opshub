@@ -1,3 +1,4 @@
+import { REPORT_ROW_LIMIT } from '@shared-kernel';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   ConflictException,
@@ -311,7 +312,7 @@ export class InternalAuditService {
   }
 
   /** `internal_audit` findings that name no audit — the traceability gap. */
-  async unlinkedFindings(limit = 200): Promise<UnlinkedFinding[]> {
+  async unlinkedFindings(limit = REPORT_ROW_LIMIT): Promise<UnlinkedFinding[]> {
     return this.repo.unlinkedFindings(limit);
   }
 

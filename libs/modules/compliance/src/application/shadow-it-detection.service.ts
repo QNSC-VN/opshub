@@ -65,13 +65,16 @@ export class ShadowItDetectionService {
     const client = this.buildClient();
     const catalog = await this.loadCatalog();
 
-    let url: string | undefined = '/deviceManagement/detectedApps?$top=100&$select=id,displayName,version,sizeInByte,deviceCount';
+    let url: string | undefined =
+      '/deviceManagement/detectedApps?$top=100&$select=id,displayName,version,sizeInByte,deviceCount';
     let totalScanned = 0;
     let totalFindings = 0;
 
     while (url) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const page: { value: GraphDetectedApp[]; '@odata.nextLink'?: string } = await client.api(url).get();
+      const page: { value: GraphDetectedApp[]; '@odata.nextLink'?: string } = await client
+        .api(url)
+        .get();
       const apps = page.value ?? [];
 
       totalScanned += apps.length;
@@ -80,7 +83,9 @@ export class ShadowItDetectionService {
       url = page['@odata.nextLink'];
     }
 
-    this.logger.log(`Shadow IT scan complete: ${totalScanned} apps scanned, ${totalFindings} new findings`);
+    this.logger.log(
+      `Shadow IT scan complete: ${totalScanned} apps scanned, ${totalFindings} new findings`,
+    );
     return { scanned: totalScanned, newFindings: totalFindings };
   }
 
@@ -116,12 +121,7 @@ export class ShadowItDetectionService {
       const existing = await this.db
         .select({ id: complianceFindings.id })
         .from(complianceFindings)
-        .where(
-          and(
-            eq(complianceFindings.source, sourceKey),
-            eq(complianceFindings.status, 'open'),
-          ),
-        )
+        .where(and(eq(complianceFindings.source, sourceKey), eq(complianceFindings.status, 'open')))
         .limit(1);
 
       if (existing.length > 0) continue;
@@ -142,8 +142,14 @@ export class ShadowItDetectionService {
     return newFindings;
   }
 
-  /** Query findings raised by shadow IT detection (source starts with 'shadow-it:'). */
-  async listShadowItFindings(limit = 50): Promise<typeof complianceFindings.$inferSelect[]> {
+  /**
+   * Query findings raised by shadow IT detection (source starts with 'shadow-it:').
+   *
+   * Deliberately smaller than `REPORT_ROW_LIMIT`: this is the most-recent SAMPLE the detection screen
+   * shows to explain what the scan is finding, not the register a reviewer works through. The register is
+   * `/v1/compliance/findings`, which pages.
+   */
+  async listShadowItFindings(limit = 50): Promise<(typeof complianceFindings.$inferSelect)[]> {
     const { like } = await import('drizzle-orm');
     return this.db
       .select()

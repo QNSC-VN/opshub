@@ -4,6 +4,7 @@ export * from './application/control.service';
 export * from './application/incident.service';
 export * from './application/information-asset.service';
 export * from './application/vendor.service';
+export * from './application/review-reminder.service';
 export * from './application/risk-acceptance.type-def';
 export * from './domain/risk.types';
 export * from './domain/control.types';

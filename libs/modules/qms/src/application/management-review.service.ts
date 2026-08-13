@@ -7,7 +7,7 @@ import {
   PreconditionFailedException,
   type DrizzleDB,
 } from '@platform';
-import { today, type Actor } from '@shared-kernel';
+import { today, type Actor, REPORT_ROW_LIMIT } from '@shared-kernel';
 import {
   AUDIT_ACTION,
   AUDIT_RESOURCE,
@@ -58,8 +58,13 @@ const ALLOWED_TRANSITIONS: Record<ManagementReviewStatus, readonly ManagementRev
 
 /** How many rows of any one input the agenda names. Enough to act on, not a data export. */
 const AGENDA_SAMPLE = 10;
-/** How many carried-forward actions the agenda carries. §9.3.2(a) wants all of them, within reason. */
-const CARRIED_FORWARD_LIMIT = 200;
+/**
+ * How many carried-forward actions the agenda carries. §9.3.2(a) wants all of them, within reason.
+ *
+ * The same ceiling every other report uses, by reference rather than by coincidence: two independent 200s
+ * are two numbers that drift apart the first time somebody tunes one.
+ */
+const CARRIED_FORWARD_LIMIT = REPORT_ROW_LIMIT;
 
 /**
  * Management reviews — ISO 9001 §9.3.

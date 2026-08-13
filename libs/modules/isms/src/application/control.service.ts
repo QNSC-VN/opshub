@@ -1,3 +1,4 @@
+import { REPORT_ROW_LIMIT } from '@shared-kernel';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   ConflictException,
@@ -287,7 +288,7 @@ export class ControlService {
   }
 
   /** Open risks that no control treats — the gap the link table exists to expose. */
-  async untreatedRisks(limit = 200): Promise<UntreatedRisk[]> {
+  async untreatedRisks(limit = REPORT_ROW_LIMIT): Promise<UntreatedRisk[]> {
     return this.repo.untreatedRisks(limit);
   }
 

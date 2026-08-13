@@ -8,11 +8,13 @@ import { WebhooksModule } from '@modules/webhooks';
 import { ComplianceModule, ComplianceSyncCron } from '@modules/compliance';
 import { SecurityPostureModule, SecurityPostureSyncCron } from '@modules/security-posture';
 import { ContractsModule } from '@modules/contracts';
+import { IsmsModule } from '@modules/isms';
 import { RequestExpiryCron } from './cron/request-expiry.cron';
 import { SlaBreachCron } from './cron/sla-breach.cron';
 import { DelegationExpiryCron } from './cron/delegation-expiry.cron';
 import { ContractExpiryCron } from './cron/contract-expiry.cron';
 import { StorageCleanupCron } from './cron/storage-cleanup.cron';
+import { ReviewDueCron } from './cron/review-due.cron';
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { StorageCleanupCron } from './cron/storage-cleanup.cron';
     ComplianceModule,
     SecurityPostureModule,
     ContractsModule,
+    IsmsModule,
   ],
   providers: [
     ComplianceSyncCron,
@@ -44,6 +47,7 @@ import { StorageCleanupCron } from './cron/storage-cleanup.cron';
     DelegationExpiryCron,
     ContractExpiryCron,
     StorageCleanupCron,
+    ReviewDueCron,
   ],
 })
 export class WorkerModule {}

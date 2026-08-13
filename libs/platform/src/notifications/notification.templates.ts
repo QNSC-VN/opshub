@@ -14,6 +14,7 @@ export type NotificationTemplateName =
   | 'employee.offboarded'
   | 'contract.expiring_soon'
   | 'contract.expired'
+  | 'review.due'
   | 'request.sla_breach'
   | 'request.delegation_created'
   | 'request.step_ready'
@@ -58,6 +59,21 @@ export interface NotificationTemplateVars {
     employeeName: string;
     reference: string;
     endDate: string; // YYYY-MM-DD
+  };
+  /**
+   * A periodic review that has come due — a risk, a control, an information asset, a supplier.
+   *
+   * ONE TEMPLATE FOR EVERY REGISTER, with `register` naming which one. The alternative was five
+   * near-identical templates whose only difference was a noun, and five places to edit when the wording
+   * changes. `daysOverdue` is the number that decides whether this is a nudge or a finding, so it is a
+   * variable rather than something the reader works out from `dueOn`.
+   */
+  'review.due': {
+    register: string;
+    reference: string;
+    name: string;
+    dueOn: string; // YYYY-MM-DD
+    daysOverdue: number;
   };
   'request.sla_breach': {
     requestType: string;
@@ -148,6 +164,16 @@ const templates: {
     return {
       title: 'Contract expired',
       body: `${v.employeeName}'s contract ${v.reference} reached its end date of ${v.endDate} and is now marked expired.`,
+    };
+  },
+  'review.due'(v) {
+    return {
+      title: `${v.register} review due`,
+      body:
+        `${v.reference} — ${v.name} was due for review on ${v.dueOn}` +
+        (v.daysOverdue > 0
+          ? `, ${v.daysOverdue} day(s) ago. Review it or re-date it.`
+          : ` (today). Review it or re-date it.`),
     };
   },
   'request.sla_breach'(v) {

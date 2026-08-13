@@ -6,6 +6,24 @@
  * together.
  */
 
+// ── Report ceilings ──────────────────────────────────────────────────────────
+
+/**
+ * How many rows a management report returns when nobody asked for a number.
+ *
+ * WHY A CONSTANT AND NOT A LITERAL. Ten report methods each carried their own `limit = 200`, and none of
+ * their HTTP callers pass one — so those literals were not defaults, they were the CAP on what the screen
+ * and the §9.3 agenda can ever see, spelled out ten times. Changing what a report will show meant finding
+ * all ten and hoping.
+ *
+ * WHY 200 AND NOT UNBOUNDED. A report is read to decide something. Two hundred overdue rows is already a
+ * finding about the process rather than a list to work through, and every one of these reports feeds an
+ * agenda item that samples the first handful anyway.
+ *
+ * Reports that deliberately return FEWER say so at the call site with their own reason.
+ */
+export const REPORT_ROW_LIMIT = 200;
+
 // ── Request engine type discriminators ───────────────────────────────────────
 
 export const REQUEST_TYPE = {

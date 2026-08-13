@@ -1,3 +1,4 @@
+import { REPORT_ROW_LIMIT } from '@shared-kernel';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   ConflictException,
@@ -359,17 +360,17 @@ export class VendorService {
   // ── Reports ──────────────────────────────────────────────────────────────────
 
   /** Suppliers never assessed, or past the cadence their tier demands. */
-  async reviewGaps(limit = 200): Promise<VendorReviewGap[]> {
+  async reviewGaps(limit = REPORT_ROW_LIMIT): Promise<VendorReviewGap[]> {
     return this.repo.reviewGaps(limit);
   }
 
   /** Active critical suppliers with no register risk linked — the gap the join exposes. */
-  async criticalWithoutRisk(limit = 200): Promise<Vendor[]> {
+  async criticalWithoutRisk(limit = REPORT_ROW_LIMIT): Promise<Vendor[]> {
     return this.repo.criticalWithoutRisk(limit);
   }
 
   /** Money going to suppliers who are unlinked or unassessed. */
-  async unassessedSpend(limit = 200): Promise<UnassessedSpend[]> {
+  async unassessedSpend(limit = REPORT_ROW_LIMIT): Promise<UnassessedSpend[]> {
     return this.repo.unassessedSpend(limit);
   }
 

@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, type DrizzleDB } from '@platform';
+import { REPORT_ROW_LIMIT } from '@shared-kernel';
 import { BREACH_NOTIFICATION_HOURS, IncidentService } from './incident.service';
 import type { Incident, IncidentEvent } from '../domain/incident.types';
 import { createFakeAudit } from '../../../audit/src/testing/audit.fake';
@@ -467,13 +468,16 @@ describe('breach notification', () => {
 });
 
 describe('reports', () => {
-  it('caps both reports by default', async () => {
+  it('caps both reports at the shared report ceiling', async () => {
+    // The CONSTANT, not the number it currently holds: these two used their own undocumented 100, so a
+    // reader could not tell whether it meant anything. Asserting the constant is what keeps this test
+    // about "reports share one ceiling" rather than about the value 200.
     const { service, repo } = makeService();
 
     await service.overdueBreaches();
     await service.unlinkedToRisk();
 
-    expect(repo.overdueBreaches).toHaveBeenCalledWith(100);
-    expect(repo.unlinkedToRisk).toHaveBeenCalledWith(100);
+    expect(repo.overdueBreaches).toHaveBeenCalledWith(REPORT_ROW_LIMIT);
+    expect(repo.unlinkedToRisk).toHaveBeenCalledWith(REPORT_ROW_LIMIT);
   });
 });

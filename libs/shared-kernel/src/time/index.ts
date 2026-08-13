@@ -58,6 +58,17 @@ export function toIsoDate(at: Date): string {
   return at.toISOString().slice(0, 10);
 }
 
+/**
+ * Whole days from `from` to `to`, both ISO dates. Negative when `to` precedes `from`.
+ *
+ * Lived as a private function at the bottom of `contracts.service.ts` until a second caller needed it —
+ * which is the moment a private date helper becomes two subtly different date helpers.
+ */
+export function daysBetween(from: string, to: string): number {
+  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
+  return Math.round(ms / MS_PER_DAY);
+}
+
 /** `days` after `from`, as `YYYY-MM-DD`. */
 export function addDays(from: string, days: number): string {
   const d = parseIsoDate(from);
