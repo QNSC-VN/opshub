@@ -9,9 +9,10 @@ import type { PickerOption } from '@/shared/ui';
  * and the hint is a property of the ENTITY, not of the form: an employee is always best identified by
  * their department, a course by its code.
  *
- * SEARCHING IS SERVER-SIDE WHERE THE API SUPPORTS IT. `/v1/employees` and `/v1/positions` both take
- * `search` — positions only since this branch: the SPA had shipped a search box for that list while the
- * endpoint had no such parameter, so the term was dropped and the box filtered nothing.
+ * SEARCHING IS SERVER-SIDE WHERE THE API SUPPORTS IT. `/v1/employees`, `/v1/positions`, `/v1/documents`
+ * and `/v1/assets` all take `search` — positions only since this branch: the SPA had shipped a search box
+ * for that list while the endpoint had no such parameter, so the term was dropped and the box filtered
+ * nothing.
  *
  * `/v1/training/courses` still has none, so that one term filters a fetched page. Marked below, because a
  * client-side filter over one page silently stops finding things at 100 rows and must not be mistaken for
@@ -50,6 +51,34 @@ export async function activeEmployeeOptions(term: string): Promise<PickerOption[
     value: employee.id,
     label: employee.displayName,
     hint: employee.department ?? employee.email,
+  }));
+}
+
+/**
+ * Hardware assets — the DEVICES an information asset can be recorded as living on.
+ *
+ * SERVER-SIDE SEARCH, over the asset tag, serial number and model: those are what somebody reads off the
+ * machine in front of them, and the hardware register is the one list here that grows with every laptop
+ * bought.
+ *
+ * NO STATUS FILTER, unlike `controlOptions` and `documentOptions`, which both exclude retired rows. The
+ * reasoning inverts here. A `lost` device is the one this link is most often needed for — "what was on it"
+ * is asked BECAUSE the machine went missing — and a `retired` one still held what it held. Excluding
+ * either would hide exactly the devices worth naming.
+ */
+export async function assetOptions(term: string): Promise<PickerOption[]> {
+  const { data } = await api.GET('/v1/assets', {
+    params: { query: { search: term || undefined, limit: PICKER_LIMIT, offset: 0 } },
+  });
+  return (data?.data ?? []).map((asset) => ({
+    value: asset.id,
+    label: asset.assetTag,
+    // What identifies a machine once its tag is ambiguous: the model on its lid, else the serial
+    // underneath it, else at least what kind of thing it is.
+    hint:
+      [asset.manufacturer, asset.model].filter(Boolean).join(' ') ||
+      asset.serialNumber ||
+      asset.type,
   }));
 }
 

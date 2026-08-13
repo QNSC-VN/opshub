@@ -11,7 +11,7 @@ import { useEffect, useRef, useId, type ReactNode, type KeyboardEvent } from 're
 import { X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { restoreFocus } from './restore-focus';
-import { useEscapeToClose } from './use-escape-to-close';
+import { OVERLAY_LAYER, useEscapeToClose } from './use-escape-to-close';
 
 export interface ModalProps {
   open: boolean;
@@ -106,6 +106,9 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
+        // Which overlay owns Escape, mirroring the `z-[60]` above. Kept next to the class it mirrors so
+        // the two cannot drift into disagreeing about what is on top.
+        data-overlay-layer={OVERLAY_LAYER.dialog}
         onKeyDown={handleKeyDown}
         className={cn(
           'relative z-10 w-full overflow-hidden rounded-xl bg-surface shadow-2xl ring-1 ring-border',

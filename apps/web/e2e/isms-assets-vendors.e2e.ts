@@ -20,6 +20,9 @@ import {
  *   permission (`information_asset.declassify`), and the dialog says which one it is about to do
  * - every classification change is appended with its reason, so the register answers "when did this become
  *   restricted and who said so"
+ * - the asset-to-device link is readable in BOTH directions, and the count on the row moves with it
+ * - retirement ends the changes, not the row: the entry keeps its history and its links, stops offering
+ *   every action the API would refuse, and stays reachable behind a filter
  * - a supplier is registered PROSPECTIVE and activating it needs `vendor.approve`, not `vendor.manage`
  * - `pass_with_conditions` demands its conditions, because a conditional pass with nothing written down is
  *   just a pass
@@ -67,6 +70,22 @@ async function registerAsset(
   expect(res.status(), await res.text()).toBe(201);
   const body = (await res.json()) as { data?: { id: string }; id?: string };
   return { id: body.data?.id ?? body.id!, reference };
+}
+
+/** A hardware asset to hold data, through the API. */
+async function registerDevice(
+  request: APIRequestContext,
+  assetTag: string,
+): Promise<{ id: string; assetTag: string }> {
+  const res = await request.post('/v1/assets', {
+    headers: await csrfHeaders(request),
+    // `model` is set because the picker's hint line reads it, and a hint that renders `undefined` is a
+    // defect this spec would otherwise walk straight past.
+    data: { assetTag, type: 'laptop', manufacturer: 'Playwright', model: 'Spec 13' },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const body = (await res.json()) as { data?: { id: string }; id?: string };
+  return { id: body.data?.id ?? body.id!, assetTag };
 }
 
 test.describe('information assets', () => {
@@ -159,6 +178,135 @@ test.describe('information assets', () => {
     await expect(drawer.getByText('registered as')).toBeVisible();
     await expect(drawer.getByText(/Payment identifiers removed/)).toBeVisible();
     await expect(drawer.getByText(/Scope now includes payment identifiers/)).toBeVisible();
+  });
+
+  test('links a device, reads the register backwards from it, then unlinks', async ({
+    page,
+    request,
+  }) => {
+    const asset = await registerAsset(request, unique('PWL').toUpperCase(), 'confidential', 5);
+    const device = await registerDevice(request, unique('LT').toUpperCase());
+
+    await gotoInShell(page, '/information-assets');
+    await page.getByRole('searchbox').fill(asset.reference);
+    const row = page.locator('tbody tr', { hasText: asset.reference });
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.click();
+
+    const drawer = page.getByRole('dialog', { name: `Playwright asset ${asset.reference}` });
+    await expect(drawer.getByRole('heading', { name: 'Devices (0)' })).toBeVisible();
+
+    await chooseFromPicker(page, drawer, 'Device to link', device.assetTag);
+    await expect(drawer.getByText(device.assetTag)).toBeVisible({ timeout: 15_000 });
+    /*
+     * THE COUNT IN THE HEADING MOVES. It is `deviceCount` off the list row, and the drawer reads that row
+     * back out of the list rather than holding the copy it was opened with — so a snapshot would leave the
+     * heading saying "Devices (0)" directly above the device just added to it.
+     */
+    await expect(drawer.getByRole('heading', { name: 'Devices (1)' })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // THE SAME LINK, READ BACKWARDS: not "where is this data" but "what is on that machine".
+    await drawer.getByRole('button', { name: `What ${device.assetTag} holds` }).click();
+    const report = page.getByRole('dialog', { name: 'What a device holds' });
+    // `exact`, because the report shows the NAME above the reference and `registerAsset` builds the name
+    // out of the reference — a substring match resolves to both lines.
+    await expect(report.getByText(asset.reference, { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    // The triage line an incident starts from: how much, and how bad the worst of it is.
+    await expect(report.getByText(/1 registered asset/)).toBeVisible();
+    await expect(report.getByText('Confidential').first()).toBeVisible();
+    // Personal data is what turns a lost laptop into a breach assessment; `registerAsset` sets it.
+    await expect(report.getByText(/1 hold personal data/)).toBeVisible();
+
+    /*
+     * ONE KEYPRESS, ONE OVERLAY. The report closes and the drawer behind it stays open. Escape used to be
+     * decided by document order, and pages render their dialogs BEFORE the drawer — so the drawer claimed
+     * the key and this left the report open over nothing.
+     */
+    await page.keyboard.press('Escape');
+    await expect(report).toBeHidden();
+    await expect(drawer.getByRole('heading', { name: 'Devices (1)' })).toBeVisible();
+
+    await drawer.getByRole('button', { name: `Unlink ${device.assetTag}` }).click();
+    await expect(drawer.getByRole('heading', { name: 'Devices (0)' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(drawer.getByText('Not held on any registered device')).toBeVisible();
+  });
+
+  test('retiring ends the changes but keeps the entry', async ({ page, request }) => {
+    const asset = await registerAsset(request, unique('PWR').toUpperCase(), 'confidential', 5);
+    const device = await registerDevice(request, unique('LT').toUpperCase());
+    // Linked through the API, so the assertion below is about retirement KEEPING the link rather than
+    // about this spec having managed to create one.
+    const linked = await request.put(`/v1/information-assets/${asset.id}/devices/${device.id}`, {
+      headers: await csrfHeaders(request),
+    });
+    expect(linked.status(), await linked.text()).toBe(204);
+
+    await gotoInShell(page, '/information-assets');
+    await page.getByRole('searchbox').fill(asset.reference);
+    await expect(page.locator('tbody tr', { hasText: asset.reference })).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.locator('tbody tr', { hasText: asset.reference }).click();
+
+    const drawer = page.getByRole('dialog', { name: `Playwright asset ${asset.reference}` });
+    // RETIRING LIVES IN THE DRAWER, because it is the one act here that cannot be undone and the drawer is
+    // where somebody has actually read the entry.
+    await drawer.getByRole('button', { name: 'Retire' }).click();
+    const confirm = page.getByRole('alertdialog');
+    // The API's own preconditions, said BEFORE the act instead of arriving as a 412 afterwards.
+    await expect(
+      confirm.getByText(/with its classification history and its device links/i),
+    ).toBeVisible();
+    /*
+     * AND THE CONFIRMATION IS ON TOP OF THE DRAWER IT CAME FROM. Both used `z-50`, so stacking fell to DOM
+     * order — pages render their dialogs before the drawer — and the drawer panel painted ABOVE the
+     * confirmation's backdrop: still lit, still clickable, guarding nothing while a decision was pending.
+     *
+     * A trial click is the assertion: it runs Playwright's actionability check and clicks nothing, so it
+     * fails exactly when the backdrop is NOT intercepting.
+     */
+    await expect(
+      drawer.getByRole('button', { name: 'Reclassify' }).click({ trial: true, timeout: 2_000 }),
+    ).rejects.toThrow();
+    await confirm.getByRole('button', { name: /retire asset/i }).click();
+
+    // Out of the register, because the register means the CURRENT inventory — and the drawer closes with
+    // it, since it reads the row out of the list.
+    await expect(page.locator('tbody tr', { hasText: asset.reference })).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await expect(drawer).toBeHidden();
+
+    // STILL THERE, though. A retired row that could not be found again would be indistinguishable from a
+    // delete, and a risk assessment from last year still points at it.
+    await page.getByRole('button', { name: 'Include retired' }).click();
+    const retired = page.locator('tbody tr', { hasText: asset.reference });
+    await expect(retired).toBeVisible({ timeout: 15_000 });
+    await expect(retired).toContainText('Retired');
+    // AND IT OFFERS NOTHING. Every action the API refuses on a retired asset is absent rather than present
+    // and failing.
+    await expect(retired.getByRole('button', { name: 'Reclassify' })).toHaveCount(0);
+    await expect(retired.getByRole('button', { name: 'Reviewed' })).toHaveCount(0);
+
+    await retired.click();
+    const retiredDrawer = page.getByRole('dialog', {
+      name: `Playwright asset ${asset.reference}`,
+    });
+    await expect(retiredDrawer.getByRole('button', { name: 'Retire' })).toHaveCount(0);
+    // The link SURVIVED, and cannot be added to: `linkDevice` refuses a retired asset, `unlinkDevice` does
+    // not — so the picker goes and the unlink stays.
+    await expect(retiredDrawer.getByRole('heading', { name: 'Devices (1)' })).toBeVisible();
+    await expect(retiredDrawer.getByText(/no new device can be recorded/)).toBeVisible();
+    await expect(retiredDrawer.getByRole('combobox', { name: 'Device to link' })).toHaveCount(0);
+    await expect(
+      retiredDrawer.getByRole('button', { name: `Unlink ${device.assetTag}` }),
+    ).toBeVisible();
   });
 });
 

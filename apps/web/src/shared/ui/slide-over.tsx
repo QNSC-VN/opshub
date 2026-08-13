@@ -13,7 +13,7 @@ import { useEffect, useRef, useId, type ReactNode, type KeyboardEvent } from 're
 import { X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { restoreFocus } from './restore-focus';
-import { useEscapeToClose } from './use-escape-to-close';
+import { OVERLAY_LAYER, useEscapeToClose } from './use-escape-to-close';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -162,6 +162,9 @@ export function SlideOver({
         aria-hidden={open ? undefined : true}
         aria-labelledby={open ? titleId : undefined}
         aria-describedby={open && description ? descId : undefined}
+        // Below any dialog opened FROM this drawer, mirroring the `z-50` below. Pages render their dialogs
+        // before the drawer, so document order would otherwise hand Escape to whatever is underneath.
+        data-overlay-layer={open ? OVERLAY_LAYER.drawer : undefined}
         onKeyDown={handleKeyDown}
         className={cn(
           'fixed inset-y-0 right-0 z-50 flex flex-col',
