@@ -4,7 +4,9 @@ import { AlertTriangle, DollarSign, Package, PackageOpen, Plus, Users } from 'lu
 import {
   Button,
   DataTable,
+  EntityDetailPanel,
   ListPage,
+  SlideOverSection,
   StatCard,
   StatGrid,
   StatusBadge,
@@ -16,6 +18,7 @@ import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate, formatMoney } from '@/shared/lib/format';
 import { AddLicenseModal } from './add-license-modal';
 import { SeatUtilizationList, SpendByProductChart } from './finops-charts';
+import { SeatPanel } from './seat-panel';
 import { useLicenses, useUtilization, type SoftwareLicense } from './use-licenses';
 
 /*
@@ -46,6 +49,7 @@ function isExpiringSoon(l: SoftwareLicense): boolean {
 export function FinOpsPage() {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const list = useListState(50);
 
   const licenses = useLicenses(list.search, list.limit, list.offset);
@@ -53,6 +57,12 @@ export function FinOpsPage() {
 
   const rows = licenses.data?.data ?? [];
   const util = utilization.data ?? [];
+
+  // Re-read from the page's own list, so assigning or revoking a seat moves the drawer with the row.
+  const selected = selectedId ? (rows.find((l) => l.id === selectedId) ?? null) : null;
+  // The report row for the open licence: `usedSeats` is the API's count, which is the number the seat cap is
+  // enforced against — recomputing it here would be a second answer to the same question.
+  const selectedUtil = selectedId ? util.find((r) => r.licenseId === selectedId) : undefined;
 
   const monthlySpend = util.reduce((sum, r) => sum + (r.monthlySpendCents ?? 0), 0);
   const assignedSeats = util.reduce((sum, r) => sum + r.usedSeats, 0);
@@ -207,9 +217,61 @@ export function FinOpsPage() {
                 </Button>
               )
             }
+            onRowClick={(l) => setSelectedId(l.id)}
+            isRowActive={(l) => l.id === selectedId}
           />
         </div>
       </ListPage>
+
+      {/* The drawer exists for the SEATS. The tiles say how much is used in aggregate; this is where a seat is
+          given to somebody or taken back, which is the only place the aggregate can be changed. */}
+      <EntityDetailPanel
+        open={!!selectedId}
+        onClose={() => setSelectedId(null)}
+        title={selected?.name ?? 'License'}
+        description={selected?.vendor}
+        items={
+          selected
+            ? [
+                { label: 'Vendor', value: selected.vendor },
+                { label: 'Type', value: humanizeStatus(selected.licenseType) },
+                {
+                  label: 'Status',
+                  value: (
+                    <StatusBadge tone={statusTone(selected.status)}>
+                      {humanizeStatus(selected.status)}
+                    </StatusBadge>
+                  ),
+                },
+                {
+                  label: 'Seats',
+                  // "Unmetered" rather than a dash: the API enforces a cap only when a count is set, so the
+                  // absence changes what the product DOES, not just what the cell shows.
+                  value: selected.seatCount != null ? String(selected.seatCount) : 'Unmetered',
+                },
+                { label: 'Per seat', value: formatMoney(selected.costPerSeatCents) },
+                {
+                  label: 'Committed monthly',
+                  value:
+                    selected.seatCount != null && selected.costPerSeatCents != null
+                      ? formatMoney(selected.seatCount * selected.costPerSeatCents)
+                      : '—',
+                },
+                { label: 'Renewal', value: formatDate(selected.renewalDate) },
+                ...(selected.notes ? [{ label: 'Notes', wide: true, value: selected.notes }] : []),
+              ]
+            : []
+        }
+        activity={
+          selected ? { resourceId: selected.id, resourceType: 'software_license' } : undefined
+        }
+      >
+        {selected && (
+          <SlideOverSection title="Seats">
+            <SeatPanel license={selected} utilization={selectedUtil} />
+          </SlideOverSection>
+        )}
+      </EntityDetailPanel>
     </>
   );
 }
