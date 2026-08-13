@@ -40,10 +40,14 @@ import { describe, expect, it } from 'vitest';
 // 40 → 38, because promoting workforce's `RowAction` and `PanelAction` into the kit rebuilt them on
 // `Button`: two components carrying their own tone maps became none, and every caller lost a raw button.
 //
-// The 38 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
+// 38 → 36 (requests). Its approve/reject cell was two hand-rolled buttons carrying their own colour
+// classes — `text-success`/`hover:bg-success-bg` and the danger pair — which is exactly the per-page tone
+// map `RowAction` exists to remove. Found while adding the withdraw action beside them.
+//
+// The 36 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
 // few widgets (the notification bell, the AI panel, the app shell's own nav) that were never screens.
 // Worth checking what is actually left before assuming the number can keep falling.
-const MAX_RAW_BUTTON = 38;
+const MAX_RAW_BUTTON = 36;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;

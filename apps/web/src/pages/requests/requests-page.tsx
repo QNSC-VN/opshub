@@ -1,12 +1,18 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, Inbox, XCircle } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Inbox } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Badge,
+  ConfirmDialog,
   DataTable,
   EntityDetailPanel,
   ListPage,
+  PanelAction,
+  RowAction,
+  RowActions,
   SegmentedControl,
   SlideOverSection,
   StatusBadge,
@@ -15,9 +21,14 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
+import { useCurrentUser } from '@/shared/hooks/use-current-user';
+import { usePermissions } from '@/shared/hooks/use-permissions';
 import { formatDate, formatDateTime } from '@/shared/lib/format';
 import { ReviewModal } from './review-modal';
+import { RequestCommentsPanel } from './request-comments-panel';
+import { canCancelRequest, isOpen } from './request-policy';
 import { isSlaAtRisk, isSlaBreached } from './request-sla';
+import { useRequests } from './use-requests';
 import type { RequestItemResponse, RequestStatus } from '@/shared/api/types';
 
 /*
@@ -50,43 +61,55 @@ const PRIORITY_TONE = {
   urgent: 'red',
 } as const;
 
-function useRequests(filter: RequestStatus | 'my_queue' | '', limit: number, offset: number) {
-  return useQuery({
-    queryKey: ['requests', 'list', filter, limit, offset],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/requests', {
-        params: {
-          query: {
-            limit,
-            offset,
-            // `myQueue` is the parameter the API defines; `status` is the other filter. Exactly one of
-            // them applies, which is why this is a branch rather than two optional fields.
-            ...(filter === 'my_queue'
-              ? { myQueue: true }
-              : filter
-                ? { status: filter as RequestStatus }
-                : {}),
-          },
-        },
-      });
-      if (error || !data) throw new Error('Failed to load requests');
-      return data;
-    },
-  });
-}
-
 export function RequestsPage() {
   const qc = useQueryClient();
+  const me = useCurrentUser();
+  const { can } = usePermissions();
   const [filter, setFilter] = useState<RequestStatus | 'my_queue' | ''>('my_queue');
   const [modal, setModal] = useState<{
     req: RequestItemResponse;
     action: 'approve' | 'reject';
   } | null>(null);
-  const [selected, setSelected] = useState<RequestItemResponse | null>(null);
+  const [cancelling, setCancelling] = useState<RequestItemResponse | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const list = useListState();
 
   const requests = useRequests(filter, list.limit, list.offset);
+  const rows = requests.data?.data as RequestItemResponse[] | undefined;
   const invalidate = () => qc.invalidateQueries({ queryKey: ['requests'] });
+
+  /**
+   * The open request, READ BACK OUT OF THE LIST rather than held as a copy.
+   *
+   * Cancelling from the drawer moves the row's status, and a snapshot would leave the drawer showing
+   * "Pending" over a request that had just been withdrawn — with its Cancel button still offered.
+   */
+  const selected = selectedId ? (rows?.find((req) => req.id === selectedId) ?? null) : null;
+
+  // See `request-policy.ts` for why the rule lives there rather than in the JSX that reads it.
+  const canCancel = (req: RequestItemResponse) =>
+    canCancelRequest(req, me.data?.sub, can('rbac.manage'));
+
+  async function cancel() {
+    if (!cancelling) return;
+    const { error } = await api.POST('/v1/requests/{id}/cancel', {
+      params: { path: { id: cancelling.id } },
+      /*
+       * EMPTY BODY, deliberately. The route accepts `ReviewRequestDto` and so advertises an optional
+       * `note`, but the controller calls `engine.cancel(id, user)` and drops it — nothing is stored and
+       * nothing is audited from it. Collecting a reason here would be asking for text the product throws
+       * away, which is worse than not asking.
+       */
+      body: {},
+    });
+    setCancelling(null);
+    if (error) {
+      toast.error(apiErrorMessage(error, 'Failed to cancel the request.'));
+      return;
+    }
+    toast.success('Request cancelled');
+    invalidate();
+  }
 
   const columns: DataTableColumn<RequestItemResponse>[] = [
     {
@@ -135,30 +158,20 @@ export function RequestsPage() {
     {
       key: 'actions',
       header: 'Actions',
-      cell: (req) => {
-        const actionable = req.status === 'pending' || req.status === 'in_review';
-        if (!actionable) return null;
-        return (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setModal({ req, action: 'approve' })}
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
-            >
-              <CheckCircle className="h-3.5 w-3.5" strokeWidth={2} />
+      align: 'right',
+      // `RowActions`/`RowAction` from the kit, not two hand-rolled buttons with their own colour classes —
+      // which is what these were, and the tones they wanted are variants `Button` already has.
+      cell: (req) =>
+        isOpen(req.status) ? (
+          <RowActions>
+            <RowAction tone="success" onClick={() => setModal({ req, action: 'approve' })}>
               Approve
-            </button>
-            <button
-              type="button"
-              onClick={() => setModal({ req, action: 'reject' })}
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger-bg"
-            >
-              <XCircle className="h-3.5 w-3.5" strokeWidth={2} />
+            </RowAction>
+            <RowAction tone="danger" onClick={() => setModal({ req, action: 'reject' })}>
               Reject
-            </button>
-          </div>
-        );
-      },
+            </RowAction>
+          </RowActions>
+        ) : null,
     },
   ];
 
@@ -172,6 +185,18 @@ export function RequestsPage() {
           onSuccess={invalidate}
         />
       )}
+
+      {/* The API's own precondition, said before the act: cancelling is terminal, and the alternative for
+          somebody who is not the requester is to REJECT — which is a decision, not a withdrawal. */}
+      <ConfirmDialog
+        open={!!cancelling}
+        variant="danger"
+        onCancel={() => setCancelling(null)}
+        onConfirm={cancel}
+        title="Withdraw this request?"
+        description="It stops awaiting a decision and cannot be reopened — a new request would have to be raised. The discussion and the approval history stay."
+        confirmLabel="Withdraw request"
+      />
 
       <ListPage
         title="Requests Inbox"
@@ -193,7 +218,7 @@ export function RequestsPage() {
       >
         <DataTable
           columns={columns}
-          rows={requests.data?.data as RequestItemResponse[] | undefined}
+          rows={rows}
           isLoading={requests.isLoading}
           isError={requests.isError}
           errorMessage="Failed to load requests."
@@ -201,18 +226,25 @@ export function RequestsPage() {
             filter === 'my_queue' ? 'Nothing awaiting your decision' : 'No requests found'
           }
           emptyIcon={Inbox}
-          onRowClick={setSelected}
-          isRowActive={(req) => req.id === selected?.id}
+          onRowClick={(req) => setSelectedId(req.id)}
+          isRowActive={(req) => req.id === selectedId}
         />
       </ListPage>
 
       <EntityDetailPanel
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
         width="lg"
         title={selected ? humanizeStatus(selected.type) : 'Request'}
         description={
           selected ? `${selected.id.slice(0, 8)} · ${humanizeStatus(selected.status)}` : undefined
+        }
+        headerActions={
+          selected && canCancel(selected) ? (
+            <PanelAction tone="danger" onClick={() => setCancelling(selected)}>
+              Withdraw
+            </PanelAction>
+          ) : undefined
         }
         items={
           selected
@@ -279,6 +311,12 @@ export function RequestsPage() {
                 </li>
               ))}
             </ol>
+          </SlideOverSection>
+        )}
+
+        {selected && (
+          <SlideOverSection title="Discussion">
+            <RequestCommentsPanel requestId={selected.id} />
           </SlideOverSection>
         )}
       </EntityDetailPanel>
