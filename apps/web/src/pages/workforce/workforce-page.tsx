@@ -4,6 +4,7 @@ import { TimesheetsTab } from './timesheets-tab';
 import { LeaveTab } from './leave-tab';
 import { OvertimeTab } from './overtime-tab';
 import { ShiftsTab } from './shifts-tab';
+import { LeaveAdminTab } from './leave-admin-tab';
 
 /*
  * WHAT THIS SCREEN NO LONGER CARRIES
@@ -20,11 +21,14 @@ import { ShiftsTab } from './shifts-tab';
  * `new Date('2026-03-04')` was rendering as the 3rd for anybody behind UTC.
  */
 
-type WorkforceTab = 'timesheets' | 'leave' | 'overtime' | 'shifts';
+type WorkforceTab = 'timesheets' | 'leave' | 'balances' | 'overtime' | 'shifts';
 
 const WORKFORCE_TABS: { value: WorkforceTab; label: string }[] = [
   { value: 'timesheets', label: 'Timesheets' },
   { value: 'leave', label: 'Leave' },
+  // Next to Leave, not at the end: "how many days do I have" is the question somebody asks on the way to
+  // filing a request, and the two tabs read the same rows from different ends.
+  { value: 'balances', label: 'Balances & calendar' },
   { value: 'overtime', label: 'Overtime' },
   { value: 'shifts', label: 'Shifts' },
 ];
@@ -43,7 +47,7 @@ export function WorkforcePage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Workforce"
-        description="Timesheets, leave, overtime and shift logs — each with its own approval flow."
+        description="Timesheets, leave, overtime and shift logs — each with its own approval flow — plus leave balances and the holiday calendar."
       />
 
       <Tabs items={WORKFORCE_TABS} value={tab} onChange={setTab} idPrefix="workforce" />
@@ -52,6 +56,7 @@ export function WorkforcePage() {
       <TabPanel idPrefix="workforce" value={tab}>
         {tab === 'timesheets' && <TimesheetsTab />}
         {tab === 'leave' && <LeaveTab />}
+        {tab === 'balances' && <LeaveAdminTab />}
         {tab === 'overtime' && <OvertimeTab />}
         {tab === 'shifts' && <ShiftsTab />}
       </TabPanel>
