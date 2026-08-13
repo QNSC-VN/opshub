@@ -86,7 +86,14 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      /*
+       * ABOVE THE SLIDE-OVER, not beside it. Both used `z-50`, so stacking fell to DOM order — and a page
+       * renders its modals before its drawer, which put every modal opened FROM a drawer behind the drawer
+       * panel. The bottom-right of the dialog is where the submit button lives, so it was the part covered:
+       * clickable in the middle, dead where it mattered. Measured in the browser, where a renewal submit
+       * never became "stable" because the overlay above it never stopped moving.
+       */
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
