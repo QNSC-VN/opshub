@@ -151,6 +151,50 @@ export async function contextAs(email: string): Promise<APIRequestContext> {
  * mine did, and that difference is what failed this spec in CI while it passed locally for the third
  * time in this migration. Create what you assert on.
  */
+/**
+ * The signed-in seat's own employee id.
+ *
+ * Every spec that has to name an OWNER needs this, and three of them had grown their own copy — which is
+ * how one of them would eventually keep calling a route the others had moved on from. `sub` on `/auth/me`
+ * IS the employee id here; that is not obvious enough to re-derive per file.
+ */
+export async function myEmployeeId(request: APIRequestContext): Promise<string> {
+  const me = await request.get('/v1/auth/me');
+  expect(me.ok(), await me.text()).toBe(true);
+  return ((await me.json()) as { sub: string }).sub;
+}
+
+/**
+ * A register risk, owned by the caller, through the API.
+ *
+ * Shared because two suites need one for different reasons: the risk register's own journeys, and the
+ * supplier screen, which links a risk to a vendor. The SCORE is passed in because the band a risk falls
+ * into is what several assertions are about — `likelihood × impact` is a generated column, so the only way
+ * to choose the band is to choose the factors.
+ */
+export async function createRisk(
+  request: APIRequestContext,
+  reference: string,
+  likelihood: number,
+  impact: number,
+): Promise<{ id: string; reference: string }> {
+  const ownerId = await myEmployeeId(request);
+  const res = await request.post('/v1/risks', {
+    headers: await csrfHeaders(request),
+    data: {
+      reference,
+      title: `Playwright risk ${reference}`,
+      description: 'Created by an e2e spec so the register has something to act on.',
+      category: 'Access control',
+      ownerId,
+      inherent: { likelihood, impact },
+    },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const body = (await res.json()) as { data?: { id: string }; id?: string };
+  return { id: body.data?.id ?? body.id!, reference };
+}
+
 export async function createAccessRequest(request: APIRequestContext): Promise<string> {
   const res = await request.post('/v1/access-requests', {
     headers: await csrfHeaders(request),

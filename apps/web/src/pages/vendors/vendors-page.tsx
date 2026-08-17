@@ -71,7 +71,7 @@ export function VendorsPage() {
     vendor: Vendor;
     action: 'activate' | 'reinstate';
   } | null>(null);
-  const [selected, setSelected] = useState<Vendor | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const vendors = useVendors({
     status,
@@ -83,6 +83,17 @@ export function VendorsPage() {
   });
   const levels = useCriticalityLevels();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['vendors'] });
+
+  /**
+   * The open supplier, READ BACK OUT OF THE LIST rather than held as a copy.
+   *
+   * `riskCount` is on the row and appears in the drawer's own section heading, so linking a risk from
+   * inside the drawer changes it. A snapshot taken when the row was clicked would keep showing the old
+   * number directly above the risk that had just been added to it.
+   */
+  const selected = selectedId
+    ? (vendors.data?.data?.find((vendor) => vendor.id === selectedId) ?? null)
+    : null;
 
   async function runApproval() {
     if (!approving) return;
@@ -322,14 +333,14 @@ export function VendorsPage() {
           errorMessage="Failed to load the supplier register."
           emptyMessage="No suppliers match these filters"
           emptyIcon={Building2}
-          onRowClick={setSelected}
-          isRowActive={(vendor) => vendor.id === selected?.id}
+          onRowClick={(vendor) => setSelectedId(vendor.id)}
+          isRowActive={(vendor) => vendor.id === selectedId}
         />
       </ListPage>
 
       <EntityDetailPanel
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
         title={selected?.name ?? 'Supplier'}
         description={selected?.reference}
         headerActions={
@@ -419,7 +430,12 @@ export function VendorsPage() {
               <VendorAssessmentsPanel vendorId={selected.id} />
             </SlideOverSection>
             <SlideOverSection title={`Risks (${selected.riskCount})`}>
-              <VendorRisksPanel vendorId={selected.id} criticality={selected.criticality} />
+              <VendorRisksPanel
+                vendorId={selected.id}
+                criticality={selected.criticality}
+                canManage={canManage}
+                terminated={selected.status === 'terminated'}
+              />
             </SlideOverSection>
           </>
         )}

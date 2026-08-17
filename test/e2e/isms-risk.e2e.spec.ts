@@ -510,6 +510,50 @@ describe('the register view', () => {
     // A closed risk has no review — it would otherwise sit in the queue forever.
     expect(await queue()).not.toContain(due.id);
   });
+
+  /**
+   * `search`, added so the supplier screen's risk picker can be searched BY THE SERVER.
+   *
+   * The register grows with every risk an organisation records and has no natural ceiling, so a
+   * client-side filter over one page would silently stop finding things at the page limit.
+   *
+   * THE DESCRIPTION IS DELIBERATELY NOT MATCHED, and that is the assertion worth having here. A
+   * description is a paragraph; including it makes a two-letter term return most of the register, which
+   * is indistinguishable from the filter not working.
+   */
+  it('searches the reference, title and category — and not the description', async () => {
+    const token = `ZQX${RUN}`;
+    const reference = nextRef();
+    const created = await apiRequest(app, security, 'POST', '/risks', {
+      reference,
+      title: `Supplier concentration ${token}`,
+      // The token appears here too, under a DIFFERENT spelling, so a description match is detectable.
+      description: `Only one provider can deliver this service. Internal note ${token}DESC.`,
+      category: `third-party-${token}`,
+      ownerId: FIXTURE.SECURITY.id,
+      inherent: { likelihood: 3, impact: 4 },
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const risk = unwrap<RiskRow>(created.body);
+
+    const find = (term: string) =>
+      apiRequest(app, security, 'GET', `/risks?search=${encodeURIComponent(term)}&limit=100`).then(
+        (r) => unwrap<RiskRow[]>(r.body).map((x) => x.id),
+      );
+
+    // Title, reference and category all match.
+    expect(await find(token)).toContain(risk.id);
+    expect(await find(reference)).toContain(risk.id);
+    expect(await find(`third-party-${token}`)).toContain(risk.id);
+    // Case-insensitive: nobody types a reference in the case it was stored in.
+    expect(await find(token.toLowerCase())).toContain(risk.id);
+
+    // The description is NOT searched. `${token}DESC` exists only there.
+    expect(await find(`${token}DESC`)).not.toContain(risk.id);
+
+    // And a term that matches nothing returns nothing rather than everything.
+    expect(await find(`${token}-no-such-risk`)).toHaveLength(0);
+  });
 });
 
 describe('authorization', () => {

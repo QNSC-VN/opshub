@@ -2985,7 +2985,7 @@ export interface paths {
     };
     /**
      * The risk register, worst first
-     * @description Ordered by inherent score descending. `minInherentScore` narrows to what matters; `reviewDueOnBefore` gives the review queue for OPEN risks only.
+     * @description Ordered by inherent score descending. `minInherentScore` narrows to what matters; `reviewDueOnBefore` gives the review queue for OPEN risks only. `search` matches the reference, title or category — not the description, which would match most of the register.
      */
     get: operations['RiskController_list'];
     put?: never;
@@ -16321,6 +16321,7 @@ export interface operations {
         assetId?: string;
         reviewDueOnOrBefore?: string;
         minInherentScore?: number;
+        search?: string;
         limit?: number;
         offset?: number;
       };

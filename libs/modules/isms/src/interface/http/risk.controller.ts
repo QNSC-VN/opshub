@@ -100,7 +100,8 @@ export class RiskController {
     summary: 'The risk register, worst first',
     description:
       'Ordered by inherent score descending. `minInherentScore` narrows to what matters; ' +
-      '`reviewDueOnBefore` gives the review queue for OPEN risks only.',
+      '`reviewDueOnBefore` gives the review queue for OPEN risks only. `search` matches the ' +
+      'reference, title or category — not the description, which would match most of the register.',
   })
   @ApiPagedResponse(RiskResponseDto)
   @ApiCommonErrors(401, 403)
@@ -113,6 +114,7 @@ export class RiskController {
         assetId: query.assetId,
         reviewDueOnOrBefore: query.reviewDueOnOrBefore,
         minInherentScore: query.minInherentScore,
+        search: query.search,
       },
       query.limit,
       query.offset,
