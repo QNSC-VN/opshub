@@ -65,8 +65,10 @@ test.describe('compliance', () => {
     await expect(page.getByText('Failed to load software catalog.')).toHaveCount(0);
     await expect(page.getByText('No software entries found')).toHaveCount(0);
 
-    // A header per declared column.
-    await expect(table.getByRole('columnheader')).toHaveCount(4);
+    // A header per declared column. FIVE since the listing became changeable: the actions column carries
+    // the Reclassify control, and its header is deliberately blank like every other actions column in the
+    // SPA. This assertion earned its keep by catching that change rather than letting it pass unnoticed.
+    await expect(table.getByRole('columnheader')).toHaveCount(5);
   });
 
   test('reports the count, and pages only when there is a second page', async ({
@@ -161,5 +163,54 @@ test.describe('compliance', () => {
     const table = page.getByRole('table');
     await expect(table).toBeVisible();
     await expect(page.getByText('Loading…')).toHaveCount(0);
+  });
+
+  test('reclassifies a catalogue entry, with the reason it was reclassified for', async ({
+    page,
+    request,
+  }) => {
+    /*
+     * THE DECISION THE CATALOGUE EXISTS FOR, and it was unreachable. `PATCH
+     * /v1/compliance/software/{id}` had no caller, so a shadow-IT scan could report software running
+     * off-whitelist and nothing on this screen could whitelist it or ban it.
+     *
+     * SEARCH IS PART OF THE JOURNEY, not scenery: the catalogue pages, so finding the row to reclassify is
+     * the first half of the task — and the tab was sending neither `search` nor `listing`, both of which the
+     * endpoint has always taken.
+     */
+    const name = uniqueSoftwareName();
+    await addSoftware(request, name);
+
+    await gotoInShell(page, '/compliance');
+    await page.getByLabel('Search software').fill(name);
+
+    const row = page.locator('tbody tr', { hasText: name });
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row).toContainText('Review');
+
+    await row.getByRole('button', { name: 'Reclassify' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('heading', { name: new RegExp(`Reclassify ${name}`) }),
+    ).toBeVisible();
+    // Pre-filled, so changing the listing cannot silently blank a reason somebody wrote.
+    await expect(dialog.getByLabel(/^Why/)).toHaveValue('created by an e2e spec');
+
+    await dialog.getByLabel(/^Listing/).selectOption('blacklisted');
+    await dialog.getByLabel(/^Why/).fill('Peer-to-peer client, no business use.');
+    await dialog.getByRole('button', { name: 'Save listing' }).click();
+    await expect(dialog).toBeHidden();
+
+    // The badge moves, and the reason is on the row where the next person looks for it.
+    const updated = page.locator('tbody tr', { hasText: name });
+    await expect(updated).toContainText('Blacklisted', { timeout: 15_000 });
+    await expect(updated).toContainText('Peer-to-peer client');
+
+    // AND THE LISTING FILTER FINDS IT THERE. Both parameters reach the API now; before this the filter
+    // rendered and narrowed nothing.
+    await page.getByRole('radio', { name: 'Blacklisted' }).click();
+    await expect(page.locator('tbody tr', { hasText: name })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('radio', { name: 'Whitelisted' }).click();
+    await expect(page.locator('tbody tr', { hasText: name })).toHaveCount(0, { timeout: 15_000 });
   });
 });
