@@ -1,0 +1,74 @@
+/**
+ * The WORKFORCE reports — `/v1/reports/workforce/*`.
+ *
+ * Leave and overtime read together: two queries, one panel, because "who is off and who is over" is one
+ * question a manager asks at once.
+ *
+ * NOT A CHART, and the split made that visible: this panel is four stat tiles, so it imports no recharts and
+ * no `ChartSkeleton` — it was carrying both through the shared header of the old combined file.
+ */
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/shared/api/client';
+import type { LeaveSummaryResponse, OvertimeSummaryResponse } from '@/shared/api/types';
+import { dateRange } from './report-config';
+
+export function WorkforceSummary({ days }: { days: number }) {
+  const { from, to } = dateRange(days);
+
+  const leaveQ = useQuery<LeaveSummaryResponse>({
+    queryKey: ['reports', 'leave', days],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/v1/reports/workforce/leave', {
+        params: { query: { from, to } },
+      });
+      if (error || !data) throw new Error();
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const otQ = useQuery<OvertimeSummaryResponse>({
+    queryKey: ['reports', 'overtime', days],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/v1/reports/workforce/overtime', {
+        params: { query: { from, to } },
+      });
+      if (error || !data) throw new Error();
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const totalLeave = leaveQ.data?.rows.reduce((s, r) => s + r.count, 0) ?? 0;
+  const totalOTHours = otQ.data?.rows.reduce((s, r) => s + r.totalHours, 0) ?? 0;
+  const approvedOT = otQ.data?.rows.find((r) => r.status === 'approved');
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="rounded-lg bg-surface-muted p-3">
+        <p className="text-xs text-fg-subtle">Leave requests</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{totalLeave}</p>
+        <p className="mt-0.5 text-[10px] text-fg-subtle">this period</p>
+      </div>
+      <div className="rounded-lg bg-surface-muted p-3">
+        <p className="text-xs text-fg-subtle">Overtime hours</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{Math.round(totalOTHours)}</p>
+        <p className="mt-0.5 text-[10px] text-fg-subtle">total submitted</p>
+      </div>
+      <div className="rounded-lg bg-surface-muted p-3">
+        <p className="text-xs text-fg-subtle">Approved OT hours</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">
+          {Math.round(approvedOT?.totalHours ?? 0)}
+        </p>
+        <p className="mt-0.5 text-[10px] text-fg-subtle">
+          avg {Math.round(approvedOT?.avgHours ?? 0)}h / request
+        </p>
+      </div>
+      <div className="rounded-lg bg-surface-muted p-3">
+        <p className="text-xs text-fg-subtle">Approved OT requests</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{approvedOT?.count ?? 0}</p>
+        <p className="mt-0.5 text-[10px] text-fg-subtle">approved this period</p>
+      </div>
+    </div>
+  );
+}

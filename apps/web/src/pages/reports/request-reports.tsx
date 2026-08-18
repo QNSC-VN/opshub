@@ -1,17 +1,16 @@
 /**
- * ReportsPage — analytics & KPI dashboard.
+ * The REQUEST reports — everything under `/v1/reports/requests/*`.
  *
- * Sections:
- *  1. Request throughput   — daily submitted vs resolved (area chart)
- *  2. SLA compliance       — per request-type compliance rate (bar chart)
- *  3. Cycle time           — p50 / p90 hours per type (bar chart)
- *  4. Queue depth          — current pending/in-review breakdown (table)
- *  5. Asset utilization    — % assigned per asset type (bar chart)
- *  6. Compliance findings  — open by severity (donut chart)
- *  7. Workforce leave      — leave count breakdown
+ * Split from a single `report-charts.tsx` that held all seven panels and sat exactly AT the 486-line
+ * ratchet ceiling, which meant no change to any report could land until it was decomposed. The seam is the
+ * API's own report families rather than a made-up grouping, so a new endpoint has an obvious home: request
+ * reports here, asset reports next door, and so on.
  *
- * Uses recharts (already installed) — AreaChart, BarChart, PieChart.
- * Date range: last 30 days by default, settable via dropdown.
+ *  - throughput   — daily submitted vs resolved (area)
+ *  - SLA          — per-type compliance rate (bar)
+ *  - cycle time   — p50 / p90 hours per type (bar)
+ *  - queue depth  — current pending / in-review (table)
+ *  - the mix      — counts by type and status (stacked bar + table)
  */
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -19,9 +18,6 @@ import {
   Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -35,22 +31,16 @@ import type {
   SlaComplianceResponse,
   CycleTimeResponse,
   QueueDepthResponse,
-  AssetUtilizationResponse,
-  FindingsSummaryResponse,
-  LeaveSummaryResponse,
-  OvertimeSummaryResponse,
+  RequestSummaryResponse,
 } from '@/shared/api/types';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 import { ChartSkeleton, ErrorMsg } from './report-parts';
 import {
   BLUE,
+  CLOSED_STATUSES,
   GREEN,
   RED,
-  SEVERITY_COLORS,
+  REQUEST_STATUS_STACK,
   VIOLET,
-  ZINC,
   capitalize,
   dateRange,
   shortDay,
@@ -131,7 +121,7 @@ export function ThroughputChart({ days }: { days: number }) {
   );
 }
 
-// ── Section 2: SLA compliance bar chart ───────────────────────────────────────
+// ── SLA compliance ────────────────────────────────────────────────────────────
 
 export function SlaChart({ days }: { days: number }) {
   const { from, to } = dateRange(days);
@@ -185,7 +175,7 @@ export function SlaChart({ days }: { days: number }) {
   );
 }
 
-// ── Section 3: Cycle time ─────────────────────────────────────────────────────
+// ── Cycle time ────────────────────────────────────────────────────────────────
 
 export function CycleTimeChart({ days }: { days: number }) {
   const { from, to } = dateRange(days);
@@ -240,7 +230,7 @@ export function CycleTimeChart({ days }: { days: number }) {
   );
 }
 
-// ── Section 4: Queue depth table ──────────────────────────────────────────────
+// ── Queue depth ───────────────────────────────────────────────────────────────
 
 export function QueueTable() {
   const { data, isLoading, isError } = useQuery<QueueDepthResponse>({
@@ -294,70 +284,29 @@ export function QueueTable() {
   );
 }
 
-// ── Section 5: Asset utilization ──────────────────────────────────────────────
+// ── The mix ───────────────────────────────────────────────────────────────────
 
-export function AssetUtilizationChart() {
-  const { data, isLoading, isError } = useQuery<AssetUtilizationResponse>({
-    queryKey: ['reports', 'assets'],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/reports/assets/utilization');
-      if (error || !data) throw new Error();
-      return data;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  if (isLoading) return <ChartSkeleton />;
-  if (isError || !data) return <ErrorMsg />;
-
-  const chartData = data.rows.map((r) => ({
-    type: capitalize(r.type),
-    assigned: r.assigned,
-    inStock: r.inStock,
-    retired: r.retired,
-    pct: r.utilizationPct,
-  }));
-
-  if (!chartData.length)
-    return <p className="py-4 text-center text-xs text-fg-subtle">No asset data</p>;
-
-  return (
-    <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
-        <XAxis
-          dataKey="type"
-          tick={{ fontSize: 10, fill: '#a1a1aa' }}
-          tickLine={false}
-          axisLine={false}
-        />
-        <YAxis
-          tick={{ fontSize: 10, fill: '#a1a1aa' }}
-          tickLine={false}
-          axisLine={false}
-          allowDecimals={false}
-        />
-        <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e4e4e7' }}
-          formatter={(val, name) => (name === 'pct' ? `${val}%` : val)}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="assigned" name="Assigned" fill={BLUE} radius={[3, 3, 0, 0]} stackId="a" />
-        <Bar dataKey="inStock" name="In Stock" fill={GREEN} radius={[3, 3, 0, 0]} stackId="a" />
-        <Bar dataKey="retired" name="Retired" fill={ZINC} radius={[3, 3, 0, 0]} stackId="a" />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-// ── Section 6: Compliance findings donut ─────────────────────────────────────
-
-export function FindingsChart({ days }: { days: number }) {
+/**
+ * Request counts by TYPE and STATUS — what the queue is made of.
+ *
+ * WHY A STACKED BAR AND NOT ANOTHER LINE. The other three request panels are all about time: how many per
+ * day, how often the SLA was met, how long things took. None answers "what is in here" — a cross-tab of
+ * type against status is a composition, and the bar's total is a number somebody wants as much as its parts.
+ *
+ * A TABLE SITS UNDER IT, and not as an afterthought. Two segments in this stack can be small enough to be
+ * unclickable, the neutral one is under 3:1 against the surface, and identity in a chart must never rest on
+ * colour alone — so the exact grid is readable as text, and it also keeps `cancelled` and `expired` distinct
+ * where the chart folds them together.
+ *
+ * The 2px surface-coloured stroke between segments is a spacer, not a border: touching fills of similar
+ * lightness merge into one block, and the gap is what makes five segments countable.
+ */
+export function RequestMixChart({ days }: { days: number }) {
   const { from, to } = dateRange(days);
-  const { data, isLoading, isError } = useQuery<FindingsSummaryResponse>({
-    queryKey: ['reports', 'findings', days],
+  const { data, isLoading, isError } = useQuery<RequestSummaryResponse>({
+    queryKey: ['reports', 'request-summary', days],
     queryFn: async () => {
-      const { data, error } = await api.GET('/v1/reports/compliance/findings', {
+      const { data, error } = await api.GET('/v1/reports/requests/summary', {
         params: { query: { from, to } },
       });
       if (error || !data) throw new Error();
@@ -368,118 +317,117 @@ export function FindingsChart({ days }: { days: number }) {
 
   if (isLoading) return <ChartSkeleton />;
   if (isError || !data) return <ErrorMsg />;
+  if (!data.rows.length)
+    return <p className="py-8 text-center text-xs text-fg-subtle">No requests in this window</p>;
 
-  // Aggregate open findings by severity
-  const pieData = data.rows
-    .filter((r) => r.open > 0)
-    .map((r) => ({ name: capitalize(r.severity), value: r.open, severity: r.severity }));
+  /*
+   * One row per TYPE, one key per stack segment. `cancelled` and `expired` both land on `closed` — see
+   * `REQUEST_STATUS_STACK` for why the chart folds them and the table below does not.
+   */
+  const byType = new Map<string, Record<string, number>>();
+  for (const row of data.rows) {
+    const bucket = byType.get(row.type) ?? {};
+    const key = (CLOSED_STATUSES as readonly string[]).includes(row.status) ? 'closed' : row.status;
+    bucket[key] = (bucket[key] ?? 0) + row.count;
+    byType.set(row.type, bucket);
+  }
+  /*
+   * ONE ORDER, BUSIEST FIRST, shared by the chart and the table below it. Deriving them separately is how
+   * the two came to disagree — the chart sorted and the table kept insertion order, so the same panel
+   * listed its types two ways. Caught by the spec, which is why it asserts the order at all.
+   */
+  const ordered = [...byType.entries()]
+    .map(([type, counts]) => ({
+      type,
+      counts,
+      total: Object.values(counts).reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => b.total - a.total);
 
-  if (!pieData.length)
-    return (
-      <div className="flex flex-col items-center justify-center h-48 gap-2">
-        <p className="text-3xl">✅</p>
-        <p className="text-sm text-fg-muted font-medium">No open findings</p>
-      </div>
-    );
+  const chartRows = ordered.map(({ type, counts }) => ({ type: capitalize(type), ...counts }));
+  const statuses = [...new Set(data.rows.map((r) => r.status))].sort();
 
   return (
-    <div className="flex items-center gap-6">
-      <ResponsiveContainer width={160} height={160}>
-        <PieChart>
-          <Pie
-            data={pieData}
-            cx="50%"
-            cy="50%"
-            innerRadius={45}
-            outerRadius={70}
-            paddingAngle={3}
-            dataKey="value"
-          >
-            {pieData.map((entry, i) => (
-              <Cell key={i} fill={SEVERITY_COLORS[entry.severity] ?? ZINC} />
-            ))}
-          </Pie>
-          <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e4e4e7' }} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="flex flex-col gap-2">
-        {pieData.map((entry) => (
-          <div key={entry.name} className="flex items-center gap-2 text-xs">
-            <span
-              className="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ background: SEVERITY_COLORS[entry.severity] ?? ZINC }}
+    /*
+     * A BLOCK wrapper, not `flex flex-col`. `ResponsiveContainer width="100%"` measures its parent, and
+     * inside a flex column it resolved to zero — so the chart silently drew nothing while the table beside it
+     * rendered fine. Measured in a real browser; jsdom cannot see it, and the panel looked complete because
+     * the table carried the numbers. The other charts on this page return the container as their root and
+     * never hit it.
+     */
+    <div className="space-y-4">
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={chartRows} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+          <XAxis dataKey="type" tick={{ fontSize: 11 }} stroke="var(--color-fg-subtle)" />
+          <YAxis tick={{ fontSize: 11 }} stroke="var(--color-fg-subtle)" allowDecimals={false} />
+          <Tooltip
+            contentStyle={{
+              fontSize: 12,
+              borderRadius: 8,
+              border: '1px solid var(--color-border)',
+            }}
+          />
+          {/* Present because there is more than one series — identity is never colour alone. */}
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {REQUEST_STATUS_STACK.map((segment, i) => (
+            <Bar
+              key={segment.key}
+              dataKey={segment.key}
+              name={segment.label}
+              stackId="mix"
+              fill={segment.color}
+              // The spacer: a surface-coloured hairline so adjacent fills stay countable.
+              stroke="var(--color-surface)"
+              strokeWidth={2}
+              // Only the top segment gets the rounded data-end, so the stack reads as one bar.
+              radius={i === REQUEST_STATUS_STACK.length - 1 ? [4, 4, 0, 0] : undefined}
             />
-            <span className="text-fg-muted">{entry.name}</span>
-            <span className="ml-auto font-semibold tabular-nums text-fg">{entry.value}</span>
-          </div>
-        ))}
-        <p className="mt-1 text-[10px] text-fg-subtle">open findings</p>
-      </div>
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+
+      {/* The same grid as text. Also the only place `cancelled` and `expired` are separable. */}
+      <table className="w-full text-xs">
+        <caption className="sr-only">Request counts by type and status</caption>
+        <thead>
+          <tr className="border-b border-border text-fg-subtle">
+            <th scope="col" className="py-1.5 text-left font-medium">
+              Type
+            </th>
+            {statuses.map((status) => (
+              <th key={status} scope="col" className="py-1.5 text-right font-medium">
+                {capitalize(status)}
+              </th>
+            ))}
+            <th scope="col" className="py-1.5 text-right font-medium">
+              Total
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {ordered.map(({ type }) => {
+            const cells = statuses.map(
+              (status) => data.rows.find((r) => r.type === type && r.status === status)?.count ?? 0,
+            );
+            return (
+              <tr key={type} className="border-b border-border/60">
+                <th scope="row" className="py-1.5 text-left font-medium text-fg">
+                  {capitalize(type)}
+                </th>
+                {cells.map((count, i) => (
+                  <td key={statuses[i]} className="py-1.5 text-right tabular-nums text-fg-muted">
+                    {count}
+                  </td>
+                ))}
+                <td className="py-1.5 text-right font-semibold tabular-nums text-fg">
+                  {cells.reduce((a, b) => a + b, 0)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
-
-// ── Section 7: Leave & Overtime summary ───────────────────────────────────────
-
-export function WorkforceSummary({ days }: { days: number }) {
-  const { from, to } = dateRange(days);
-
-  const leaveQ = useQuery<LeaveSummaryResponse>({
-    queryKey: ['reports', 'leave', days],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/reports/workforce/leave', {
-        params: { query: { from, to } },
-      });
-      if (error || !data) throw new Error();
-      return data;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  const otQ = useQuery<OvertimeSummaryResponse>({
-    queryKey: ['reports', 'overtime', days],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/reports/workforce/overtime', {
-        params: { query: { from, to } },
-      });
-      if (error || !data) throw new Error();
-      return data;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  const totalLeave = leaveQ.data?.rows.reduce((s, r) => s + r.count, 0) ?? 0;
-  const totalOTHours = otQ.data?.rows.reduce((s, r) => s + r.totalHours, 0) ?? 0;
-  const approvedOT = otQ.data?.rows.find((r) => r.status === 'approved');
-
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="rounded-lg bg-surface-muted p-3">
-        <p className="text-xs text-fg-subtle">Leave requests</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{totalLeave}</p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">this period</p>
-      </div>
-      <div className="rounded-lg bg-surface-muted p-3">
-        <p className="text-xs text-fg-subtle">Overtime hours</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{Math.round(totalOTHours)}</p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">total submitted</p>
-      </div>
-      <div className="rounded-lg bg-surface-muted p-3">
-        <p className="text-xs text-fg-subtle">Approved OT hours</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">
-          {Math.round(approvedOT?.totalHours ?? 0)}
-        </p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">
-          avg {Math.round(approvedOT?.avgHours ?? 0)}h / request
-        </p>
-      </div>
-      <div className="rounded-lg bg-surface-muted p-3">
-        <p className="text-xs text-fg-subtle">Approved OT requests</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{approvedOT?.count ?? 0}</p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">approved this period</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────

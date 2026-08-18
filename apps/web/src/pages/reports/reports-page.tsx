@@ -2,15 +2,16 @@ import { useState } from 'react';
 import { PageHeader, SegmentedControl } from '@/shared/ui';
 import { Card } from './report-parts';
 import { DAYS_OPTIONS } from './report-config';
+import { AssetUtilizationChart } from './asset-reports';
+import { FindingsChart } from './compliance-reports';
 import {
-  AssetUtilizationChart,
   CycleTimeChart,
-  FindingsChart,
   QueueTable,
+  RequestMixChart,
   SlaChart,
   ThroughputChart,
-  WorkforceSummary,
-} from './report-charts';
+} from './request-reports';
+import { WorkforceSummary } from './workforce-reports';
 
 /*
  * Analytics across the four systems.
@@ -58,6 +59,11 @@ export function ReportsPage() {
           <CycleTimeChart days={days} />
         </Card>
       </div>
+
+      {/* What the window is made of, before the per-measure panels below break it down. */}
+      <Card title="Requests by Type and Status">
+        <RequestMixChart days={days} />
+      </Card>
 
       {/* Row 3: Asset utilization + Findings donut */}
       <div className="grid grid-cols-2 gap-4">

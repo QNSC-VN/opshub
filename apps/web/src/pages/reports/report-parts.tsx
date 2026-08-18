@@ -34,5 +34,3 @@ export function ChartSkeleton() {
 export function ErrorMsg() {
   return <p className="py-4 text-center text-xs text-danger">Failed to load data</p>;
 }
-
-// ── Section 1: Throughput area chart ──────────────────────────────────────────
