@@ -1,18 +1,22 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, Plus, CheckCircle, XCircle } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ShieldCheck, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import {
   ActivityTimeline,
   Button,
+  ConfirmDialog,
   DataTable,
   DescriptionList,
   FormField,
   Input,
   ListPage,
   Modal,
+  PanelAction,
+  RowAction,
+  RowActions,
   SegmentedControl,
   Select,
   SlideOver,
@@ -24,8 +28,15 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate } from '@/shared/lib/format';
-import type { AccessRequestResponse, AccessRequestStatus } from '@/shared/api/types';
+import { usePermissions } from '@/shared/hooks/use-permissions';
+import { formatDate, formatDateTime } from '@/shared/lib/format';
+import { MyGrantsPanel } from './my-grants-panel';
+import { useAccessRequests } from './use-access';
+import type {
+  AccessGrantResponse,
+  AccessRequestResponse,
+  AccessRequestStatus,
+} from '@/shared/api/types';
 
 const ACCESS_TYPE_OPTIONS = [
   { value: 'local_admin', label: 'Local Admin' },
@@ -51,22 +62,6 @@ const STATUS_FILTERS = [
   { value: 'approved' as const, label: 'Approved' },
   { value: 'rejected' as const, label: 'Rejected' },
 ];
-
-// ── Hook ──────────────────────────────────────────────────────────────────────
-
-function useAccessRequests(status: AccessRequestStatus | '', limit: number, offset: number) {
-  return useQuery({
-    // The offset is part of the key: without it React Query serves page 1 from cache for every page.
-    queryKey: ['access-requests', 'list', status, limit, offset],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/access-requests', {
-        params: { query: { status: (status || undefined) as never, limit, offset } },
-      });
-      if (error || !data) throw new Error('Failed to load access requests');
-      return data;
-    },
-  });
-}
 
 // ── Submit modal ──────────────────────────────────────────────────────────────
 
@@ -229,22 +224,16 @@ function accessColumns(actions: {
       cell: (r) => (
         <div onClick={(e) => e.stopPropagation()}>
           {r.status === 'pending' && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => actions.onApprove(r.id)}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
-              >
-                <CheckCircle className="h-3.5 w-3.5" strokeWidth={2} />
+            // `RowAction`s from the kit, not two hand-rolled buttons carrying their own tone classes —
+            // the duplication `RowActions` exists to remove, and the same pair the inbox now uses.
+            <RowActions>
+              <RowAction tone="success" onClick={() => actions.onApprove(r.id)}>
                 Approve
-              </button>
-              <button
-                onClick={() => actions.onReject(r.id)}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger-bg"
-              >
-                <XCircle className="h-3.5 w-3.5" strokeWidth={2} />
+              </RowAction>
+              <RowAction tone="danger" onClick={() => actions.onReject(r.id)}>
                 Reject
-              </button>
-            </div>
+              </RowAction>
+            </RowActions>
           )}
           {r.status === 'approved' && r.reviewedAt && (
             <span className="text-xs text-fg-subtle">Approved {formatDate(r.reviewedAt)}</span>
@@ -263,13 +252,25 @@ function accessColumns(actions: {
 
 export function AccessPage() {
   const qc = useQueryClient();
+  const { can } = usePermissions();
+  /*
+   * REVOKING IS THE SAME PERMISSION AS APPROVING, and that is the API's choice, not a shortcut here:
+   * `grants/{grantId}/revoke` is guarded by `access_request.security_approve`. Whoever may grant elevation
+   * may take it back, and nobody else — including the holder, who can READ their own grants
+   * (`grants/me/active` is `@SelfScoped`) but cannot end one.
+   */
+  const canRevoke = can('access_request.security_approve');
+
   const [statusFilter, setStatusFilter] = useState<AccessRequestStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<AccessRequestResponse | null>(null);
+  const [revoking, setRevoking] = useState<AccessGrantResponse | null>(null);
   const list = useListState();
 
   const requests = useAccessRequests(statusFilter, list.limit, list.offset);
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['access-requests'] });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['access-requests'] });
+  };
 
   async function handleApprove(id: string) {
     const { error } = await api.POST('/v1/access-requests/{id}/approve', {
@@ -297,9 +298,40 @@ export function AccessPage() {
     invalidate();
   }
 
+  async function revokeGrant() {
+    if (!revoking) return;
+    const { error } = await api.POST('/v1/access-requests/grants/{grantId}/revoke', {
+      params: { path: { grantId: revoking.id } },
+    });
+    setRevoking(null);
+    if (error) {
+      toast.error(apiErrorMessage(error, 'Failed to revoke the grant.'));
+      return;
+    }
+    toast.success('Access revoked');
+    invalidate();
+  }
+
   return (
     <>
       <SubmitModal open={showForm} onClose={() => setShowForm(false)} onSuccess={invalidate} />
+
+      {/* The API's own precondition, said before the act: revoking is immediate and one-way. A grant is
+          `ACCESS_GRANT_NOT_ACTIVE` once revoked, so there is no un-revoke — the route back is a new
+          request through the same approval it came from. */}
+      <ConfirmDialog
+        open={!!revoking}
+        variant="danger"
+        onCancel={() => setRevoking(null)}
+        onConfirm={revokeGrant}
+        title="Revoke this access now?"
+        description={
+          revoking
+            ? `${humanizeStatus(revoking.accessType)} on ${revoking.target} ends immediately, rather than when its window closes at ${formatDateTime(revoking.expiresAt)}. Getting it back means requesting it again.`
+            : undefined
+        }
+        confirmLabel="Revoke access"
+      />
 
       <ListPage
         title="Access Requests"
@@ -326,6 +358,10 @@ export function AccessPage() {
         onOffsetChange={list.goToOffset}
         noun="requests"
       >
+        {/* Above the list, because "what am I already holding" outranks "ask for more" — and it renders
+            nothing at all when the answer is none. */}
+        <MyGrantsPanel canRevoke={canRevoke} onRevoke={setRevoking} />
+
         <DataTable
           columns={accessColumns({ onApprove: handleApprove, onReject: handleReject })}
           rows={requests.data?.data as AccessRequestResponse[] | undefined}
@@ -347,26 +383,26 @@ export function AccessPage() {
         width="lg"
         headerActions={
           selected?.status === 'pending' ? (
-            <div className="flex items-center gap-2">
-              <button
+            <>
+              <PanelAction
+                tone="success"
                 onClick={() => {
                   handleApprove(selected.id);
                   setSelected(null);
                 }}
-                className="flex items-center gap-1 rounded-md bg-success-bg px-3 py-1.5 text-xs font-medium text-success"
               >
-                <CheckCircle className="h-3 w-3" strokeWidth={2} /> Approve
-              </button>
-              <button
+                Approve
+              </PanelAction>
+              <PanelAction
+                tone="danger"
                 onClick={() => {
                   handleReject(selected.id);
                   setSelected(null);
                 }}
-                className="flex items-center gap-1 rounded-md bg-danger-bg px-3 py-1.5 text-xs font-medium text-danger"
               >
-                <XCircle className="h-3 w-3" strokeWidth={2} /> Reject
-              </button>
-            </div>
+                Reject
+              </PanelAction>
+            </>
           ) : undefined
         }
       >
