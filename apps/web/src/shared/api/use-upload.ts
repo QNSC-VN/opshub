@@ -43,11 +43,26 @@ export interface UploadOptions {
 
 export interface UploadResult {
   fileId: string;
-  /** A download URL, where the confirm endpoint returns one. Certificates do not. */
-  url: string | null;
   /** The confirm response, for callers that need the record it created. */
   confirmed: unknown;
 }
+
+/*
+ * THERE IS DELIBERATELY NO `url` HERE, and the history is worth keeping.
+ *
+ * This used to return `url`, read as `confirmed.url` — and not one of the four confirm endpoints returns a
+ * key called `url`: the asset photo answers `{ photoUrl }`, the avatar `{ avatarUrl }`, the leave document
+ * `{ documentUrl }`, and the training certificate a record with no URL at all. So `url` was null on every
+ * upload in the SPA and each caller stored that null.
+ *
+ * NOTHING LOOKED WRONG, which is why it survived. `FileUploadWidget` renders a local preview of the file
+ * just chosen, so the picture appeared the moment it was picked and the loss only showed on a reload, with
+ * the object sitting in storage and the screen saying there was none.
+ *
+ * The fix is not a better guess at the key. A URL for an attachment now comes from ONE place — the readback
+ * hooks in `attachment-urls.ts`, which ask the endpoint whose job it is and are what a reload reads too.
+ * Returning a second, differently-sourced URL from here is what created the ambiguity in the first place.
+ */
 
 interface PresignResponse {
   fileId: string;
@@ -109,11 +124,11 @@ export function useUpload() {
           ),
         );
       }
-      const confirmed = (await confirmRes.json().catch(() => null)) as { url?: string } | null;
+      const confirmed: unknown = await confirmRes.json().catch(() => null);
 
       opts.onProgress?.(100);
 
-      return { fileId: presigned.fileId, url: confirmed?.url ?? null, confirmed };
+      return { fileId: presigned.fileId, confirmed };
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       setError(e);

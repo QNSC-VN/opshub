@@ -31,7 +31,8 @@ export interface FileUploadWidgetProps {
    * `null` where the confirm endpoint returns no URL — the caller then refetches rather than showing a
    * preview it was not given.
    */
-  onSuccess: (url: string | null) => void;
+  /** Fired once the file is attached. Takes nothing: the URL comes from the record's own readback. */
+  onSuccess: () => void;
   /** Optional: disable the widget */
   disabled?: boolean;
   label?: string;
@@ -68,13 +69,13 @@ export function FileUploadWidget({
     }
 
     try {
-      const result = await upload({
+      await upload({
         file,
         presignUrl,
         confirmUrl,
         onProgress: setProgress,
       });
-      onSuccess(result.url);
+      onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
       setPreview(null);
@@ -116,12 +117,28 @@ export function FileUploadWidget({
         )}
 
         {/* Document display */}
-        {mode === 'document' && (currentUrl || fileName) && !uploading && (
+        {mode === 'document' && (displayUrl || fileName) && !uploading && (
           <div className="flex items-center gap-2 px-3">
             <FileText className="h-4 w-4 shrink-0 text-accent" />
-            <span className="truncate text-xs text-fg-muted">
-              {fileName ?? 'Uploaded document'}
-            </span>
+            {/*
+             * A LINK WHEN THERE IS SOMEWHERE TO GO. This was plain text, so a document already attached to
+             * a record could be seen to exist and not opened — which made the readback the other half of
+             * this branch adds decorative. `stopPropagation` because the whole tile is the file picker, and
+             * opening the existing document must not also prompt for a replacement.
+             */}
+            {displayUrl ? (
+              <a
+                href={displayUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="truncate text-xs text-accent underline-offset-2 hover:underline"
+              >
+                {fileName ?? 'View document'}
+              </a>
+            ) : (
+              <span className="truncate text-xs text-fg-muted">{fileName}</span>
+            )}
           </div>
         )}
 

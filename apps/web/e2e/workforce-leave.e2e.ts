@@ -1,5 +1,12 @@
 import { test } from '@playwright/test';
-import { expectRowSomewhere, expect, gotoInShell, settle } from './support/fixtures';
+import {
+  PDF_BYTES,
+  csrfHeaders,
+  expectRowSomewhere,
+  expect,
+  gotoInShell,
+  settle,
+} from './support/fixtures';
 
 /**
  * Workforce leave, end to end through the real UI: file a request → it appears in the list →
@@ -117,6 +124,69 @@ test.describe('workforce leave', () => {
     const row = page.locator('tbody tr', { hasText: reason });
     await row.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('tbody tr', { hasText: reason })).toContainText('Cancelled', {
+      timeout: 15_000,
+    });
+  });
+
+  test('a supporting document is still there after a reload', async ({ page, request }) => {
+    /*
+     * THE ASSERTION THAT WAS FAILING SILENTLY. Attaching worked — presign, PUT, confirm all 200 — and the
+     * screen then forgot. Two faults compounded: `useUpload` read `confirmed.url` when this endpoint answers
+     * `{ documentUrl }`, so the URL was dropped on the floor; and nothing ever called
+     * `GET /leave-requests/{id}/document`, so a reload had nowhere to read it from. In `document` mode there
+     * is no local preview to paper over it, so the row simply looked empty with the file sitting in storage.
+     *
+     * The reload is the whole point. Asserting only that the filename appears after upload passed throughout.
+     */
+    const reason = `Playwright leave doc ${Date.now()}`;
+    const { start, end } = uniqueLeaveWindow();
+    const created = await request.post('/v1/workforce/leave', {
+      headers: await csrfHeaders(request),
+      data: { leaveType: 'sick', startDate: start, endDate: end, reason },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+
+    await gotoInShell(page, '/workforce');
+    await page.getByRole('tab', { name: 'Leave', exact: true }).click();
+    await expectRowSomewhere(page, reason);
+    await page.locator('tbody tr', { hasText: reason }).click();
+
+    const drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('heading', { name: 'Supporting document' })).toBeVisible();
+
+    // Each step of the handshake named separately, so a future failure arrives already diagnosed —
+    // presign is where CSRF broke, the PUT is where CORS broke, confirm is where the API checks size.
+    const presign = page.waitForResponse(
+      (r) => r.url().includes('/document/presign') && r.request().method() === 'POST',
+    );
+    const put = page.waitForResponse((r) => r.request().method() === 'PUT');
+    const confirm = page.waitForResponse(
+      (r) => r.url().includes('/document/confirm') && r.request().method() === 'POST',
+    );
+
+    await drawer
+      .locator('input[type=file]')
+      .setInputFiles({ name: 'fitnote.pdf', mimeType: 'application/pdf', buffer: PDF_BYTES });
+
+    expect((await presign).status(), 'presign was refused').toBe(200);
+    expect((await put).status(), 'storage refused the bytes').toBe(200);
+    expect((await confirm).status(), 'confirm was refused').toBe(200);
+
+    // Present immediately — which it was before this branch too, from local component state.
+    await expect(drawer.getByText(/fitnote\.pdf|View document/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // AND STILL PRESENT ON A COLD PAGE. This is what the readback added; without it the section reads
+    // "no document" over a request that has one.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('tab', { name: 'Leave', exact: true }).click();
+    await expectRowSomewhere(page, reason);
+    await page.locator('tbody tr', { hasText: reason }).click();
+
+    const reopened = page.getByRole('dialog');
+    await expect(reopened.getByRole('heading', { name: 'Supporting document' })).toBeVisible();
+    await expect(reopened.getByRole('link', { name: /view document/i })).toBeVisible({
       timeout: 15_000,
     });
   });

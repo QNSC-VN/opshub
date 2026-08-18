@@ -18,6 +18,7 @@ import {
   statusTone,
   type DataTableColumn,
 } from '@/shared/ui';
+import { useAssetPhotoUrl } from '@/shared/api/attachment-urls';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
 import { formatDate } from '@/shared/lib/format';
@@ -64,7 +65,6 @@ export function AssetsPage() {
     action: 'unassign' | 'retire';
   } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const list = useListState();
 
   const assets = useAssets({
@@ -81,6 +81,15 @@ export function AssetsPage() {
   const selected = selectedId
     ? (assets.data?.data?.find((asset) => asset.id === selectedId) ?? null)
     : null;
+
+  /*
+   * THE PHOTO ALREADY ON THE RECORD, re-read whenever a row is opened.
+   *
+   * Nothing fetched this before, so the widget was handed a `null` that only ever became non-null from the
+   * confirm response — and that response was being misread, so it stayed null too. The upload worked; the
+   * screen just never showed it again.
+   */
+  const photo = useAssetPhotoUrl(selectedId);
 
   function applyFilter(apply: () => void) {
     apply();
@@ -206,10 +215,7 @@ export function AssetsPage() {
           errorMessage="Failed to load assets."
           emptyMessage={list.search ? 'No assets match that search' : 'No assets yet'}
           emptyIcon={Laptop}
-          onRowClick={(a) => {
-            setSelectedId(a.id);
-            setPhotoUrl(null);
-          }}
+          onRowClick={(a) => setSelectedId(a.id)}
           isRowActive={(a) => a.id === selectedId}
         />
       </ListPage>
@@ -273,12 +279,15 @@ export function AssetsPage() {
           <SlideOverSection title="Photo">
             <FileUploadWidget
               mode="image"
-              currentUrl={photoUrl}
+              currentUrl={photo.data}
               presignUrl={`/v1/assets/${selected.id}/photo/presign`}
               confirmUrl={`/v1/assets/${selected.id}/photo/confirm`}
               accept="image/jpeg,image/png,image/webp"
-              onSuccess={(url) => {
-                setPhotoUrl(url);
+              // ONE SOURCE OF TRUTH: refetch and let the readback answer. The widget already shows a local
+              // preview of the file just chosen, so a copy of the URL in page state would only be a second
+              // thing that could disagree with the server.
+              onSuccess={() => {
+                void qc.invalidateQueries({ queryKey: ['attachment-url', 'asset-photo'] });
                 invalidate();
               }}
               label="Asset photo (JPEG, PNG, WebP · max 5 MB)"
