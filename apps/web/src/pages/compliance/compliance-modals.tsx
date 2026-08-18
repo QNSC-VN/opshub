@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, FormField, Modal, Textarea } from '@/shared/ui';
+import { Button, FormActions, FormField, Modal, Select, Textarea } from '@/shared/ui';
 
 /**
  * Resolving a compliance finding.
@@ -77,6 +77,99 @@ export function ResolveModal({ findingId, open, onClose, onSuccess }: ResolveMod
             {loading ? 'Saving…' : 'Resolve'}
           </Button>
         </div>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Changing a software entry's listing — the decision the catalogue exists to record.
+ *
+ * WHY THE NOTE SITS WITH THE LISTING. `PATCH /v1/compliance/software/{id}` takes both, and offering the
+ * listing alone would make "why is this banned" a separate act nobody performs. Six months on, a blacklist
+ * entry with no reason is one somebody quietly reverses; the shadow-IT scan that flagged the software is not
+ * itself an explanation.
+ *
+ * PRE-FILLED FROM THE ROW, including the existing note, so a listing change does not silently blank a reason
+ * somebody wrote. The API treats an omitted field as unchanged, but sending the note back unchanged is
+ * clearer than relying on that and leaves the textarea honest about what is stored.
+ */
+interface ReclassifySoftwareModalProps {
+  entry: { id: string; name: string; listing: string; notes: string | null };
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const LISTING_OPTIONS = [
+  { value: 'whitelisted', label: 'Whitelisted — allowed on managed devices' },
+  { value: 'blacklisted', label: 'Blacklisted — must not be installed' },
+  { value: 'review', label: 'Review — a decision is pending' },
+  { value: 'unknown', label: 'Unknown — seen, not yet assessed' },
+] as const;
+
+export function ReclassifySoftwareModal({
+  entry,
+  onClose,
+  onSuccess,
+}: ReclassifySoftwareModalProps) {
+  const [loading, setLoading] = useState(false);
+  const [listing, setListing] = useState(entry.listing);
+  const [notes, setNotes] = useState(entry.notes ?? '');
+  const [error, setError] = useState('');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { error: err } = await api.PATCH('/v1/compliance/software/{id}', {
+      params: { path: { id: entry.id } },
+      // `notes` is nullable at the API: an emptied box means "no reason recorded", not "leave the old one".
+      body: { listing: listing as never, notes: notes.trim() || null },
+    });
+    setLoading(false);
+    if (err) {
+      setError(apiErrorMessage(err, 'Failed to update the listing.'));
+      return;
+    }
+    toast.success(`${entry.name} is now ${listing}`);
+    onSuccess();
+    onClose();
+  }
+
+  return (
+    <Modal open onClose={onClose} size="sm" title={`Reclassify ${entry.name}`}>
+      <form onSubmit={submit} className="flex flex-col gap-4 p-5">
+        <FormField label="Listing" htmlFor="software-listing" required>
+          <Select
+            id="software-listing"
+            value={listing}
+            onChange={(e) => setListing(e.target.value)}
+          >
+            {LISTING_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+
+        <FormField
+          label="Why"
+          htmlFor="software-notes"
+          hint="The reason the next person reads. Empty records no reason at all."
+        >
+          <Textarea
+            id="software-notes"
+            rows={3}
+            value={notes}
+            maxLength={2000}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </FormField>
+
+        {error && <p className="text-xs text-danger">{error}</p>}
+
+        <FormActions loading={loading} onClose={onClose} submitLabel="Save listing" />
       </form>
     </Modal>
   );
