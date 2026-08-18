@@ -4,7 +4,13 @@ import { Card } from './report-parts';
 import { DAYS_OPTIONS } from './report-config';
 import { AssetUtilizationChart } from './asset-reports';
 import { FindingsChart } from './compliance-reports';
-import { CycleTimeChart, QueueTable, SlaChart, ThroughputChart } from './request-reports';
+import {
+  CycleTimeChart,
+  QueueTable,
+  RequestMixChart,
+  SlaChart,
+  ThroughputChart,
+} from './request-reports';
 import { WorkforceSummary } from './workforce-reports';
 
 /*
@@ -53,6 +59,11 @@ export function ReportsPage() {
           <CycleTimeChart days={days} />
         </Card>
       </div>
+
+      {/* What the window is made of, before the per-measure panels below break it down. */}
+      <Card title="Requests by Type and Status">
+        <RequestMixChart days={days} />
+      </Card>
 
       {/* Row 3: Asset utilization + Findings donut */}
       <div className="grid grid-cols-2 gap-4">

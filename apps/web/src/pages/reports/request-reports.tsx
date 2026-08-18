@@ -10,6 +10,7 @@
  *  - SLA          — per-type compliance rate (bar)
  *  - cycle time   — p50 / p90 hours per type (bar)
  *  - queue depth  — current pending / in-review (table)
+ *  - the mix      — counts by type and status (stacked bar + table)
  */
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -30,9 +31,20 @@ import type {
   SlaComplianceResponse,
   CycleTimeResponse,
   QueueDepthResponse,
+  RequestSummaryResponse,
 } from '@/shared/api/types';
 import { ChartSkeleton, ErrorMsg } from './report-parts';
-import { BLUE, GREEN, RED, VIOLET, capitalize, dateRange, shortDay } from './report-config';
+import {
+  BLUE,
+  CLOSED_STATUSES,
+  GREEN,
+  RED,
+  REQUEST_STATUS_STACK,
+  VIOLET,
+  capitalize,
+  dateRange,
+  shortDay,
+} from './report-config';
 
 export function ThroughputChart({ days }: { days: number }) {
   const { from, to } = dateRange(days);
@@ -269,5 +281,153 @@ export function QueueTable() {
         )}
       </tbody>
     </table>
+  );
+}
+
+// ── The mix ───────────────────────────────────────────────────────────────────
+
+/**
+ * Request counts by TYPE and STATUS — what the queue is made of.
+ *
+ * WHY A STACKED BAR AND NOT ANOTHER LINE. The other three request panels are all about time: how many per
+ * day, how often the SLA was met, how long things took. None answers "what is in here" — a cross-tab of
+ * type against status is a composition, and the bar's total is a number somebody wants as much as its parts.
+ *
+ * A TABLE SITS UNDER IT, and not as an afterthought. Two segments in this stack can be small enough to be
+ * unclickable, the neutral one is under 3:1 against the surface, and identity in a chart must never rest on
+ * colour alone — so the exact grid is readable as text, and it also keeps `cancelled` and `expired` distinct
+ * where the chart folds them together.
+ *
+ * The 2px surface-coloured stroke between segments is a spacer, not a border: touching fills of similar
+ * lightness merge into one block, and the gap is what makes five segments countable.
+ */
+export function RequestMixChart({ days }: { days: number }) {
+  const { from, to } = dateRange(days);
+  const { data, isLoading, isError } = useQuery<RequestSummaryResponse>({
+    queryKey: ['reports', 'request-summary', days],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/v1/reports/requests/summary', {
+        params: { query: { from, to } },
+      });
+      if (error || !data) throw new Error();
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  if (isLoading) return <ChartSkeleton />;
+  if (isError || !data) return <ErrorMsg />;
+  if (!data.rows.length)
+    return <p className="py-8 text-center text-xs text-fg-subtle">No requests in this window</p>;
+
+  /*
+   * One row per TYPE, one key per stack segment. `cancelled` and `expired` both land on `closed` — see
+   * `REQUEST_STATUS_STACK` for why the chart folds them and the table below does not.
+   */
+  const byType = new Map<string, Record<string, number>>();
+  for (const row of data.rows) {
+    const bucket = byType.get(row.type) ?? {};
+    const key = (CLOSED_STATUSES as readonly string[]).includes(row.status) ? 'closed' : row.status;
+    bucket[key] = (bucket[key] ?? 0) + row.count;
+    byType.set(row.type, bucket);
+  }
+  /*
+   * ONE ORDER, BUSIEST FIRST, shared by the chart and the table below it. Deriving them separately is how
+   * the two came to disagree — the chart sorted and the table kept insertion order, so the same panel
+   * listed its types two ways. Caught by the spec, which is why it asserts the order at all.
+   */
+  const ordered = [...byType.entries()]
+    .map(([type, counts]) => ({
+      type,
+      counts,
+      total: Object.values(counts).reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  const chartRows = ordered.map(({ type, counts }) => ({ type: capitalize(type), ...counts }));
+  const statuses = [...new Set(data.rows.map((r) => r.status))].sort();
+
+  return (
+    /*
+     * A BLOCK wrapper, not `flex flex-col`. `ResponsiveContainer width="100%"` measures its parent, and
+     * inside a flex column it resolved to zero — so the chart silently drew nothing while the table beside it
+     * rendered fine. Measured in a real browser; jsdom cannot see it, and the panel looked complete because
+     * the table carried the numbers. The other charts on this page return the container as their root and
+     * never hit it.
+     */
+    <div className="space-y-4">
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={chartRows} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+          <XAxis dataKey="type" tick={{ fontSize: 11 }} stroke="var(--color-fg-subtle)" />
+          <YAxis tick={{ fontSize: 11 }} stroke="var(--color-fg-subtle)" allowDecimals={false} />
+          <Tooltip
+            contentStyle={{
+              fontSize: 12,
+              borderRadius: 8,
+              border: '1px solid var(--color-border)',
+            }}
+          />
+          {/* Present because there is more than one series — identity is never colour alone. */}
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {REQUEST_STATUS_STACK.map((segment, i) => (
+            <Bar
+              key={segment.key}
+              dataKey={segment.key}
+              name={segment.label}
+              stackId="mix"
+              fill={segment.color}
+              // The spacer: a surface-coloured hairline so adjacent fills stay countable.
+              stroke="var(--color-surface)"
+              strokeWidth={2}
+              // Only the top segment gets the rounded data-end, so the stack reads as one bar.
+              radius={i === REQUEST_STATUS_STACK.length - 1 ? [4, 4, 0, 0] : undefined}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+
+      {/* The same grid as text. Also the only place `cancelled` and `expired` are separable. */}
+      <table className="w-full text-xs">
+        <caption className="sr-only">Request counts by type and status</caption>
+        <thead>
+          <tr className="border-b border-border text-fg-subtle">
+            <th scope="col" className="py-1.5 text-left font-medium">
+              Type
+            </th>
+            {statuses.map((status) => (
+              <th key={status} scope="col" className="py-1.5 text-right font-medium">
+                {capitalize(status)}
+              </th>
+            ))}
+            <th scope="col" className="py-1.5 text-right font-medium">
+              Total
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {ordered.map(({ type }) => {
+            const cells = statuses.map(
+              (status) => data.rows.find((r) => r.type === type && r.status === status)?.count ?? 0,
+            );
+            return (
+              <tr key={type} className="border-b border-border/60">
+                <th scope="row" className="py-1.5 text-left font-medium text-fg">
+                  {capitalize(type)}
+                </th>
+                {cells.map((count, i) => (
+                  <td key={statuses[i]} className="py-1.5 text-right tabular-nums text-fg-muted">
+                    {count}
+                  </td>
+                ))}
+                <td className="py-1.5 text-right font-semibold tabular-nums text-fg">
+                  {cells.reduce((a, b) => a + b, 0)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
