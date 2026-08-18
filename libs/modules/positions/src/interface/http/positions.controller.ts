@@ -13,10 +13,16 @@ import {
 } from '@platform';
 import { EmployeeService } from '@modules/identity';
 import { PositionsService } from '../../application/positions.service';
-import type { EmployeePosition, Position, PositionOccupancy } from '../../domain/positions.types';
+import type {
+  EmployeePosition,
+  EmployeePositionWithRole,
+  Position,
+  PositionOccupancy,
+} from '../../domain/positions.types';
 import {
   AssignPositionDto,
   CreatePositionDto,
+  EmployeePositionHistoryResponseDto,
   EmployeePositionResponseDto,
   EndAssignmentDto,
   ListPositionsQueryDto,
@@ -55,6 +61,11 @@ function toAssignmentDto(a: EmployeePosition): EmployeePositionResponseDto {
   };
 }
 
+/** The history shape — the same row, plus the role it refers to. */
+function toHistoryDto(a: EmployeePositionWithRole): EmployeePositionHistoryResponseDto {
+  return { ...toAssignmentDto(a), positionCode: a.positionCode, positionTitle: a.positionTitle };
+}
+
 @ApiTags('positions')
 @Controller('positions')
 @Auth()
@@ -73,10 +84,12 @@ export class PositionsController {
   @Get('me')
   @SelfScoped("returns the caller's own position history — keyed on their own id")
   @ApiOperation({ summary: 'My position history, newest first' })
-  @ApiOkResponse({ type: [EmployeePositionResponseDto] })
+  @ApiOkResponse({ type: [EmployeePositionHistoryResponseDto] })
   @ApiCommonErrors(401)
-  async myPositions(@CurrentUser() user: JwtPayload): Promise<EmployeePositionResponseDto[]> {
-    return (await this.service.listAssignmentsForEmployee(user.sub)).map(toAssignmentDto);
+  async myPositions(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<EmployeePositionHistoryResponseDto[]> {
+    return (await this.service.listAssignmentsForEmployee(user.sub)).map(toHistoryDto);
   }
 
   @Get()
@@ -211,12 +224,12 @@ export class PositionsController {
   @Get('employees/:employeeId/history')
   @RequirePermission('position.read')
   @ApiOperation({ summary: "One employee's position history, newest first" })
-  @ApiOkResponse({ type: [EmployeePositionResponseDto] })
+  @ApiOkResponse({ type: [EmployeePositionHistoryResponseDto] })
   @ApiCommonErrors(401, 403, 404)
   async employeeHistory(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
-  ): Promise<EmployeePositionResponseDto[]> {
+  ): Promise<EmployeePositionHistoryResponseDto[]> {
     await this.employees.getById(employeeId);
-    return (await this.service.listAssignmentsForEmployee(employeeId)).map(toAssignmentDto);
+    return (await this.service.listAssignmentsForEmployee(employeeId)).map(toHistoryDto);
   }
 }

@@ -18,6 +18,7 @@ import {
 import { useEmployeeAvatarUrl } from '@/shared/api/attachment-urls';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
+import { EmployeePositionHistoryPanel } from './position-history-panel';
 import { EmployeeModal } from './employee-modal';
 import { OnboardingWizard } from './onboarding-wizard';
 import { OffboardingModal } from './offboarding-modal';
@@ -84,6 +85,9 @@ export function PeoplePage() {
   };
   // Removing an avatar is `employee.write`, unlike reading one.
   const canManage = can('employee.write');
+  // The position register is its own permission: a screen that can read people cannot assume it may read
+  // the org structure they sit in.
+  const canReadPositions = can('position.read');
 
   async function removeAvatar() {
     if (!selected) return;
@@ -288,31 +292,42 @@ export function PeoplePage() {
         activity={selected ? { resourceId: selected.id, resourceType: 'employee' } : undefined}
       >
         {selected && (
-          <SlideOverSection title="Photo">
-            <FileUploadWidget
-              mode="image"
-              currentUrl={avatar.data}
-              presignUrl={`/v1/employees/${selected.id}/avatar/presign`}
-              confirmUrl={`/v1/employees/${selected.id}/avatar/confirm`}
-              accept="image/jpeg,image/png,image/webp"
-              // ONE SOURCE OF TRUTH: refetch and let the readback answer — the widget already shows a
-              // local preview of the file just chosen.
-              onSuccess={() => {
-                refreshAvatar();
-                invalidate();
-              }}
-              label="Employee photo (JPEG, PNG, WebP · max 5 MB)"
-            />
-            {/* REMOVING IS ITS OWN ENDPOINT and needs `employee.write`, so it sits beside the upload
-                rather than inside the widget — which serves records that have no delete route at all. */}
-            {canManage && avatar.data && (
-              <div className="mt-2 flex justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setRemovingAvatar(true)}>
-                  Remove photo
-                </Button>
-              </div>
+          <>
+            {/* WHOSE ROLE, NOT WHICH ID. `/positions/employees/{id}/history` needs `position.read`, and
+                its rows now carry the position's code and title — resolved in the same query that powers
+                the self-scoped `/positions/me`, so both sides read the same way. */}
+            {canReadPositions && (
+              <SlideOverSection title="Position history">
+                <EmployeePositionHistoryPanel employeeId={selected.id} />
+              </SlideOverSection>
             )}
-          </SlideOverSection>
+
+            <SlideOverSection title="Photo">
+              <FileUploadWidget
+                mode="image"
+                currentUrl={avatar.data}
+                presignUrl={`/v1/employees/${selected.id}/avatar/presign`}
+                confirmUrl={`/v1/employees/${selected.id}/avatar/confirm`}
+                accept="image/jpeg,image/png,image/webp"
+                // ONE SOURCE OF TRUTH: refetch and let the readback answer — the widget already shows a
+                // local preview of the file just chosen.
+                onSuccess={() => {
+                  refreshAvatar();
+                  invalidate();
+                }}
+                label="Employee photo (JPEG, PNG, WebP · max 5 MB)"
+              />
+              {/* REMOVING IS ITS OWN ENDPOINT and needs `employee.write`, so it sits beside the upload
+                  rather than inside the widget — which serves records that have no delete route. */}
+              {canManage && avatar.data && (
+                <div className="mt-2 flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => setRemovingAvatar(true)}>
+                    Remove photo
+                  </Button>
+                </div>
+              )}
+            </SlideOverSection>
+          </>
         )}
       </EntityDetailPanel>
 

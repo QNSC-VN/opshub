@@ -7,6 +7,7 @@ import type { IPositionsRepository } from '../../domain/ports/positions.reposito
 import type {
   CreatePositionInput,
   EmployeePosition,
+  EmployeePositionWithRole,
   Position,
   PositionFilters,
   PositionOccupancy,
@@ -214,10 +215,28 @@ export class PositionsDrizzleRepository implements IPositionsRepository {
     return row ?? null;
   }
 
-  async listAssignmentsForEmployee(employeeId: string): Promise<EmployeePosition[]> {
+  /**
+   * One employee's history, WITH the role each row refers to.
+   *
+   * The join is here rather than in a second call because the caller may hold no `position.read`: this
+   * powers `/positions/me`, which is self-scoped, and a bare `positionId` is unresolvable to that caller.
+   * `positions` is the owning row of a non-null FK, so the inner join drops nothing.
+   */
+  async listAssignmentsForEmployee(employeeId: string): Promise<EmployeePositionWithRole[]> {
     return this.db
-      .select()
+      .select({
+        id: employeePositions.id,
+        employeeId: employeePositions.employeeId,
+        positionId: employeePositions.positionId,
+        effectiveFrom: employeePositions.effectiveFrom,
+        effectiveTo: employeePositions.effectiveTo,
+        endReason: employeePositions.endReason,
+        createdAt: employeePositions.createdAt,
+        positionCode: positions.code,
+        positionTitle: positions.title,
+      })
       .from(employeePositions)
+      .innerJoin(positions, eq(positions.id, employeePositions.positionId))
       .where(eq(employeePositions.employeeId, employeeId))
       .orderBy(desc(employeePositions.effectiveFrom), asc(employeePositions.id));
   }

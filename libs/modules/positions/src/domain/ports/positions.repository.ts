@@ -2,6 +2,7 @@ import type { DbExecutor } from '@platform';
 import type {
   CreatePositionInput,
   EmployeePosition,
+  EmployeePositionWithRole,
   Position,
   PositionFilters,
   PositionOccupancy,
@@ -50,7 +51,8 @@ export interface IPositionsRepository {
     tx?: DbExecutor,
   ): Promise<EmployeePosition | null>;
   /** Full occupancy history for one employee, newest first. */
-  listAssignmentsForEmployee(employeeId: string): Promise<EmployeePosition[]>;
+  /** WITH the role each row refers to — see `EmployeePositionWithRole`. */
+  listAssignmentsForEmployee(employeeId: string): Promise<EmployeePositionWithRole[]>;
   /** Everyone who has held a position, newest first. */
   listAssignmentsForPosition(positionId: string): Promise<EmployeePosition[]>;
 }

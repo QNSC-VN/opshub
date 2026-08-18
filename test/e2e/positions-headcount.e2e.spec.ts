@@ -59,6 +59,7 @@ const nextCode = (): string => `E2E-${RUN}-${++seq}`;
 interface PositionRow {
   id: string;
   code: string;
+  title: string;
   headcount: number;
   filled: number;
   vacancies: number;
@@ -68,6 +69,9 @@ interface AssignmentRow {
   id: string;
   employeeId: string;
   positionId: string;
+  /** History rows only — see the `positions/me` test for why the join exists. */
+  positionCode?: string;
+  positionTitle?: string;
   effectiveFrom: string;
   effectiveTo: string | null;
   endReason: string | null;
@@ -489,5 +493,53 @@ describe('unknown ids', () => {
       '2041-01-01',
     );
     expect(status).toBe(404);
+  });
+});
+describe('my own history', () => {
+  /**
+   * `/positions/me` IS SELF-SCOPED, AND HAS TO BE READABLE ON ITS OWN TERMS.
+   *
+   * Anybody may read their own assignment history — no permission code. But every route that could turn a
+   * `positionId` into a title needs `position.read`, which `FIXTURE.NO_PERMISSIONS` does not hold. So the
+   * self-service answer used to be a list of UUIDs the caller had no way to resolve, and the only honest
+   * thing a screen could render was the id itself.
+   *
+   * The join is the fix, and this is the test that pins it: read as the employee, with no permissions at
+   * all, and the role has to come back named.
+   */
+  it('names the role, for a caller who holds no permission to look one up', async () => {
+    const position = await createPosition(2);
+    /*
+     * LATER THAN EVERY OTHER DATE IN THIS FILE. Assigning somebody who already holds a position is a
+     * TRANSFER, and a transfer cannot start before the assignment it closes began — the suite's other tests
+     * leave these principals holding positions dated into 2041, so an earlier date answers
+     * `POSITION_INVALID_WINDOW`. Learned by asserting 201 and reading the refusal.
+     */
+    const assigned = await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2045-01-01');
+    expect(assigned.status, JSON.stringify(assigned.body)).toBe(201);
+
+    const mine = unwrap<AssignmentRow[]>(
+      (await apiRequest(app, employee, 'GET', '/positions/me')).body,
+    );
+    const row = mine.find((r) => r.positionId === position.id);
+    expect(row, 'the assignment is missing from the caller own history').toBeTruthy();
+
+    // The two fields that make the row readable without `position.read`.
+    expect(row!.positionCode).toBe(position.code);
+    expect(row!.positionTitle).toBe(position.title);
+
+    // AND THE CALLER STILL CANNOT LOOK ONE UP DIRECTLY. If they could, the join would be a convenience
+    // rather than the only route to the title — and this test would be pinning nothing.
+    expect((await apiRequest(app, employee, 'GET', `/positions/${position.id}`)).status).toBe(403);
+  });
+
+  it('names the role on somebody else history too, since it is the same query', async () => {
+    const position = await createPosition(1);
+    const assigned = await assign(position.id, FIXTURE.MANAGER.id, '2045-02-01');
+    expect(assigned.status, JSON.stringify(assigned.body)).toBe(201);
+
+    const rows = await historyOf(FIXTURE.MANAGER.id);
+    const row = rows.find((r) => r.positionId === position.id);
+    expect(row!.positionTitle).toBe(position.title);
   });
 });

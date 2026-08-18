@@ -55,6 +55,10 @@ export type PermissionResponse = components['schemas']['PermissionResponseDto'];
 export type RoleAssignmentResponse = components['schemas']['RoleAssignmentResponseDto'];
 export type DelegationResponse = components['schemas']['DelegationResponseDto'];
 
+// Positions — the HISTORY shape carries the role it refers to, unlike the plain assignment dto.
+export type EmployeePositionHistory = components['schemas']['EmployeePositionHistoryResponseDto'];
+export type ContractResponse = components['schemas']['ContractResponseDto'];
+
 // Compliance — software listing / finding types (previously exported as enums)
 export type SoftwareResponse = components['schemas']['SoftwareResponseDto'];
 export type SoftwareListing = 'whitelisted' | 'blacklisted' | 'review' | 'unknown';
