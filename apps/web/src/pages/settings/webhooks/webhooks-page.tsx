@@ -11,6 +11,8 @@ import {
   DataTable,
   EntityDetailPanel,
   ListPage,
+  RowAction,
+  RowActions,
   SlideOverSection,
   StatusBadge,
   humanizeStatus,
@@ -77,6 +79,26 @@ export function WebhooksPage() {
   const subscriptions = useSubscriptions();
   const deliveries = useDeliveries(selected?.id ?? null);
   const invalidate = () => qc.invalidateQueries({ queryKey: ['webhooks'] });
+
+  /*
+   * RETRY IS OFFERED ONLY ON A DELIVERY THAT FAILED, and that is the screen's judgement rather than the
+   * API's: `retryDelivery` sets any delivery back to `pending` with a fresh `nextAttemptAt` and checks no
+   * status at all, so a DELIVERED event would be re-sent to the endpoint on a click. The route's own summary
+   * says "failed webhook delivery"; the code does not enforce it, so this does.
+   */
+  async function retryDelivery(deliveryId: string) {
+    const { error } = await api.POST('/v1/webhooks/deliveries/{id}/retry', {
+      params: { path: { id: deliveryId } },
+    });
+    if (error) {
+      toast.error(apiErrorMessage(error, 'Failed to queue the retry.'));
+      return;
+    }
+    // Queued, not sent: the worker picks it up on its next pass, so the row goes back to `pending` rather
+    // than straight to `delivered`. Saying "retried" would claim an outcome nobody has yet.
+    toast.success('Retry queued');
+    invalidate();
+  }
 
   const toggle = useMutation({
     mutationFn: async (sub: WebhookSubscription) => {
@@ -297,6 +319,19 @@ export function WebhooksPage() {
                   cell: (d) => <span className="text-xs text-danger">{d.lastError ?? '—'}</span>,
                   className: 'max-w-[220px] truncate',
                   hideOnMobile: true,
+                },
+                {
+                  key: 'actions',
+                  header: '',
+                  align: 'right',
+                  cell: (d) =>
+                    d.status === 'failed' ? (
+                      <RowActions>
+                        <RowAction tone="accent" onClick={() => void retryDelivery(d.id)}>
+                          Retry
+                        </RowAction>
+                      </RowActions>
+                    ) : null,
                 },
               ]}
               rows={deliveries.data}
