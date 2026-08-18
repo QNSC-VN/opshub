@@ -3,8 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Pencil, UserPlus, UserMinus, Users } from 'lucide-react';
 import { api } from '@/shared/api/client';
+import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
+  ConfirmDialog,
   DataTable,
   EntityDetailPanel,
   ListPage,
@@ -13,7 +15,9 @@ import {
   SlideOverSection,
   type DataTableColumn,
 } from '@/shared/ui';
+import { useEmployeeAvatarUrl } from '@/shared/api/attachment-urls';
 import { useListState } from '@/shared/hooks/use-list-state';
+import { usePermissions } from '@/shared/hooks/use-permissions';
 import { EmployeeModal } from './employee-modal';
 import { OnboardingWizard } from './onboarding-wizard';
 import { OffboardingModal } from './offboarding-modal';
@@ -63,11 +67,38 @@ export function PeoplePage() {
   const [onboarding, setOnboarding] = useState<EmployeeResponse | null>(null);
   const [offboarding, setOffboarding] = useState<EmployeeResponse | null>(null);
   const [selected, setSelected] = useState<EmployeeResponse | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [removingAvatar, setRemovingAvatar] = useState(false);
   const list = useListState();
+  const { can } = usePermissions();
 
   const employees = useEmployees(list.search, statusFilter, list.limit, list.offset);
   const invalidate = () => qc.invalidateQueries({ queryKey: ['employees'] });
+
+  /*
+   * THE PHOTO ALREADY ON THE RECORD. Nothing read this before, so the widget only ever showed the local
+   * preview of a file just chosen — the stored avatar was invisible on every later visit.
+   */
+  const avatar = useEmployeeAvatarUrl(selected?.id ?? null);
+  const refreshAvatar = () => {
+    void qc.invalidateQueries({ queryKey: ['attachment-url', 'employee-avatar'] });
+  };
+  // Removing an avatar is `employee.write`, unlike reading one.
+  const canManage = can('employee.write');
+
+  async function removeAvatar() {
+    if (!selected) return;
+    const { error } = await api.DELETE('/v1/employees/{id}/avatar', {
+      params: { path: { id: selected.id } },
+    });
+    setRemovingAvatar(false);
+    if (error) {
+      toast.error(apiErrorMessage(error, 'Failed to remove the photo.'));
+      return;
+    }
+    toast.success('Photo removed');
+    refreshAvatar();
+    invalidate();
+  }
 
   /** Both wizards end the same way: the engine has the request, so point the user at it. */
   function notifyRequest(requestId: string) {
@@ -220,10 +251,7 @@ export function PeoplePage() {
           errorMessage="Failed to load employees."
           emptyMessage="No employees match this filter"
           emptyIcon={Users}
-          onRowClick={(emp) => {
-            setSelected(emp);
-            setAvatarUrl(null);
-          }}
+          onRowClick={(emp) => setSelected(emp)}
           isRowActive={(emp) => emp.id === selected?.id}
         />
       </ListPage>
@@ -263,19 +291,41 @@ export function PeoplePage() {
           <SlideOverSection title="Photo">
             <FileUploadWidget
               mode="image"
-              currentUrl={avatarUrl}
+              currentUrl={avatar.data}
               presignUrl={`/v1/employees/${selected.id}/avatar/presign`}
               confirmUrl={`/v1/employees/${selected.id}/avatar/confirm`}
               accept="image/jpeg,image/png,image/webp"
-              onSuccess={(url) => {
-                setAvatarUrl(url);
+              // ONE SOURCE OF TRUTH: refetch and let the readback answer — the widget already shows a
+              // local preview of the file just chosen.
+              onSuccess={() => {
+                refreshAvatar();
                 invalidate();
               }}
               label="Employee photo (JPEG, PNG, WebP · max 5 MB)"
             />
+            {/* REMOVING IS ITS OWN ENDPOINT and needs `employee.write`, so it sits beside the upload
+                rather than inside the widget — which serves records that have no delete route at all. */}
+            {canManage && avatar.data && (
+              <div className="mt-2 flex justify-end">
+                <Button variant="ghost" size="sm" onClick={() => setRemovingAvatar(true)}>
+                  Remove photo
+                </Button>
+              </div>
+            )}
           </SlideOverSection>
         )}
       </EntityDetailPanel>
+
+      {/* Removal is immediate and the object is gone from storage — a new upload is the only way back. */}
+      <ConfirmDialog
+        open={removingAvatar}
+        variant="danger"
+        onCancel={() => setRemovingAvatar(false)}
+        onConfirm={removeAvatar}
+        title="Remove this photo?"
+        description="The file is deleted from storage. Putting one back means uploading it again."
+        confirmLabel="Remove photo"
+      />
     </>
   );
 }

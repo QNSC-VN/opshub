@@ -145,12 +145,16 @@ export async function contextAs(email: string): Promise<APIRequestContext> {
 }
 
 /**
- * Put one real item in the request engine, and return its id.
+ * A tiny REAL PDF, so the MIME allow-list and the size check see what they expect.
  *
- * Specs that assert on the inbox need a request to exist. A FRESH database has none — CI's does not,
- * mine did, and that difference is what failed this spec in CI while it passed locally for the third
- * time in this migration. Create what you assert on.
+ * Shared because two upload journeys need one — a training certificate and a leave-request document — and a
+ * second hand-rolled byte string is a second thing to get subtly wrong.
  */
+export const PDF_BYTES = Buffer.from(
+  '255044462d312e340a25c7ec8fa20a312030206f626a0a3c3c2f547970652f436174616c6f672f50616765732032203020523e3e0a656e646f626a0a747261696c65720a3c3c2f526f6f742031203020523e3e0a2525454f46',
+  'hex',
+);
+
 /**
  * The signed-in seat's own employee id.
  *
@@ -195,6 +199,13 @@ export async function createRisk(
   return { id: body.data?.id ?? body.id!, reference };
 }
 
+/**
+ * Put one real item in the request engine, and return its id.
+ *
+ * Specs that assert on the inbox need a request to exist. A FRESH database has none — CI's does not,
+ * mine did, and that difference is what failed this spec in CI while it passed locally for the third
+ * time in this migration. Create what you assert on.
+ */
 export async function createAccessRequest(request: APIRequestContext): Promise<string> {
   const res = await request.post('/v1/access-requests', {
     headers: await csrfHeaders(request),

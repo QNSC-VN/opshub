@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import {
+  PDF_BYTES,
   chooseFromPicker,
   csrfHeaders,
   expect,
@@ -23,12 +24,6 @@ import {
 function unique(prefix: string): string {
   return `${prefix}-${Date.now()}`;
 }
-
-/** A tiny real PDF, so the MIME allow-list and the size check see what they expect. */
-const PDF_BYTES = Buffer.from(
-  '255044462d312e340a25c7ec8fa20a312030206f626a0a3c3c2f547970652f436174616c6f672f50616765732032203020523e3e0a656e646f626a0a747261696c65720a3c3c2f526f6f742031203020523e3e0a2525454f46',
-  'hex',
-);
 
 async function createEmployee(request: APIRequestContext): Promise<{ id: string; name: string }> {
   const stamp = Date.now();

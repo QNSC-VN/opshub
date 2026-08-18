@@ -488,6 +488,11 @@ export class WorkforceController {
   // did not, which meant the tier existed and two thirds of the uploads in the product ignored it.
   @RateLimit('UPLOAD')
   @Post('leave-requests/:id/document/presign')
+  // 200, not Nest's default 201: this is not a creation, and the `@ApiResponse` below already promises
+  // 200 — so without this the generated client's contract disagreed with the server. The asset-photo and
+  // avatar upload routes carry the same line for the same reason; these two were missed, and a browser
+  // spec asserting the documented status is what found it.
+  @HttpCode(HttpStatus.OK)
   @AuthorizedInService(
     'assertOwnerOrApprover on the leave request the document attaches to',
     'workforce-access-narrowing.spec.ts',
@@ -518,6 +523,11 @@ export class WorkforceController {
 
   @RateLimit('UPLOAD')
   @Post('leave-requests/:id/document/confirm')
+  // 200, not Nest's default 201: this is not a creation, and the `@ApiResponse` below already promises
+  // 200 — so without this the generated client's contract disagreed with the server. The asset-photo and
+  // avatar upload routes carry the same line for the same reason; these two were missed, and a browser
+  // spec asserting the documented status is what found it.
+  @HttpCode(HttpStatus.OK)
   @AuthorizedInService(
     'assertOwnerOrApprover on the owning leave request',
     'workforce-access-narrowing.spec.ts',

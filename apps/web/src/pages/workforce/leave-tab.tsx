@@ -28,6 +28,7 @@ import {
   type DataTableColumn,
   type FormModalProps,
 } from '@/shared/ui';
+import { useLeaveDocumentUrl } from '@/shared/api/attachment-urls';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate } from '@/shared/lib/format';
 import type { LeaveResponse, LeaveStatus, LeaveType } from '@/shared/api/types';
@@ -128,8 +129,15 @@ export function LeaveTab() {
   const [statusFilter, setStatusFilter] = useState<LeaveStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<LeaveResponse | null>(null);
-  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const list = useListState();
+
+  /*
+   * THE DOCUMENT ALREADY ATTACHED, re-read whenever a row is opened.
+   *
+   * In `document` mode the widget has no local preview to fall back on, so this row showed nothing at all
+   * for a request that had a certificate attached — the most visible half of the same fault.
+   */
+  const supportingDoc = useLeaveDocumentUrl(selected?.id ?? null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['workforce', 'leave', statusFilter, list.offset, list.limit],
@@ -259,10 +267,7 @@ export function LeaveTab() {
           errorMessage="Failed to load leave records."
           emptyMessage="No leave records found"
           emptyIcon={Calendar}
-          onRowClick={(l) => {
-            setSelected(l);
-            setDocumentUrl(null);
-          }}
+          onRowClick={(l) => setSelected(l)}
           isRowActive={(l) => l.id === selected?.id}
         />
 
@@ -340,11 +345,16 @@ export function LeaveTab() {
           <SlideOverSection title="Supporting document">
             <FileUploadWidget
               mode="document"
-              currentUrl={documentUrl}
+              currentUrl={supportingDoc.data}
               presignUrl={`/v1/workforce/leave-requests/${selected.id}/document/presign`}
               confirmUrl={`/v1/workforce/leave-requests/${selected.id}/document/confirm`}
               accept="application/pdf,image/jpeg,image/png"
-              onSuccess={(url) => setDocumentUrl(url)}
+              // ONE SOURCE OF TRUTH: refetch and let the readback answer. The widget already shows the
+              // file just chosen from its own local state, so there is nothing to bridge — an extra copy of
+              // the URL in page state would only be a second thing that could disagree.
+              onSuccess={() => {
+                void qc.invalidateQueries({ queryKey: ['attachment-url', 'leave-document'] });
+              }}
               label="Attach a medical certificate or supporting document (PDF, JPEG, PNG · max 10 MB)"
             />
           </SlideOverSection>
