@@ -7,6 +7,7 @@ import {
   expect,
   expectRowSomewhere,
   gotoInShell,
+  myEmployeeId,
 } from './support/fixtures';
 
 /**
@@ -28,13 +29,6 @@ function unique(prefix: string): string {
 }
 
 /** The seeded admin, who is the caller in every spec here. */
-async function myEmployeeId(request: APIRequestContext): Promise<string> {
-  const me = await request.get('/v1/auth/me');
-  expect(me.ok(), await me.text()).toBe(true);
-  const { sub } = (await me.json()) as { sub: string };
-  return sub;
-}
-
 async function createEmployee(request: APIRequestContext): Promise<string> {
   const stamp = Date.now();
   const res = await request.post('/v1/employees', {

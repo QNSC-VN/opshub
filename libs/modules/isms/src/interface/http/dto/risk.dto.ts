@@ -106,6 +106,8 @@ export const ListRisksQuerySchema = z
     reviewDueOnOrBefore: z.string().date().optional(),
     /** Inherent score at or above this — the register's "what actually matters" filter. */
     minInherentScore: z.coerce.number().int().min(1).max(25).optional(),
+    /** Free text over the reference, title and category. */
+    search: z.string().max(200).optional(),
   })
   .merge(PaginationQuerySchema);
 export class ListRisksQueryDto extends createZodDto(ListRisksQuerySchema) {}

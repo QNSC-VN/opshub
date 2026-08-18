@@ -73,6 +73,13 @@ export class RiskDrizzleRepository implements IRiskRepository {
             lte(risks.reviewDueOn, filters.reviewDueOnOrBefore),
           )
         : undefined,
+      // Reference, title and category — what somebody types when they half-remember a risk. Not the
+      // DESCRIPTION: it is a paragraph, and matching it makes every search return most of the register.
+      filters.search
+        ? sql`(${risks.reference} ILIKE ${'%' + filters.search + '%'}
+            OR ${risks.title} ILIKE ${'%' + filters.search + '%'}
+            OR ${risks.category} ILIKE ${'%' + filters.search + '%'})`
+        : undefined,
     );
 
     const rows = await this.db

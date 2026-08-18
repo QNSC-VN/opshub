@@ -1,11 +1,12 @@
 import { test } from '@playwright/test';
-import type { APIRequestContext } from '@playwright/test';
 import {
   chooseFromPicker,
+  createRisk,
   csrfHeaders,
   expect,
   expectRowSomewhere,
   gotoInShell,
+  myEmployeeId,
 } from './support/fixtures';
 
 /**
@@ -29,36 +30,7 @@ function unique(prefix: string): string {
   return `${prefix}-${Date.now()}`;
 }
 
-async function myEmployeeId(request: APIRequestContext): Promise<string> {
-  const me = await request.get('/v1/auth/me');
-  expect(me.ok(), await me.text()).toBe(true);
-  return ((await me.json()) as { sub: string }).sub;
-}
-
 /** A risk at a chosen severity, created through the API so a spec starts where it needs to. */
-async function createRisk(
-  request: APIRequestContext,
-  reference: string,
-  likelihood: number,
-  impact: number,
-): Promise<{ id: string; reference: string }> {
-  const ownerId = await myEmployeeId(request);
-  const res = await request.post('/v1/risks', {
-    headers: await csrfHeaders(request),
-    data: {
-      reference,
-      title: `Playwright risk ${reference}`,
-      description: 'Created by an e2e spec so the register has something to act on.',
-      category: 'Access control',
-      ownerId,
-      inherent: { likelihood, impact },
-    },
-  });
-  expect(res.status(), await res.text()).toBe(201);
-  const body = (await res.json()) as { data?: { id: string }; id?: string };
-  return { id: body.data?.id ?? body.id!, reference };
-}
-
 test.describe('risk register', () => {
   test('identifies a risk and shows its score in the high band', async ({ page }) => {
     const reference = unique('PWR').toUpperCase();

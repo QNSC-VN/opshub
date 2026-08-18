@@ -132,6 +132,31 @@ export async function controlOptions(term: string): Promise<PickerOption[]> {
 }
 
 /**
+ * Register risks, for recording which ones a supplier carries.
+ *
+ * SERVER-SIDE SEARCH over the reference, title and category. `search` was added to `/v1/risks` for this,
+ * the same call made for `/v1/documents` and for the same reason: the risk register grows with every risk
+ * an organisation records and has no natural ceiling, so the client-side compromise `controlOptions` makes
+ * — justified there by Annex A being 93 controls — would silently stop finding things at the page limit.
+ *
+ * NO STATUS FILTER, and this one is worth stating because it is not obviously right. `/v1/risks` takes a
+ * single `status`, so "everything except closed" is not expressible in one call, and `VendorService.linkRisk`
+ * checks the risk's status not at all. Offering every risk therefore matches what the API will accept — and
+ * the panel shows each linked risk's status, so a closed risk standing in for a live one is visible rather
+ * than hidden behind a filter that quietly disagreed with the server.
+ */
+export async function riskOptions(term: string): Promise<PickerOption[]> {
+  const { data } = await api.GET('/v1/risks', {
+    params: { query: { search: term || undefined, limit: PICKER_LIMIT, offset: 0 } },
+  });
+  return (data?.data ?? []).map((risk) => ({
+    value: risk.id,
+    label: risk.title,
+    hint: risk.reference,
+  }));
+}
+
+/**
  * Controlled documents, for pointing a record at the document that evidences it — an audit report, a
  * review's minutes.
  *

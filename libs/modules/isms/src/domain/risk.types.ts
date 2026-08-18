@@ -48,6 +48,15 @@ export interface RiskFilters {
   reviewDueOnOrBefore?: string;
   /** Inherent score at or above this. The register's "what actually matters" filter. */
   minInherentScore?: number;
+  /**
+   * Free text over the reference, title and category.
+   *
+   * Added for the supplier screen's risk picker. The register grows with every risk an organisation
+   * records and has no natural ceiling, so a client-side filter over one page — the compromise
+   * `controlOptions` makes, justified there by Annex A being 93 controls — would silently stop finding
+   * things exactly when the register became useful.
+   */
+  search?: string;
 }
 
 export interface AddTreatmentInput {

@@ -2,10 +2,12 @@ import { test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import {
   chooseFromPicker,
+  createRisk,
   csrfHeaders,
   expect,
   expectRowSomewhere,
   gotoInShell,
+  myEmployeeId,
 } from './support/fixtures';
 
 /**
@@ -30,12 +32,6 @@ import {
 
 function unique(prefix: string): string {
   return `${prefix}-${Date.now()}`;
-}
-
-async function myEmployeeId(request: APIRequestContext): Promise<string> {
-  const me = await request.get('/v1/auth/me');
-  expect(me.ok(), await me.text()).toBe(true);
-  return ((await me.json()) as { sub: string }).sub;
 }
 
 /** An asset at a chosen classification, through the API. */
@@ -416,5 +412,68 @@ test.describe('suppliers', () => {
     await expect(
       drawer.getByText(/Conditions: Provide the penetration-test summary/),
     ).toBeVisible();
+  });
+
+  test('links a register risk to a supplier, and the count follows', async ({ page, request }) => {
+    const reference = unique('PWL').toUpperCase();
+    const ownerId = await myEmployeeId(request);
+    const created = await request.post('/v1/vendors', {
+      headers: await csrfHeaders(request),
+      data: {
+        reference,
+        name: `Playwright supplier ${reference}`,
+        services: 'Created by an e2e spec.',
+        // CRITICAL, because the empty state on this panel is a FINDING at this tier — the same gap
+        // `/reports/critical-without-risk` names from the other side.
+        criticality: 'critical',
+        ownerId,
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const risk = await createRisk(request, unique('PWK').toUpperCase(), 4, 5);
+
+    await gotoInShell(page, '/vendors');
+    await page.getByRole('searchbox').fill(reference);
+    const row = page.locator('tbody tr', { hasText: reference });
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.click();
+
+    const drawer = page.getByRole('dialog', { name: `Playwright supplier ${reference}` });
+    await expect(drawer.getByRole('heading', { name: 'Risks (0)' })).toBeVisible();
+    // The absence is named as the gap it is, not as an empty list.
+    await expect(
+      drawer.getByText(/a supplier at this criticality with nothing in the register/),
+    ).toBeVisible();
+
+    /*
+     * SEARCHED BY THE SERVER. The picker is fed by `/v1/risks?search=`, which this branch added — the term
+     * here is the risk's REFERENCE, which the picker shows as its hint and the API matches. A client-side
+     * filter over one page would have found this risk today and stopped finding it once the register grew
+     * past the page limit.
+     */
+    await chooseFromPicker(page, drawer, 'Risk to link', risk.reference);
+    // `exact`, because the row shows the TITLE under the reference and `createRisk` builds the title out of
+    // the reference — a substring match resolves to both lines.
+    await expect(drawer.getByText(risk.reference, { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    /*
+     * THE COUNT IN THE HEADING MOVES. It is `riskCount` off the list row, and the drawer reads that row back
+     * out of the list rather than holding the copy it was opened with — a snapshot would leave the heading
+     * saying "Risks (0)" directly above the risk just added to it.
+     */
+    await expect(drawer.getByRole('heading', { name: 'Risks (1)' })).toBeVisible({
+      timeout: 15_000,
+    });
+    // The status and the score come back too. The FE type used to be the CONTROLS route's three-field
+    // schema, which was assignable and silently hid both.
+    await expect(drawer.getByText('Identified')).toBeVisible();
+    await expect(drawer.getByText('20', { exact: true })).toBeVisible();
+
+    await drawer.getByRole('button', { name: `Unlink ${risk.reference}` }).click();
+    await expect(drawer.getByRole('heading', { name: 'Risks (0)' })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });
