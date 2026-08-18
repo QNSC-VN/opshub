@@ -2,15 +2,10 @@ import { useState } from 'react';
 import { PageHeader, SegmentedControl } from '@/shared/ui';
 import { Card } from './report-parts';
 import { DAYS_OPTIONS } from './report-config';
-import {
-  AssetUtilizationChart,
-  CycleTimeChart,
-  FindingsChart,
-  QueueTable,
-  SlaChart,
-  ThroughputChart,
-  WorkforceSummary,
-} from './report-charts';
+import { AssetUtilizationChart } from './asset-reports';
+import { FindingsChart } from './compliance-reports';
+import { CycleTimeChart, QueueTable, SlaChart, ThroughputChart } from './request-reports';
+import { WorkforceSummary } from './workforce-reports';
 
 /*
  * Analytics across the four systems.
