@@ -12,6 +12,13 @@
  * Reconnect strategy: exponential back-off (1 s → 2 s → 4 s … capped at 30 s).
  * On reconnect the `connected` event returns the current unread count so the
  * badge is always accurate even if events were missed while disconnected.
+ *
+ * THE COUNT IS SEEDED FROM THE API, NOT FROM ZERO. `connected` is authoritative once it arrives — but
+ * until then, and for as long as the stream cannot be opened at all, the badge used to read zero and say
+ * so confidently. A proxy that blocks `text/event-stream`, an offline moment, a 500 on the stream route:
+ * every one of them left a user with unread notifications looking at a clean bell. That is the same
+ * failure as an empty list standing in for a failed one, and the API's own SSE controller already says
+ * what to do about it — "call GET /notifications/unread-count to reconcile missed events". Nothing did.
  */
 import { useEffect, useRef, useState } from 'react';
 import { ENV } from '@/shared/config/env';
@@ -65,9 +72,35 @@ export function useSSENotifications(): UseSSENotificationsResult {
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef(INITIAL_BACKOFF_MS);
   const mountedRef = useRef(true);
+  /** Set once the stream has reported a count, so a slow seed cannot overwrite the authoritative one. */
+  const streamAnsweredRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
+
+    /**
+     * The count as the SERVER has it, read once before the stream is up.
+     *
+     * Deliberately not a `useQuery`: this hook is the notification badge's only source of truth and owns
+     * `unreadCount` in local state, so a second cache holding the same number is a second thing that can
+     * disagree. The `connected` event overwrites this the moment it arrives.
+     */
+    async function seedCount() {
+      if (!isAuthenticated()) return;
+      try {
+        const res = await sessionFetch(`${ENV.API_BASE_URL}/v1/notifications/unread-count`);
+        if (!res.ok) return;
+        const body = (await res.json()) as { count?: number };
+        // Only if the stream has not already answered — `connected` is the authoritative number and this
+        // request may land after it on a fast connection.
+        if (mountedRef.current && !streamAnsweredRef.current && typeof body.count === 'number') {
+          setUnreadCount(body.count);
+        }
+      } catch {
+        // A failed count leaves the badge as it was. It must not reset to zero: that is the very claim
+        // this seed exists to stop the UI making.
+      }
+    }
 
     async function connect() {
       // The session cookie travels automatically, so there is no token to check — but
@@ -111,6 +144,7 @@ export function useSSENotifications(): UseSSENotificationsResult {
             try {
               const payload = JSON.parse(data) as Record<string, unknown>;
               if (event === 'connected') {
+                streamAnsweredRef.current = true;
                 setUnreadCount((payload['unreadCount'] as number) ?? 0);
               } else if (event === 'notification') {
                 setUnreadCount((c) => c + 1);
@@ -132,6 +166,7 @@ export function useSSENotifications(): UseSSENotificationsResult {
       retryRef.current = setTimeout(connect, delay);
     }
 
+    void seedCount();
     connect();
 
     return () => {
