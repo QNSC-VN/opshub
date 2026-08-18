@@ -17,6 +17,7 @@ import {
 import type {
   CreatePositionInput,
   EmployeePosition,
+  EmployeePositionWithRole,
   Position,
   PositionFilters,
 } from '../domain/positions.types';
@@ -257,7 +258,7 @@ export class PositionsService {
   }
 
   /** Occupancy history for one employee, newest first. */
-  async listAssignmentsForEmployee(employeeId: string): Promise<EmployeePosition[]> {
+  async listAssignmentsForEmployee(employeeId: string): Promise<EmployeePositionWithRole[]> {
     return this.repo.listAssignmentsForEmployee(employeeId);
   }
 

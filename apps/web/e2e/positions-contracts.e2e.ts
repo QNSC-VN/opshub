@@ -5,6 +5,7 @@ import {
   expect,
   expectRowSomewhere,
   gotoInShell,
+  myEmployeeId,
   selectStatusFilter,
 } from './support/fixtures';
 
@@ -163,5 +164,51 @@ test.describe('contracts', () => {
     // Either rows or the empty message — never an error, and never a stuck loading row.
     await expect(page.getByText('Failed to load contracts.')).toHaveCount(0);
     await expect(page.getByText('Loading…')).toHaveCount(0);
+  });
+});
+
+test.describe('my own employment record', () => {
+  test('names the role on your own profile, without permission to look one up', async ({
+    page,
+    request,
+  }) => {
+    /*
+     * `/v1/positions/me` IS SELF-SCOPED AND HAD NO CALLER, so an employee could not see their own role
+     * history anywhere in the product — reading it through the positions register needs `position.read`.
+     *
+     * THE ASSERTION IS THAT IT READS AS A TITLE. The route used to answer with a bare `positionId`, and a
+     * screen showing a UUID is the "nobody knows a UUID" problem the SPA's picker exists to remove. The API
+     * now resolves the code and title in the same query, and this is where that shows.
+     */
+    const code = unique('PWME').toUpperCase();
+    const position = await request.post('/v1/positions', {
+      headers: await csrfHeaders(request),
+      data: { code, title: 'Playwright Own Role', department: 'Quality', headcount: 3 },
+    });
+    expect(position.status(), await position.text()).toBe(201);
+    const positionId = ((await position.json()) as { id: string }).id;
+
+    /*
+     * DATED WELL AHEAD. Assigning somebody who already holds a position is a TRANSFER, and a transfer
+     * cannot start before the assignment it closes began — the seats accumulate far-future assignments
+     * across runs, so an earlier date answers `POSITION_INVALID_WINDOW`.
+     */
+    const assigned = await request.post(`/v1/positions/${positionId}/assignments`, {
+      headers: await csrfHeaders(request),
+      data: { employeeId: await myEmployeeId(request), effectiveFrom: '2046-01-01' },
+    });
+    expect(assigned.status(), await assigned.text()).toBe(201);
+
+    await gotoInShell(page, '/profile');
+
+    const roles = page.getByText('Playwright Own Role').first();
+    await expect(roles).toBeVisible({ timeout: 15_000 });
+    // The code beside it, and NOT the id — which is what this screen would have had to print before.
+    await expect(page.getByText(code, { exact: true })).toBeVisible();
+    await expect(page.getByText(positionId)).toHaveCount(0);
+
+    // The contract half of the same section, also self-scoped and also previously uncalled. The seeded
+    // admin has one, so the section must show something rather than the empty-state line.
+    await expect(page.getByRole('heading', { name: 'Your contracts' })).toBeVisible();
   });
 });

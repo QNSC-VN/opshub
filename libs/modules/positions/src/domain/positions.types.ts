@@ -26,6 +26,23 @@ export interface EmployeePosition {
   createdAt: Date;
 }
 
+/**
+ * An assignment with the ROLE IT WAS, resolved in the same query.
+ *
+ * WHY THE JOIN EXISTS. `/v1/positions/me` is `@SelfScoped` — anybody may read their own history — but
+ * every route that could turn a `positionId` into a title needs `position.read`, which a plain employee
+ * does not hold. So the self-service answer was a list of UUIDs the caller had no way to resolve, which is
+ * the same "nobody knows a UUID" problem the SPA's `EntityPicker` exists to remove.
+ *
+ * A SEPARATE TYPE FROM `EmployeePosition`, not extra optional fields on it: `listAssignmentsForPosition`
+ * answers the other direction — who held THIS position — where the title is the thing the caller already
+ * had. Optional fields would make every reader check which query it came from.
+ */
+export interface EmployeePositionWithRole extends EmployeePosition {
+  positionCode: string;
+  positionTitle: string;
+}
+
 export interface CreatePositionInput {
   code: string;
   title: string;

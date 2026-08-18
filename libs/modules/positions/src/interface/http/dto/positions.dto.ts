@@ -80,6 +80,30 @@ export class PositionOccupancyResponseDto extends PositionResponseDto {
   vacancies!: number;
 }
 
+/**
+ * A HISTORY row, carrying the role it refers to.
+ *
+ * SEPARATE FROM `EmployeePositionResponseDto` rather than two optional fields on it. `/positions/me` is
+ * `@SelfScoped` while every route that could turn a `positionId` into a title needs `position.read` — so a
+ * self-service caller used to receive ids it had no way to resolve, and the only honest thing a screen
+ * could render was a UUID.
+ *
+ * The assignment WRITES (`assign`, `endAssignment`) and `:id/assignments` keep the plain shape: those
+ * callers hold `position.read` and already know which position they asked about, so resolving it again
+ * would be a join to tell them what they passed in.
+ */
+export class EmployeePositionHistoryResponseDto {
+  id!: string;
+  employeeId!: string;
+  positionId!: string;
+  positionCode!: string;
+  positionTitle!: string;
+  effectiveFrom!: string;
+  effectiveTo!: string | null;
+  endReason!: string | null;
+  createdAt!: string;
+}
+
 export class EmployeePositionResponseDto {
   id!: string;
   employeeId!: string;

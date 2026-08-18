@@ -124,32 +124,52 @@ describe('formatMoney', () => {
 });
 
 describe('formatTimeUntil', () => {
-  const inMs = (ms: number) => new Date(Date.now() + ms).toISOString();
+  /*
+   * A FIXED `now`, PASSED IN. The first version of this suite built its inputs from `Date.now()` and let the
+   * function read the clock again a millisecond later — so `47 * 60_000` floored to "46m left" whenever the
+   * two reads straddled a minute, and the suite failed roughly one run in three. `now` is a parameter for
+   * exactly this reason; a test of a pure function should not be racing the clock.
+   */
+  const NOW = Date.parse('2026-08-18T12:00:00.000Z');
+  const inMs = (ms: number) => new Date(NOW + ms).toISOString();
+  const until = (ms: number) => formatTimeUntil(inMs(ms), NOW);
 
   it('reads as a remaining budget, one coarse unit at a time', () => {
     // The question a time-boxed grant raises is "how long do I still hold this", never "at what o'clock
     // does it lapse" — so one unit, rounded down, is the honest precision.
-    expect(formatTimeUntil(inMs(47 * 60_000))).toBe('47m left');
-    expect(formatTimeUntil(inMs(3 * 3_600_000))).toBe('3h left');
-    expect(formatTimeUntil(inMs(2 * 86_400_000 + 3_600_000))).toBe('2d left');
+    expect(until(47 * 60_000)).toBe('47m left');
+    expect(until(3 * 3_600_000)).toBe('3h left');
+    expect(until(2 * 86_400_000 + 3_600_000)).toBe('2d left');
   });
 
   it('rounds DOWN, so it never promises time that has gone', () => {
     // 119 minutes is "1h left", not "2h left". Rounding up on a privileged-access window would tell
     // somebody they had longer than they do.
-    expect(formatTimeUntil(inMs(119 * 60_000))).toBe('1h left');
-    expect(formatTimeUntil(inMs(59_000))).toBe('0m left');
+    expect(until(119 * 60_000)).toBe('1h left');
+    expect(until(59_000)).toBe('0m left');
   });
 
   it('says Expired rather than a negative', () => {
     // A grant whose window closed is gone, not "-12h left".
-    expect(formatTimeUntil(inMs(-60_000))).toBe('Expired');
-    expect(formatTimeUntil(new Date(Date.now() - 1))).toBe('Expired');
+    expect(until(-60_000)).toBe('Expired');
+    expect(formatTimeUntil(new Date(NOW - 1), NOW)).toBe('Expired');
+    // Exactly now is expired too: the boundary belongs to the past, so a window is never "0m left" at the
+    // instant it closes.
+    expect(until(0)).toBe('Expired');
   });
 
   it('em-dashes what it cannot read', () => {
-    expect(formatTimeUntil(null)).toBe(EM_DASH);
-    expect(formatTimeUntil(undefined)).toBe(EM_DASH);
-    expect(formatTimeUntil('not a date')).toBe(EM_DASH);
+    expect(formatTimeUntil(null, NOW)).toBe(EM_DASH);
+    expect(formatTimeUntil(undefined, NOW)).toBe(EM_DASH);
+    expect(formatTimeUntil('not a date', NOW)).toBe(EM_DASH);
+  });
+
+  it('defaults `now` to the real clock, so callers that do not care need not pass one', () => {
+    /*
+     * OFF THE BOUNDARY, deliberately. An exact multiple of a day races the clock: if both `Date.now()` reads
+     * land in the same millisecond it is "5d left", and if they straddle one it is "4d". Half a day past the
+     * boundary answers the same either way — which is the whole reason the other cases here pass `now`.
+     */
+    expect(formatTimeUntil(new Date(Date.now() + 5.5 * 86_400_000))).toBe('5d left');
   });
 });

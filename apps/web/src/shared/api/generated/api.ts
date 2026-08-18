@@ -5989,10 +5989,12 @@ export interface components {
       employeeId: string;
       acknowledgedAt: string;
     };
-    EmployeePositionResponseDto: {
+    EmployeePositionHistoryResponseDto: {
       id: string;
       employeeId: string;
       positionId: string;
+      positionCode: string;
+      positionTitle: string;
       effectiveFrom: string;
       effectiveTo: string | null;
       endReason: string | null;
@@ -6022,6 +6024,15 @@ export interface components {
       headcount: number;
       description: string | null;
       status: string;
+      createdAt: string;
+    };
+    EmployeePositionResponseDto: {
+      id: string;
+      employeeId: string;
+      positionId: string;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+      endReason: string | null;
       createdAt: string;
     };
     CreatePositionDto: {
@@ -13246,7 +13257,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EmployeePositionResponseDto'][];
+          'application/json': components['schemas']['EmployeePositionHistoryResponseDto'][];
         };
       };
       /** @description Unauthorized — missing or invalid authentication */
@@ -13638,7 +13649,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EmployeePositionResponseDto'][];
+          'application/json': components['schemas']['EmployeePositionHistoryResponseDto'][];
         };
       };
       /** @description Unauthorized — missing or invalid authentication */

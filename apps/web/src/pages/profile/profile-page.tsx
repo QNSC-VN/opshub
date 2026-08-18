@@ -28,6 +28,7 @@ import {
   statusTone,
 } from '@/shared/ui';
 import { formatDate } from '@/shared/lib/format';
+import { MyContracts, MyRoleHistory } from './my-employment';
 import type { components } from '@/shared/api/generated/api';
 
 type MeDto = components['schemas']['MeResponseDto'];
@@ -47,7 +48,12 @@ function SectionCard({
   return (
     <div className="rounded-xl border border-border bg-surface">
       <div className="border-b border-border px-6 py-4">
-        <p className="text-sm font-semibold text-fg">{title}</p>
+        {/*
+         * A HEADING, not a styled paragraph. Six sections on this page carried their titles as `<p>`, so a
+         * screen reader was handed one flat run of text with no structure to navigate — and a browser test
+         * could not address a section by name either. `h2` because the page's own title is the `h1`.
+         */}
+        <h2 className="text-sm font-semibold text-fg">{title}</h2>
         {subtitle && <p className="mt-0.5 text-xs text-fg-muted">{subtitle}</p>}
       </div>
       <div className="px-6 py-5">{children}</div>
@@ -373,6 +379,22 @@ export function ProfilePage() {
             </div>
           </SectionCard>
         )}
+
+        {/* Your own employment record — both routes are self-scoped and neither had a caller, so an
+            employee could not see their own role history or contract anywhere in the product. */}
+        <SectionCard
+          title="Your roles"
+          subtitle="The positions you have held, newest first. Read from your own record."
+        >
+          <MyRoleHistory />
+        </SectionCard>
+
+        <SectionCard
+          title="Your contracts"
+          subtitle="Reference, type, dates and notice period — newest first."
+        >
+          <MyContracts />
+        </SectionCard>
 
         {/* Authentication */}
         <SectionCard
