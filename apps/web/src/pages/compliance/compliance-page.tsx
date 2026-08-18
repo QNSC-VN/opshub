@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert, PackageSearch } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
@@ -26,7 +26,8 @@ import { formatDate } from '@/shared/lib/format';
 import { FEATURES } from '@/shared/config/features';
 import { ShadowItPanel } from './shadow-it-tab';
 import { ResolveModal } from './compliance-modals';
-import type { FindingResponse, SoftwareListing, FindingSeverity } from '@/shared/api/types';
+import { SoftwareCatalogTab } from './software-catalog-tab';
+import type { FindingResponse, FindingSeverity } from '@/shared/api/types';
 
 /*
  * NO LOCAL COLOUR MAPS.
@@ -38,83 +39,9 @@ import type { FindingResponse, SoftwareListing, FindingSeverity } from '@/shared
  * and `humanizeStatus` turns `risk_accepted` into `Risk accepted`.
  *
  * `listing` is the ONE vocabulary that stays local: whitelisted/blacklisted/unknown/review appears on
- * this screen alone, and a lookup nobody can attribute to a caller is worse than a local one.
+ * this screen alone, and a lookup nobody can attribute to a caller is worse than a local one. It now lives
+ * in `software-catalog-tab.tsx`, with its only caller.
  */
-const LISTING_TONE = {
-  whitelisted: 'green',
-  blacklisted: 'red',
-  review: 'amber',
-  unknown: 'neutral',
-} as const;
-
-// ── Software Catalog tab ──────────────────────────────────────────────────────
-
-function SoftwareCatalogTab() {
-  // Paged, where this tab previously asked for `limit: 100` and showed a total — which silently
-  // truncated any catalogue with more entries than that.
-  const list = useListState();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['compliance', 'software', list.offset, list.limit],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/compliance/software', {
-        params: { query: { limit: list.limit, offset: list.offset } },
-      });
-      if (error || !data) throw new Error('Failed to load software catalog');
-      return data;
-    },
-  });
-
-  // The row type comes from the generated client rather than a hand-written interface, so a
-  // response shape change is a type error here instead of an `undefined` on screen.
-  type SoftwareRow = NonNullable<NonNullable<typeof data>['data']>[number];
-  const columns: DataTableColumn<SoftwareRow>[] = [
-    {
-      key: 'name',
-      header: 'Name',
-      cell: (r) => <span className="font-medium text-fg">{r.name}</span>,
-    },
-    { key: 'publisher', header: 'Publisher', cell: (r) => r.publisher ?? '—' },
-    {
-      key: 'listing',
-      header: 'Listing',
-      cell: (r) => (
-        <StatusBadge tone={LISTING_TONE[r.listing as SoftwareListing]}>
-          {humanizeStatus(r.listing)}
-        </StatusBadge>
-      ),
-    },
-    {
-      key: 'notes',
-      header: 'Notes',
-      cell: (r) => (
-        <span className="text-xs text-fg-subtle" title={r.notes ?? ''}>
-          {r.notes ?? '—'}
-        </span>
-      ),
-      className: 'max-w-xs truncate',
-      hideOnMobile: true,
-    },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <DataTable
-        columns={columns}
-        rows={data?.data}
-        isLoading={isLoading}
-        isError={isError}
-        errorMessage="Failed to load software catalog."
-        emptyMessage="No software entries found"
-        emptyIcon={PackageSearch}
-      />
-      <PaginationFooter
-        pageInfo={data?.pageInfo}
-        onOffsetChange={list.goToOffset}
-        noun="software"
-      />
-    </div>
-  );
-}
 
 // ── Findings tab ──────────────────────────────────────────────────────────────
 
