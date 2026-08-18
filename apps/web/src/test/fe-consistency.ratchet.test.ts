@@ -44,10 +44,14 @@ import { describe, expect, it } from 'vitest';
 // classes — `text-success`/`hover:bg-success-bg` and the danger pair — which is exactly the per-page tone
 // map `RowAction` exists to remove. Found while adding the withdraw action beside them.
 //
-// The 36 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
+// 36 → 32 (access). Four more of the same: an approve/reject pair in the row cell and another in the drawer
+// header, each carrying its own `bg-success-bg`/`text-success` classes. `RowAction` and `PanelAction` are the
+// pair that already own those tones. Found while adding the standing-grants panel to that screen.
+//
+// The 32 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
 // few widgets (the notification bell, the AI panel, the app shell's own nav) that were never screens.
 // Worth checking what is actually left before assuming the number can keep falling.
-const MAX_RAW_BUTTON = 36;
+const MAX_RAW_BUTTON = 32;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;

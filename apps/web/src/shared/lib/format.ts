@@ -138,6 +138,43 @@ export function formatDateTime(value: string | Date | null | undefined): string 
 }
 
 /**
+ * How long until an instant, in words: `47m left`, `3h left`, `2d left`, `Expired`.
+ *
+ * WHY A SEPARATE FORMATTER FROM `formatDateTime`. Some deadlines are read as a MOMENT — "when was this
+ * approved" — and some as a REMAINING BUDGET. A time-boxed privileged grant is the second: the question is
+ * never "at what o'clock does this lapse", it is "how long do I still hold this". Printing the absolute
+ * instant makes the reader do the subtraction, and they do it wrong across a timezone.
+ *
+ * PAST IS `Expired`, NOT A NEGATIVE. A grant whose window closed is not "-12h left"; it is gone, and the
+ * word is what the reader needs. `activity-timeline.tsx` has the mirror of this for the past, kept separate
+ * because that one is about how long ago something HAPPENED.
+ *
+ * Coarse on purpose: one unit, rounded down. "1h left" for anything from an hour to two minutes short of
+ * the next is the honest precision for a decision about whether to renew.
+ *
+ * `now` IS A PARAMETER so this stays a pure function of its inputs. A caller rendering a list should pass
+ * the moment its DATA was fetched — React Query's `dataUpdatedAt` — because the list is the server's view as
+ * of then, and `Date.now()` inside a render body is what `react-hooks/purity` refuses.
+ */
+export function formatTimeUntil(
+  value: string | Date | null | undefined,
+  now: number = Date.now(),
+): string {
+  if (!value) return EM_DASH;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return EM_DASH;
+
+  const ms = date.getTime() - now;
+  if (ms <= 0) return 'Expired';
+
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h left`;
+  return `${Math.floor(hours / 24)}d left`;
+}
+
+/**
  * A `numeric` column for display.
  *
  * The driver hands `numeric` back as a STRING, so these arrive as `'2.50'` and formatting them with

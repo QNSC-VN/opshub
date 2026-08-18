@@ -4,7 +4,15 @@
  * A `.ts` spec: these are pure functions over strings, so no DOM.
  */
 import { describe, expect, it } from 'vitest';
-import { EM_DASH, formatDate, formatDateTime, formatDecimal, formatMoney, orDash } from './format';
+import {
+  EM_DASH,
+  formatDate,
+  formatDateTime,
+  formatDecimal,
+  formatMoney,
+  formatTimeUntil,
+  orDash,
+} from './format';
 
 describe('formatDate', () => {
   it('formats a calendar date unambiguously', () => {
@@ -112,5 +120,36 @@ describe('formatMoney', () => {
     expect(formatMoney(undefined)).toBe(EM_DASH);
     expect(formatMoney(Number.NaN)).toBe(EM_DASH);
     expect(formatMoney(0)).not.toBe(EM_DASH);
+  });
+});
+
+describe('formatTimeUntil', () => {
+  const inMs = (ms: number) => new Date(Date.now() + ms).toISOString();
+
+  it('reads as a remaining budget, one coarse unit at a time', () => {
+    // The question a time-boxed grant raises is "how long do I still hold this", never "at what o'clock
+    // does it lapse" — so one unit, rounded down, is the honest precision.
+    expect(formatTimeUntil(inMs(47 * 60_000))).toBe('47m left');
+    expect(formatTimeUntil(inMs(3 * 3_600_000))).toBe('3h left');
+    expect(formatTimeUntil(inMs(2 * 86_400_000 + 3_600_000))).toBe('2d left');
+  });
+
+  it('rounds DOWN, so it never promises time that has gone', () => {
+    // 119 minutes is "1h left", not "2h left". Rounding up on a privileged-access window would tell
+    // somebody they had longer than they do.
+    expect(formatTimeUntil(inMs(119 * 60_000))).toBe('1h left');
+    expect(formatTimeUntil(inMs(59_000))).toBe('0m left');
+  });
+
+  it('says Expired rather than a negative', () => {
+    // A grant whose window closed is gone, not "-12h left".
+    expect(formatTimeUntil(inMs(-60_000))).toBe('Expired');
+    expect(formatTimeUntil(new Date(Date.now() - 1))).toBe('Expired');
+  });
+
+  it('em-dashes what it cannot read', () => {
+    expect(formatTimeUntil(null)).toBe(EM_DASH);
+    expect(formatTimeUntil(undefined)).toBe(EM_DASH);
+    expect(formatTimeUntil('not a date')).toBe(EM_DASH);
   });
 });
