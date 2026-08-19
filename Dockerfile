@@ -82,8 +82,12 @@ USER nestjs
 EXPOSE 3000
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/apps/api/apps/api/src/main.js"]
+# `/v1/healthz`, not `/healthz`. `bootstrapApp` calls `setGlobalPrefix('v1')`, so the unprefixed path
+# is a 404 — and a HEALTHCHECK that always fails marks the image permanently unhealthy to anything
+# that honours it: `docker run`, compose, and image scanners. ECS and the ALB were unaffected because
+# they use the target-group health check with the correct path, which is why this went unnoticed.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget -qO- http://localhost:${PORT}/healthz || exit 1
+    CMD wget -qO- http://localhost:${PORT}/v1/healthz || exit 1
 
 # ── worker ────────────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS worker

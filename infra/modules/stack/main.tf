@@ -324,14 +324,21 @@ module "app_bucket" {
     max_age_seconds = 3600
   }]
 
-  # Uploads are presigned before they are confirmed, so an abandoned upload leaves an
-  # object nothing references. One day under `tmp/` is long enough for any real
-  # confirmation to arrive.
-  lifecycle_rules = [{
-    id              = "expire-unconfirmed-uploads"
-    prefix          = "tmp/"
-    expiration_days = 1
-  }]
+  # NO LIFECYCLE RULE, deliberately — the application owns this cleanup.
+  #
+  # There was an `expire-unconfirmed-uploads` rule here with `prefix = "tmp/"`, and it matched nothing:
+  # `StorageService.presignUpload` builds keys as `<resource_type>/<uploader_id>/<id>`, so no object has
+  # ever been written under `tmp/`. The rule's own comment described a layout that does not exist.
+  #
+  # It was also redundant. `StorageCleanupCron` sweeps hourly, and it is strictly better placed than a
+  # prefix rule could be: it reads `storage.stored_files`, so it deletes exactly the objects whose row
+  # is still `pending` after 24 hours, and it deletes the row with them. A lifecycle rule can only match
+  # on key or tag and would have to guess.
+  #
+  # The sweep is also COMPLETE, which is what makes dropping the backstop safe: `presignUpload` inserts
+  # the `stored_files` row BEFORE it signs the URL, so an object cannot exist without a row for the cron
+  # to find. Adding a real backstop later means tagging objects at presign and untagging on confirm —
+  # worth doing only if that ordering ever changes.
 
   tags = local.tags
 }
