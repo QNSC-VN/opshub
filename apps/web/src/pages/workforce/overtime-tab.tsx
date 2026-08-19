@@ -261,7 +261,9 @@ export function OvertimeTab() {
               ]
             : []
         }
-        activity={selected ? { resourceId: selected.id, resourceType: 'overtime' } : undefined}
+        activity={
+          selected ? { resourceId: selected.id, resourceType: 'overtime_entry' } : undefined
+        }
       />
     </>
   );

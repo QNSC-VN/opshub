@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
@@ -56,7 +57,8 @@ export class SoftwareResponseDto {
   id!: string;
   name!: string;
   publisher!: string | null;
-  listing!: string;
+  @ApiProperty({ enum: softwareListingEnum.enumValues })
+  listing!: (typeof softwareListingEnum.enumValues)[number];
   notes!: string | null;
   createdAt!: string;
   updatedAt!: string;
@@ -68,8 +70,10 @@ export class FindingResponseDto {
   employeeId!: string | null;
   softwareName!: string;
   softwareVersion!: string | null;
-  severity!: string;
-  status!: string;
+  @ApiProperty({ enum: findingSeverityEnum.enumValues })
+  severity!: (typeof findingSeverityEnum.enumValues)[number];
+  @ApiProperty({ enum: findingStatusEnum.enumValues })
+  status!: (typeof findingStatusEnum.enumValues)[number];
   source!: string;
   detectedAt!: string;
   resolvedBy!: string | null;

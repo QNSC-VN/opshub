@@ -9,13 +9,19 @@ import {
   EntityDetailPanel,
   Input,
   ListPage,
+  Select,
   SlideOverSection,
+  humanizeStatus,
   type BadgeTone,
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDateTime } from '@/shared/lib/format';
-import type { AuditLogResponse } from '@/shared/api/types';
+import {
+  AUDIT_RESOURCE_TYPES,
+  type AuditLogResponse,
+  type AuditResourceType,
+} from '@/shared/api/types';
 
 /*
  * WHAT THIS SCREEN NO LONGER CARRIES
@@ -67,7 +73,20 @@ function verbTone(action: string): BadgeTone {
 export function AuditLogsPage() {
   // The three filters are COMMITTED on submit rather than per keystroke: this endpoint is rate-limited
   // `STRICT` (60/min) and a request per character would spend that in a sentence.
-  const [draft, setDraft] = useState({ actorEmail: '', resourceType: '', action: '' });
+  /*
+   * `resourceType` is TYPED, not free text.
+   *
+   * It used to be an `<Input>`, and the API accepted any string and answered an unknown one with an
+   * empty list — so the filter's failure mode was "no results", indistinguishable from a resource with
+   * no history. The API now validates it against the catalogue, which makes a typo a 422; the control
+   * below is a `<Select>` so there is nothing to mistype. `leave` versus `leave_request` is exactly the
+   * guess that made seven detail drawers render an empty timeline forever.
+   */
+  const [draft, setDraft] = useState<{
+    actorEmail: string;
+    resourceType: AuditResourceType | '';
+    action: string;
+  }>({ actorEmail: '', resourceType: '', action: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<AuditLogResponse | null>(null);
   const list = useListState(50);
@@ -144,13 +163,24 @@ export function AuditLogsPage() {
               placeholder="Actor email…"
               className="w-48"
             />
-            <Input
+            <Select
               value={draft.resourceType}
-              onChange={(e) => setDraft((d) => ({ ...d, resourceType: e.target.value }))}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  resourceType: e.target.value as AuditResourceType | '',
+                }))
+              }
               aria-label="Filter by resource type"
-              placeholder="Resource type…"
-              className="w-40"
-            />
+              className="w-44"
+            >
+              <option value="">Any resource</option>
+              {AUDIT_RESOURCE_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {humanizeStatus(value)}
+                </option>
+              ))}
+            </Select>
             <Input
               value={draft.action}
               onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}

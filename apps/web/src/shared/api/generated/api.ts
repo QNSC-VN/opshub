@@ -5103,6 +5103,13 @@ export interface components {
       actorId: string | null;
       actorEmail: string | null;
       action: string;
+      /**
+       * @description Left as `string` deliberately: this is a READ of a varchar column, and a row written before the
+       *     catalogue was typed could hold a value the catalogue no longer lists. Narrowing the response would
+       *     be a claim about historical data rather than about this API's behaviour.
+       *
+       *     The direction that needed narrowing is the QUERY — see `AuditQuerySchema.resourceType`.
+       */
       resourceType: string;
       resourceId: string | null;
       changes: Record<string, never>;
@@ -5341,13 +5348,15 @@ export interface components {
       fileId: string;
     };
     AccessRequestResponseDto: {
+      /** @enum {string} */
+      accessType: 'local_admin' | 'pim_role' | 'app_admin' | 'vpn' | 'other';
+      /** @enum {string} */
+      status: 'pending' | 'approved' | 'rejected' | 'expired' | 'revoked';
       id: string;
       requesterId: string;
-      accessType: string;
       target: string;
       justification: string;
       durationHours: number;
-      status: string;
       reviewerId: string | null;
       reviewNote: string | null;
       reviewedAt: string | null;
@@ -5364,20 +5373,22 @@ export interface components {
       note?: string;
     };
     AccessGrantResponseDto: {
+      /** @enum {string} */
+      accessType: 'local_admin' | 'pim_role' | 'app_admin' | 'vpn' | 'other';
       id: string;
       requestId: string;
       granteeId: string;
-      accessType: string;
       target: string;
       grantedAt: string;
       expiresAt: string;
       revokedAt: string | null;
     };
     SoftwareResponseDto: {
+      /** @enum {string} */
+      listing: 'whitelisted' | 'blacklisted' | 'review';
       id: string;
       name: string;
       publisher: string | null;
-      listing: string;
       notes: string | null;
       createdAt: string;
       updatedAt: string;
@@ -5400,13 +5411,15 @@ export interface components {
       notes?: string | null;
     };
     FindingResponseDto: {
+      /** @enum {string} */
+      severity: 'low' | 'medium' | 'high' | 'critical';
+      /** @enum {string} */
+      status: 'open' | 'acknowledged' | 'resolved' | 'risk_accepted';
       id: string;
       assetId: string | null;
       employeeId: string | null;
       softwareName: string;
       softwareVersion: string | null;
-      severity: string;
-      status: string;
       source: string;
       detectedAt: string;
       resolvedBy: string | null;
@@ -5430,12 +5443,13 @@ export interface components {
       newFindings: number;
     };
     TimesheetResponseDto: {
+      /** @enum {string} */
+      status: 'draft' | 'submitted' | 'approved' | 'rejected';
       id: string;
       employeeId: string;
       workDate: string;
       minutesWorked: number;
       note: string | null;
-      status: string;
       submittedAt: string | null;
       approvedBy: string | null;
       createdAt: string;
@@ -5450,19 +5464,24 @@ export interface components {
       approve: boolean;
     };
     LeaveResponseDto: {
-      id: string;
-      employeeId: string;
-      leaveType: string;
-      startDate: string;
-      endDate: string;
+      /** @enum {string} */
+      leaveType: 'annual' | 'sick' | 'unpaid' | 'parental' | 'other';
       /**
        * @description Which part of the first and last day the window covers: `full_day`, `morning` or `afternoon`.
        *
        *     Always present — a whole-day request reads `full_day` at both ends — so a client never has to
        *     treat an absent portion as a special case.
+       * @enum {string}
        */
-      startPortion: string;
-      endPortion: string;
+      startPortion: 'full_day' | 'morning' | 'afternoon';
+      /** @enum {string} */
+      endPortion: 'full_day' | 'morning' | 'afternoon';
+      /** @enum {string} */
+      status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+      id: string;
+      employeeId: string;
+      startDate: string;
+      endDate: string;
       reason: string | null;
       /**
        * @description Working days this request costs, excluding weekends, public holidays and part-day ends, frozen
@@ -5473,7 +5492,6 @@ export interface components {
        *     can see it.
        */
       workingDays: number | null;
-      status: string;
       reviewerId: string | null;
       reviewedAt: string | null;
       createdAt: string;
@@ -5492,12 +5510,13 @@ export interface components {
       reason?: string;
     };
     OvertimeResponseDto: {
+      /** @enum {string} */
+      status: 'pending' | 'approved' | 'rejected';
       id: string;
       employeeId: string;
       workDate: string;
       hours: string;
       reason: string;
-      status: string;
       reviewerId: string | null;
       reviewedAt: string | null;
       createdAt: string;
@@ -5509,9 +5528,10 @@ export interface components {
       reason: string;
     };
     ShiftLogResponseDto: {
+      /** @enum {string} */
+      shiftType: 'night' | 'on_call' | 'weekend';
       id: string;
       employeeId: string;
-      shiftType: string;
       startsAt: string;
       endsAt: string;
       note: string | null;
@@ -5565,7 +5585,8 @@ export interface components {
       fileId: string;
     };
     LeaveBalanceResponseDto: {
-      leaveType: string;
+      /** @enum {string} */
+      leaveType: 'annual' | 'sick' | 'unpaid' | 'parental' | 'other';
       year: number;
       /** @description The year's whole entitlement, as HR set it. */
       grantedDays: number;
@@ -5599,7 +5620,8 @@ export interface components {
       note?: string;
     };
     LeavePolicyResponseDto: {
-      leaveType: string;
+      /** @enum {string} */
+      leaveType: 'annual' | 'sick' | 'unpaid' | 'parental' | 'other';
       /** @description `annual_grant` — available in full from 1 January — or `monthly_accrual`. */
       accrualMethod: string;
       carryOverMaxDays: number;
@@ -6070,16 +6092,18 @@ export interface components {
       salaryPeriod: string;
     };
     ContractResponseDto: {
+      /** @enum {string} */
+      contractType: 'permanent' | 'fixed_term' | 'probation' | 'internship' | 'contractor';
+      /** @enum {string} */
+      status: 'draft' | 'active' | 'expired' | 'terminated';
       id: string;
       employeeId: string;
       positionId: string | null;
       reference: string;
-      contractType: string;
       startDate: string;
       endDate: string | null;
       probationEndDate: string | null;
       noticePeriodDays: number;
-      status: string;
       signedAt: string | null;
       documentId: string | null;
       terminatedOn: string | null;
@@ -7654,7 +7678,57 @@ export interface operations {
       query?: {
         actorId?: string;
         actorEmail?: string;
-        resourceType?: string;
+        resourceType?:
+          | 'role'
+          | 'role_assignment'
+          | 'delegation'
+          | 'access_request'
+          | 'access_grant'
+          | 'employee'
+          | 'employee_avatar'
+          | 'asset'
+          | 'asset_photo'
+          | 'software_catalog'
+          | 'software_license'
+          | 'license_assignment'
+          | 'compliance'
+          | 'compliance_finding'
+          | 'catalog_item'
+          | 'catalog_request'
+          | 'request'
+          | 'leave_request'
+          | 'leave_document'
+          | 'leave_entitlement'
+          | 'holiday'
+          | 'document'
+          | 'document_version'
+          | 'position'
+          | 'employee_position'
+          | 'employment_contract'
+          | 'training_course'
+          | 'training_requirement'
+          | 'training_record'
+          | 'performance_cycle'
+          | 'performance_review'
+          | 'risk'
+          | 'risk_treatment'
+          | 'control'
+          | 'soa_entry'
+          | 'incident'
+          | 'information_asset'
+          | 'vendor'
+          | 'nonconformance'
+          | 'capa'
+          | 'internal_audit'
+          | 'management_review'
+          | 'review_action'
+          | 'timesheet'
+          | 'shift_log'
+          | 'overtime_entry'
+          | 'webhook_subscription'
+          | 'webhook_delivery'
+          | 'session'
+          | 'user';
         resourceId?: string;
         action?: string;
         limit?: number;

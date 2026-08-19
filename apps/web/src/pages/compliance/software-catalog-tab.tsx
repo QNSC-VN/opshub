@@ -13,6 +13,8 @@ import {
   humanizeStatus,
   type DataTableColumn,
 } from '@/shared/ui';
+import type { BadgeTone } from '@/shared/ui';
+import type { SoftwareListing } from '@/shared/api/types';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
 import { ReclassifySoftwareModal } from './compliance-modals';
@@ -39,23 +41,32 @@ import type { SoftwareResponse } from '@/shared/api/types';
  * these four words appear here alone, and a shared lookup nobody can attribute to a caller is worse than a
  * local one. It moved with the tab rather than being left behind for one caller.
  */
-const LISTING_TONE = {
+/**
+ * EXHAUSTIVE OVER THE API'S ENUM, and the `Record` is what enforces it.
+ *
+ * This carried a fourth key, `unknown`, that `software_listing` has never had — the column is NOT NULL
+ * over whitelisted/blacklisted/review. Typing the map as `Record<SoftwareListing, BadgeTone>` means a
+ * value the API gains is a missing-key error here, and a value it does not have is an excess-property
+ * error, instead of both being silently fine.
+ */
+const LISTING_TONE: Record<SoftwareListing, BadgeTone> = {
   whitelisted: 'green',
   blacklisted: 'red',
   review: 'amber',
-  unknown: 'neutral',
-} as const;
+};
 
-type Listing = keyof typeof LISTING_TONE;
-
-/** The API takes one `listing` value or none, so "All" is the empty string rather than a fifth code. */
-const LISTING_FILTERS = [
+/**
+ * The API takes one `listing` value or none, so "All" is the empty string rather than a fourth code.
+ *
+ * `unknown` was offered here too, and the API's `z.enum` refused it — so the filter answered 422 and
+ * the tab showed a load failure for a choice the tab itself provided.
+ */
+const LISTING_FILTERS: { value: SoftwareListing | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'whitelisted', label: 'Whitelisted' },
   { value: 'blacklisted', label: 'Blacklisted' },
   { value: 'review', label: 'Review' },
-  { value: 'unknown', label: 'Unknown' },
-] as const;
+];
 
 export function SoftwareCatalogTab() {
   const qc = useQueryClient();
@@ -65,7 +76,9 @@ export function SoftwareCatalogTab() {
   // Paged, where this tab previously asked for `limit: 100` and showed a total — which silently
   // truncated any catalogue with more entries than that.
   const list = useListState();
-  const [listing, setListing] = useState('');
+  // Typed, not `string`: the state feeds the query parameter, so an unlisted value is a compile
+  // error here rather than a 422 at run time.
+  const [listing, setListing] = useState<SoftwareListing | ''>('');
   const [reclassifying, setReclassifying] = useState<SoftwareResponse | null>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -76,7 +89,7 @@ export function SoftwareCatalogTab() {
           query: {
             // BOTH FILTERS ARE THE API'S, and neither was being sent. A catalogue that pages cannot be
             // searched by scrolling, and reclassifying an entry means finding it first.
-            listing: (listing || undefined) as never,
+            listing: listing || undefined,
             search: list.search || undefined,
             limit: list.limit,
             offset: list.offset,
@@ -99,9 +112,7 @@ export function SoftwareCatalogTab() {
       key: 'listing',
       header: 'Listing',
       cell: (r) => (
-        <StatusBadge tone={LISTING_TONE[r.listing as Listing]}>
-          {humanizeStatus(r.listing)}
-        </StatusBadge>
+        <StatusBadge tone={LISTING_TONE[r.listing]}>{humanizeStatus(r.listing)}</StatusBadge>
       ),
     },
     {

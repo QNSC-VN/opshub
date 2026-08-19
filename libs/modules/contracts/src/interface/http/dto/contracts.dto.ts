@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
@@ -122,12 +123,14 @@ export class ContractResponseDto {
   employeeId!: string;
   positionId!: string | null;
   reference!: string;
-  contractType!: string;
+  @ApiProperty({ enum: contractTypeEnum.enumValues })
+  contractType!: (typeof contractTypeEnum.enumValues)[number];
   startDate!: string;
   endDate!: string | null;
   probationEndDate!: string | null;
   noticePeriodDays!: number;
-  status!: string;
+  @ApiProperty({ enum: contractStatusEnum.enumValues })
+  status!: (typeof contractStatusEnum.enumValues)[number];
   signedAt!: string | null;
   documentId!: string | null;
   terminatedOn!: string | null;

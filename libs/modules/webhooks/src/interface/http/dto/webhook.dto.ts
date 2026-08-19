@@ -19,10 +19,7 @@ export const CreateWebhookSubscriptionSchema = z.object({
   /** HMAC-SHA256 signing secret. Min 16 chars for adequate entropy. */
   secret: z.string().min(16).max(255),
   /** At least one event type must be subscribed. */
-  events: z
-    .array(z.enum(SUPPORTED_WEBHOOK_EVENTS))
-    .min(1)
-    .describe('Event types to subscribe to'),
+  events: z.array(z.enum(SUPPORTED_WEBHOOK_EVENTS)).min(1).describe('Event types to subscribe to'),
   description: z.string().max(500).optional(),
 });
 export class CreateWebhookSubscriptionDto extends createZodDto(CreateWebhookSubscriptionSchema) {}

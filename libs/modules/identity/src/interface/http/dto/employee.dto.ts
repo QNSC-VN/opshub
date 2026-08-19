@@ -18,11 +18,13 @@ export const CreateEmployeeSchema = z.object({
 
 export class CreateEmployeeDto extends createZodDto(CreateEmployeeSchema) {}
 
-export const ListEmployeesQuerySchema = z.object({
-  status: z.enum(employeeStatusEnum.enumValues).optional(),
-  department: z.string().optional(),
-  search: z.string().optional(),
-}).merge(PaginationQuerySchema);
+export const ListEmployeesQuerySchema = z
+  .object({
+    status: z.enum(employeeStatusEnum.enumValues).optional(),
+    department: z.string().optional(),
+    search: z.string().optional(),
+  })
+  .merge(PaginationQuerySchema);
 
 export class ListEmployeesQueryDto extends createZodDto(ListEmployeesQuerySchema) {}
 

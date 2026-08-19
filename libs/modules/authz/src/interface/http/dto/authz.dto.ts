@@ -62,8 +62,14 @@ export class RoleAssignmentResponseDto {
 
 export const CreateDelegationSchema = z.object({
   toUserId: z.string().uuid(),
-  startsAt: z.string().datetime({ offset: true }).transform((v) => new Date(v)),
-  endsAt: z.string().datetime({ offset: true }).transform((v) => new Date(v)),
+  startsAt: z
+    .string()
+    .datetime({ offset: true })
+    .transform((v) => new Date(v)),
+  endsAt: z
+    .string()
+    .datetime({ offset: true })
+    .transform((v) => new Date(v)),
   reason: z.string().max(500).optional(),
 });
 export class CreateDelegationDto extends createZodDto(CreateDelegationSchema) {}

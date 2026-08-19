@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
@@ -36,7 +37,8 @@ export class TimesheetResponseDto {
   workDate!: string;
   minutesWorked!: number;
   note!: string | null;
-  status!: string;
+  @ApiProperty({ enum: timesheetStatusEnum.enumValues })
+  status!: (typeof timesheetStatusEnum.enumValues)[number];
   submittedAt!: string | null;
   approvedBy!: string | null;
   createdAt!: string;
@@ -78,7 +80,8 @@ export class ListLeaveQueryDto extends createZodDto(ListLeaveQuerySchema) {}
 export class LeaveResponseDto {
   id!: string;
   employeeId!: string;
-  leaveType!: string;
+  @ApiProperty({ enum: leaveTypeEnum.enumValues })
+  leaveType!: (typeof leaveTypeEnum.enumValues)[number];
   startDate!: string;
   endDate!: string;
   /**
@@ -87,8 +90,10 @@ export class LeaveResponseDto {
    * Always present — a whole-day request reads `full_day` at both ends — so a client never has to
    * treat an absent portion as a special case.
    */
-  startPortion!: string;
-  endPortion!: string;
+  @ApiProperty({ enum: leaveDayPortionEnum.enumValues })
+  startPortion!: (typeof leaveDayPortionEnum.enumValues)[number];
+  @ApiProperty({ enum: leaveDayPortionEnum.enumValues })
+  endPortion!: (typeof leaveDayPortionEnum.enumValues)[number];
   reason!: string | null;
   /**
    * Working days this request costs, excluding weekends, public holidays and part-day ends, frozen
@@ -99,7 +104,8 @@ export class LeaveResponseDto {
    * can see it.
    */
   workingDays!: number | null;
-  status!: string;
+  @ApiProperty({ enum: leaveStatusEnum.enumValues })
+  status!: (typeof leaveStatusEnum.enumValues)[number];
   reviewerId!: string | null;
   reviewedAt!: string | null;
   createdAt!: string;
@@ -127,7 +133,8 @@ export class OvertimeResponseDto {
   workDate!: string;
   hours!: string;
   reason!: string;
-  status!: string;
+  @ApiProperty({ enum: overtimeStatusEnum.enumValues })
+  status!: (typeof overtimeStatusEnum.enumValues)[number];
   reviewerId!: string | null;
   reviewedAt!: string | null;
   createdAt!: string;
@@ -158,7 +165,8 @@ export class ListShiftLogsQueryDto extends createZodDto(ListShiftLogsQuerySchema
 export class ShiftLogResponseDto {
   id!: string;
   employeeId!: string;
-  shiftType!: string;
+  @ApiProperty({ enum: shiftTypeEnum.enumValues })
+  shiftType!: (typeof shiftTypeEnum.enumValues)[number];
   startsAt!: string;
   endsAt!: string;
   note!: string | null;
@@ -239,7 +247,8 @@ export const LeaveBalanceQuerySchema = z.object({
 export class LeaveBalanceQueryDto extends createZodDto(LeaveBalanceQuerySchema) {}
 
 export class LeaveBalanceResponseDto {
-  leaveType!: string;
+  @ApiProperty({ enum: leaveTypeEnum.enumValues })
+  leaveType!: (typeof leaveTypeEnum.enumValues)[number];
   year!: number;
   /** The year's whole entitlement, as HR set it. */
   grantedDays!: number;
@@ -264,7 +273,8 @@ export class LeaveBalanceResponseDto {
 }
 
 export class LeavePolicyResponseDto {
-  leaveType!: string;
+  @ApiProperty({ enum: leaveTypeEnum.enumValues })
+  leaveType!: (typeof leaveTypeEnum.enumValues)[number];
   /** `annual_grant` — available in full from 1 January — or `monthly_accrual`. */
   accrualMethod!: string;
   carryOverMaxDays!: number;

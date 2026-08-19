@@ -287,7 +287,7 @@ function FindingsTab() {
             <div className="mx-5 h-px bg-surface-muted" />
 
             <SlideOverSection title="Activity">
-              <ActivityTimeline resourceId={selected.id} resourceType="finding" />
+              <ActivityTimeline resourceId={selected.id} resourceType="compliance_finding" />
             </SlideOverSection>
           </>
         )}
