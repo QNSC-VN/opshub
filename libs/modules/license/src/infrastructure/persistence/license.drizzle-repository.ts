@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
+import { and, asc, count, desc, eq, isNull, sql } from 'drizzle-orm';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { softwareLicenses, licenseAssignments } from '../../../../../../db/schema';
 import type { ILicenseRepository } from '../../domain/ports/license.repository';
@@ -52,8 +52,8 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
   ): Promise<{ rows: SoftwareLicense[]; total: number }> {
     const conditions = [
       filters.status ? eq(softwareLicenses.status, filters.status) : undefined,
-      filters.vendor ? ilike(softwareLicenses.vendor, `%${filters.vendor}%`) : undefined,
-      filters.search ? ilike(softwareLicenses.name, `%${filters.search}%`) : undefined,
+      searchAcross(filters.vendor, softwareLicenses.vendor),
+      searchAcross(filters.search, softwareLicenses.name),
     ].filter(Boolean);
 
     const where = conditions.length ? and(...conditions) : undefined;

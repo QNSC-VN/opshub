@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { softwareCatalog, complianceFindings } from '../../../../../../db/schema';
 import type { IComplianceRepository } from '../../domain/ports/compliance.repository';
@@ -76,7 +76,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
   ): Promise<{ rows: SoftwareCatalogEntry[]; total: number }> {
     const conditions = [
       filters.listing ? eq(softwareCatalog.listing, filters.listing) : undefined,
-      filters.search ? ilike(softwareCatalog.name, `%${filters.search}%`) : undefined,
+      searchAcross(filters.search, softwareCatalog.name),
     ].filter(Boolean);
     const where = conditions.length ? and(...conditions) : undefined;
 

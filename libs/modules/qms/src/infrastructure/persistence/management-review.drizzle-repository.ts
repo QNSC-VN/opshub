@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, eq, lte, ne, notInArray, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { managementReviewActions, managementReviews } from '../../../../../../db/schema';
 import type { IManagementReviewRepository } from '../../domain/ports/qms.repository';
@@ -90,11 +90,12 @@ export class ManagementReviewDrizzleRepository implements IManagementReviewRepos
       filters.scheduledOnOrBefore
         ? lte(managementReviews.scheduledFor, filters.scheduledOnOrBefore)
         : undefined,
-      filters.search
-        ? sql`(${managementReviews.title} ILIKE ${'%' + filters.search + '%'}
-            OR ${managementReviews.reference} ILIKE ${'%' + filters.search + '%'}
-            OR ${managementReviews.period} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(
+        filters.search,
+        managementReviews.title,
+        managementReviews.reference,
+        managementReviews.period,
+      ),
     );
 
     const rows = await this.db

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, lte, notInArray, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import {
   internalAuditAuditors,
@@ -113,11 +113,12 @@ export class InternalAuditDrizzleRepository implements IInternalAuditRepository 
       filters.plannedStartOnOrBefore
         ? lte(internalAudits.plannedStartOn, filters.plannedStartOnOrBefore)
         : undefined,
-      filters.search
-        ? sql`(${internalAudits.title} ILIKE ${'%' + filters.search + '%'}
-            OR ${internalAudits.reference} ILIKE ${'%' + filters.search + '%'}
-            OR ${internalAudits.scope} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(
+        filters.search,
+        internalAudits.title,
+        internalAudits.reference,
+        internalAudits.scope,
+      ),
     );
 
     const rows = await this.db

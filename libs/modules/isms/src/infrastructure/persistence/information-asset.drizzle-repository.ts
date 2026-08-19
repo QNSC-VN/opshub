@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, isNull, lte, or, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import {
   assetClassificationHistory,
@@ -140,10 +140,7 @@ export class InformationAssetDrizzleRepository implements IInformationAssetRepos
         : undefined,
       // The register means the CURRENT inventory, so retired rows are out unless asked for.
       filters.includeRetired ? undefined : isNull(informationAssets.retiredAt),
-      filters.search
-        ? sql`(${informationAssets.name} ILIKE ${'%' + filters.search + '%'}
-            OR ${informationAssets.reference} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(filters.search, informationAssets.name, informationAssets.reference),
     );
 
     const rows = await this.db

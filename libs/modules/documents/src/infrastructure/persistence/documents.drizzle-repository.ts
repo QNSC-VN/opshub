@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, isNull, notExists, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { documentAcknowledgements, documentVersions, documents } from '../../../../../../db/schema';
 import type { IDocumentsRepository } from '../../domain/ports/documents.repository';
@@ -53,10 +53,7 @@ export class DocumentsDrizzleRepository implements IDocumentsRepository {
       filters.ownerId ? eq(documents.ownerId, filters.ownerId) : undefined,
       // Retired documents stay readable but are out of the way unless asked for.
       filters.includeRetired ? undefined : isNull(documents.retiredAt),
-      filters.search
-        ? sql`(${documents.code} ILIKE ${'%' + filters.search + '%'}
-            OR ${documents.title} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(filters.search, documents.code, documents.title),
     );
 
     const rows = await this.db
