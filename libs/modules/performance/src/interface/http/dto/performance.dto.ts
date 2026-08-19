@@ -82,6 +82,17 @@ export const ListReviewsQuerySchema = z
   .merge(PaginationQuerySchema);
 export class ListReviewsQueryDto extends createZodDto(ListReviewsQuerySchema) {}
 
+/**
+ * Paging alone, for the coverage report.
+ *
+ * No filters: the report IS the filter — everybody outstanding — and narrowing it by status would let a
+ * caller ask "who is outstanding, except the ones I would rather not see". Defined here rather than
+ * reusing a shared `PageQueryDto` because every other list in this product declares its own query
+ * schema, and one route importing a different pagination type is how two conventions start.
+ */
+export const CoverageQuerySchema = z.object({}).merge(PaginationQuerySchema);
+export class CoverageQueryDto extends createZodDto(CoverageQuerySchema) {}
+
 export const SubmitSelfAssessmentSchema = z.object({
   /** The employee's own account of the period. Substantial by design: a one-word review is not one. */
   selfAssessment: z.string().min(20).max(10_000),

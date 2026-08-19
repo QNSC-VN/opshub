@@ -112,8 +112,16 @@ export interface IPerformanceRepository {
    *
    * An ANTI-JOIN, not a stored list: a cached "who is missing" is wrong the moment a review is
    * created, and the answer is one query.
+   *
+   * PAGED, AND RETURNS THE TOTAL. This took a bare `limit` and the controller passed 500, so past five
+   * hundred active employees the report answering "who has not been reviewed" silently omitted people —
+   * the one report where an omission reads as an all-clear.
    */
-  coverageGaps(cycleId: string, limit: number): Promise<CoverageGap[]>;
+  coverageGaps(
+    cycleId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: CoverageGap[]; total: number }>;
   /** How many reviews sit in each state of a cycle. */
   cycleProgress(cycleId: string, tx?: DbExecutor): Promise<CycleProgress[]>;
   /** How many reviews are neither acknowledged nor cancelled — the close gate's input. */

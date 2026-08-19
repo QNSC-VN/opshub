@@ -667,14 +667,52 @@ describe('the calibration sign-off', () => {
   });
 });
 
+interface CoverageRow {
+  employeeId: string;
+  reviewId: string | null;
+  status: string | null;
+}
+
+/** One page of the coverage report, with the page info the pager needs. */
+async function coveragePage(
+  cycleId: string,
+  query = '',
+): Promise<{ rows: CoverageRow[]; total: number; hasNextPage: boolean }> {
+  const res = await apiRequest(app, hr, 'GET', `/performance/cycles/${cycleId}/coverage${query}`);
+  expect(res.status, JSON.stringify(res.body)).toBe(200);
+  const body = res.body as {
+    data: CoverageRow[];
+    pageInfo: { total: number; hasNextPage: boolean };
+  };
+  return { rows: body.data, total: body.pageInfo.total, hasNextPage: body.pageInfo.hasNextPage };
+}
+
+/**
+ * Every outstanding person, by walking the pages.
+ *
+ * THIS IS WHY THE TEST LOOKS LIKE THIS NOW. The endpoint used to pass a hard `500` and return a bare
+ * array, and the assertion below — "an employee with no review must appear" — failed on a database that
+ * had grown to 848 active employees. A correct assertion, a real ceiling, and nothing in the response
+ * that would have told anybody which of the two was wrong.
+ */
+async function allCoverage(cycleId: string): Promise<CoverageRow[]> {
+  const rows: CoverageRow[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await coveragePage(cycleId, `?limit=100&offset=${offset}`);
+    rows.push(...page.rows);
+    if (!page.hasNextPage) return rows;
+    // A guard against an endpoint that always says there is more: a walk that cannot terminate is a
+    // test that hangs rather than fails.
+    expect(offset, 'the coverage report never reported a last page').toBeLessThan(100_000);
+  }
+}
+
 describe('coverage and closing', () => {
   it('reports both kinds of gap, and refuses to close over them', async () => {
     const cycle = await openCycle('CLOSE');
 
     // An employee with NO review at all. Every active employee is a gap before anybody is reviewed.
-    const beforeAny = unwrap<
-      { employeeId: string; reviewId: string | null; status: string | null }[]
-    >((await apiRequest(app, hr, 'GET', `/performance/cycles/${cycle.id}/coverage`)).body);
+    const beforeAny = await allCoverage(cycle.id);
     const missing = beforeAny.find((g) => g.employeeId === FIXTURE.NO_PERMISSIONS.id);
     expect(missing, 'an employee with no review must appear').toBeDefined();
     expect(missing!.reviewId).toBeNull();
@@ -685,9 +723,7 @@ describe('coverage and closing', () => {
 
     // …and now the SECOND kind: a review that exists and has stalled. Both are "not done", which is
     // why the report is a left join rather than an anti-join.
-    const stalled = unwrap<
-      { employeeId: string; reviewId: string | null; status: string | null }[]
-    >((await apiRequest(app, hr, 'GET', `/performance/cycles/${cycle.id}/coverage`)).body).find(
+    const stalled = (await allCoverage(cycle.id)).find(
       (g) => g.employeeId === FIXTURE.NO_PERMISSIONS.id,
     );
     expect(stalled!.reviewId).toBe(review.id);
@@ -714,11 +750,74 @@ describe('coverage and closing', () => {
     expect(closed.status, JSON.stringify(closed.body)).toBe(200);
     expect(unwrap<CycleRow>(closed.body).closedAt).not.toBeNull();
 
-    // A cancelled review is no longer a gap.
-    const afterwards = unwrap<{ employeeId: string }[]>(
-      (await apiRequest(app, hr, 'GET', `/performance/cycles/${cycle.id}/coverage`)).body,
-    );
+    // A cancelled review is no longer a gap. Walked, not read off the first page: an absence proven
+    // from one page of many is not an absence.
+    const afterwards = await allCoverage(cycle.id);
     expect(afterwards.find((g) => g.employeeId === FIXTURE.NO_PERMISSIONS.id)).toBeUndefined();
+  });
+
+  it('counts everybody outstanding, not the size of the page', async () => {
+    /*
+     * THE DEFECT, as a test. The endpoint returned a bare array capped at 500, so the only number a
+     * caller could compute was the length of what it happened to receive — and the SPA put exactly that
+     * in the panel heading. A report whose total IS its page is a report that gets shorter as the
+     * organisation grows, on the one screen where a short answer reads as progress.
+     */
+    const cycle = await openCycle('PAGED');
+
+    const firstOnly = await coveragePage(cycle.id, '?limit=1');
+    expect(firstOnly.rows).toHaveLength(1);
+    // Every active employee is outstanding in a cycle nobody has reviewed, and the fixtures alone are
+    // more than one — so a total equal to the page length would mean the total is the page length.
+    expect(firstOnly.total).toBeGreaterThan(1);
+    expect(firstOnly.hasNextPage).toBe(true);
+  });
+
+  it('pages without losing or repeating a row', async () => {
+    /*
+     * The property that makes paging trustworthy, and the reason the ORDER ends in `employees.id`: with
+     * a non-total order, two rows that compare equal can swap between requests, so one is served twice
+     * and another never — silent, and worst on the report whose purpose is "who did we miss".
+     *
+     * BOUNDED TO THE FIRST FEW ROWS, one at a time. My first version walked every row at `limit=1`,
+     * which on a database with 848 active employees is 848 requests and earned a real 429 — the DEFAULT
+     * tier is 200/minute — that then cascaded into five later tests in this file. `limit=1` is still the
+     * point, because one row per page maximises the number of BOUNDARIES, which is where a partial
+     * order goes wrong; ten boundaries prove the ordering just as well as eight hundred and are a test
+     * rather than a load generator.
+     */
+    const cycle = await openCycle('WALK');
+    const total = (await coveragePage(cycle.id, '?limit=1')).total;
+    const steps = Math.min(total, 10);
+    expect(steps, 'too few outstanding people to cross a page boundary').toBeGreaterThan(1);
+
+    const seen: string[] = [];
+    for (let offset = 0; offset < steps; offset += 1) {
+      const page = await coveragePage(cycle.id, `?limit=1&offset=${offset}`);
+      expect(page.rows, `offset ${offset} of ${total} returned nothing`).toHaveLength(1);
+      expect(page.total, 'the total moved mid-walk').toBe(total);
+      seen.push(page.rows[0].employeeId);
+    }
+
+    expect(new Set(seen).size, 'a row was served twice, so another was never served').toBe(steps);
+  });
+
+  it('reports the last page honestly rather than promising another', async () => {
+    // `hasNextPage` comes from the server because deriving it as `offset + limit < total` is wrong the
+    // moment a row is inserted between two requests — and a pager that always offers Next is a chaser
+    // clicking into an empty page believing there is more to chase.
+    const cycle = await openCycle('LAST');
+    const total = (await coveragePage(cycle.id, '?limit=1')).total;
+
+    const last = await coveragePage(cycle.id, `?limit=100&offset=${Math.max(total - 1, 0)}`);
+    expect(last.hasNextPage).toBe(false);
+    expect(last.rows.length).toBeGreaterThan(0);
+
+    // Past the end: an empty page, not a 404, and still the true total.
+    const beyond = await coveragePage(cycle.id, `?limit=100&offset=${total + 100}`);
+    expect(beyond.rows).toHaveLength(0);
+    expect(beyond.total).toBe(total);
+    expect(beyond.hasNextPage).toBe(false);
   });
 
   it('cannot withdraw a review the employee has already seen', async () => {

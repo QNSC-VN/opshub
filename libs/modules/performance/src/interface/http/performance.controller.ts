@@ -40,6 +40,7 @@ import type {
 import {
   CancelReviewDto,
   CoverageGapResponseDto,
+  CoverageQueryDto,
   CreateCycleDto,
   CreateReviewDto,
   CycleProgressResponseDto,
@@ -295,6 +296,18 @@ export class PerformanceController {
     return (await this.service.cycleProgress(id)).map(toProgressDto);
   }
 
+  /**
+   * Who has not been reviewed, paged.
+   *
+   * WHY THIS IS PAGED NOW. It passed a hard `500` and returned a bare array, so an organisation with
+   * more than five hundred active employees got a report that omitted people and said nothing about it.
+   * Of every list in this product that is the worst one to truncate silently: the answer it gives is
+   * "these are the ones still outstanding", and a short answer reads as progress.
+   *
+   * It also made a test lie. `performance.e2e.spec.ts` asserts that an employee with no review appears,
+   * and it failed on a database that had accumulated 848 active employees — a correct assertion, a real
+   * ceiling, and nothing in the response that would have told anybody which of the two was wrong.
+   */
   @Get('cycles/:id/coverage')
   @RequirePermission(PERMISSION.PERFORMANCE_READ)
   @ApiOperation({
@@ -302,12 +315,18 @@ export class PerformanceController {
     description:
       'Active employees with NO review, and those whose review has stalled short of ' +
       'acknowledgement. Both are "not done": a report showing only the first would call a cycle ' +
-      'complete while half its reviews sat unsigned. Missing reviews come first.',
+      'complete while half its reviews sat unsigned. Missing reviews come first. ' +
+      'Paged: `pageInfo.total` is every outstanding person, not the size of this page, so a caller ' +
+      'can tell a complete answer from a first page.',
   })
-  @ApiOkResponse({ type: [CoverageGapResponseDto] })
+  @ApiPagedResponse(CoverageGapResponseDto)
   @ApiCommonErrors(401, 403, 404)
-  async coverage(@Param('id', ParseUUIDPipe) id: string): Promise<CoverageGapResponseDto[]> {
-    return (await this.service.coverageGaps(id, 500)).map(toCoverageGapDto);
+  async coverage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: CoverageQueryDto,
+  ): Promise<PagedResult<CoverageGapResponseDto>> {
+    const { rows, total } = await this.service.coverageGaps(id, query.limit, query.offset);
+    return buildPageResult(rows.map(toCoverageGapDto), total, query.limit, query.offset);
   }
 
   @Post('cycles/:id/reviews')

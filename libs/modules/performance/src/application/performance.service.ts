@@ -225,9 +225,13 @@ export class PerformanceService {
     return this.repo.cycleProgress(id);
   }
 
-  async coverageGaps(cycleId: string, limit: number): Promise<CoverageGap[]> {
+  async coverageGaps(
+    cycleId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: CoverageGap[]; total: number }> {
     await this.mustFindCycle(cycleId);
-    return this.repo.coverageGaps(cycleId, limit);
+    return this.repo.coverageGaps(cycleId, limit, offset);
   }
 
   // ── Reviews ────────────────────────────────────────────────────────────────
