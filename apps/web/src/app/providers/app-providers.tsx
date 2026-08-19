@@ -1,32 +1,12 @@
 import { Component, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { Toaster } from 'sonner';
 import { router } from '@/app/router/router';
 import { bootstrapAuth } from '@/shared/api/auth-bootstrap';
-import { STALE } from '@/shared/api/cache';
+import { queryClient } from '@/shared/api/query-client';
 import { useThemeStore } from '@/shared/lib/theme';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error) => {
-        if ((error as { status?: number })?.status === 401) return false;
-        return failureCount < 1;
-      },
-      refetchOnWindowFocus: false,
-      /*
-       * STATED, NOT INHERITED. This is TanStack's own default, so nothing changes — but half the
-       * queries in the SPA set a `staleTime` and half do not, and the half that do not were reading as
-       * an omission rather than as a choice. `STALE.NONE` says the choice out loud: refetch on mount,
-       * which is right for a list somebody is about to act on and wrong for a reference catalogue.
-       * A query that wants otherwise names its tier from the same file.
-       */
-      staleTime: STALE.NONE,
-    },
-  },
-});
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
