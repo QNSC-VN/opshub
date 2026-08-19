@@ -177,7 +177,11 @@ export class AssetsController {
   // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
   // already promises 200 — without this the generated client's contract disagreed with the server.
   @HttpCode(HttpStatus.OK)
-  @RequirePermission('asset.write')
+  // Descriptored like `GET :id/photo` below, which it was not: READING an asset's photo evaluated the
+  // caller's scope against the row, and REPLACING it did not. A constrained `asset.write` grant is
+  // denied by a route that declares no scope to check it against, so the two ends of the same upload
+  // answered differently for the same holder.
+  @RequirePermission('asset.write', { resource: 'asset', from: 'param', field: 'id' })
   @RateLimit('UPLOAD')
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an asset photo' })
   @ApiOkResponse({
@@ -203,7 +207,9 @@ export class AssetsController {
   // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
   // already promises 200 — without this the generated client's contract disagreed with the server.
   @HttpCode(HttpStatus.OK)
-  @RequirePermission('asset.write')
+  // Same descriptor as the presign above: a confirm that authorized more loosely than the presign
+  // would let a caller finish an upload they could not have started.
+  @RequirePermission('asset.write', { resource: 'asset', from: 'param', field: 'id' })
   @RateLimit('UPLOAD')
   @ApiOperation({ summary: 'Confirm asset photo upload completed' })
   @ApiOkResponse({
