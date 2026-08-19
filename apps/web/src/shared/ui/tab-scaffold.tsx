@@ -33,16 +33,32 @@ export function TabToolbar({ filter, action }: { filter: ReactNode; action?: Rea
   );
 }
 
-/** Cancel + submit, so no two forms disagree about button order or labels. */
+/**
+ * Cancel + submit, so no two forms disagree about button order or labels.
+ *
+ * WHY `pendingLabel` EXISTS. Nineteen forms wrote this footer by hand, byte-identical apart from one
+ * thing: what the button says while the request is in flight. "Adding…", "Terminating…", "Assigning…",
+ * "Activating…", "Working…". This component only ever said "Saving…", so a form whose verb was not
+ * "save" had to open-code the whole footer to keep its wording — and then owned the button order, the
+ * variants and the sizes too. One optional prop is the difference between reuse and nineteen copies.
+ *
+ * The pending label is the verb in progress, not a spinner: "Terminating…" on a contract termination
+ * tells the user which irreversible thing is happening, where a spinner tells them only that something
+ * is. Default "Saving…" because that is what most of them are.
+ */
 export function FormActions({
   loading,
   onClose,
   submitLabel,
+  pendingLabel = 'Saving…',
   variant = 'primary',
 }: {
   loading: boolean;
   onClose: () => void;
-  submitLabel: string;
+  /** A node, not a string, because several callers switch the wording on create-vs-edit. */
+  submitLabel: ReactNode;
+  /** What the button says in flight. The verb in progress — "Terminating…", not a spinner. */
+  pendingLabel?: string;
   /** `danger` for a form whose submit destroys something — revoke, terminate. */
   variant?: 'primary' | 'danger';
 }) {
@@ -52,7 +68,7 @@ export function FormActions({
         Cancel
       </Button>
       <Button type="submit" variant={variant} size="sm" disabled={loading}>
-        {loading ? 'Saving…' : submitLabel}
+        {loading ? pendingLabel : submitLabel}
       </Button>
     </div>
   );

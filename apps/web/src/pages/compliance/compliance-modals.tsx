@@ -3,16 +3,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import type { SoftwareListing } from '@/shared/api/types';
-import {
-  Button,
-  Checkbox,
-  FormActions,
-  FormError,
-  FormField,
-  Modal,
-  Select,
-  Textarea,
-} from '@/shared/ui';
+import { Checkbox, FormActions, FormError, FormField, Modal, Select, Textarea } from '@/shared/ui';
 
 /**
  * Resolving a compliance finding.
@@ -73,14 +64,7 @@ export function ResolveModal({ findingId, open, onClose, onSuccess }: ResolveMod
           label="Accept residual risk (mark as risk accepted)"
         />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Saving…' : 'Resolve'}
-          </Button>
-        </div>
+        <FormActions loading={loading} onClose={onClose} submitLabel="Resolve" />
       </form>
     </Modal>
   );

@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   DataTable,
   EntityDetailPanel,
+  FormActions,
   FormField,
   Input,
   Modal,
@@ -80,14 +81,12 @@ function CreateRoleModal({
           />
         </FormField>
         {err && <p className="text-xs text-danger">{err}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Creating…' : 'Create'}
-          </Button>
-        </div>
+        <FormActions
+          loading={loading}
+          onClose={onClose}
+          submitLabel="Create"
+          pendingLabel="Creating…"
+        />
       </form>
     </Modal>
   );

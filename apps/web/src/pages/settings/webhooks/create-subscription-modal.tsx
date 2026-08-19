@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormError, FormField, Input, Modal } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal } from '@/shared/ui';
 import { cn } from '@/shared/lib/utils';
 import { ALL_EVENTS, type EventType } from './webhook.types';
 
@@ -144,14 +144,12 @@ export function CreateSubscriptionModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Creating…' : 'Create subscription'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Create subscription"
+          pendingLabel="Creating…"
+        />
       </form>
     </Modal>
   );
