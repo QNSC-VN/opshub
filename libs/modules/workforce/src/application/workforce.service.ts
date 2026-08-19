@@ -338,6 +338,16 @@ export class WorkforceService {
         await this.engine.reject(l.requestId, null, actor);
       }
     } else {
+      /*
+       * PRE-ENGINE ROWS ONLY, and this branch is why the missing audit trail was invisible.
+       *
+       * `createLeave`/`createOvertime` set `requestId` on every row they make, so nothing reaching
+       * this service today takes this path — only rows that predate the request engine can, and they
+       * are the reason it is kept rather than deleted. But it holds the ONLY
+       * `leave.approved` / `overtime.approved` writes in the service, so a reader (and a grep) saw
+       * the decision being audited while the live path above recorded nothing at all. The entries now
+       * live in the type-def hooks, where the engine applies the decision.
+       */
       // Legacy path
       return this.db.transaction(async (tx) => {
         const updated = await this.repo.setLeaveStatus(
@@ -427,6 +437,16 @@ export class WorkforceService {
         await this.engine.reject(o.requestId, null, actor);
       }
     } else {
+      /*
+       * PRE-ENGINE ROWS ONLY, and this branch is why the missing audit trail was invisible.
+       *
+       * `createLeave`/`createOvertime` set `requestId` on every row they make, so nothing reaching
+       * this service today takes this path — only rows that predate the request engine can, and they
+       * are the reason it is kept rather than deleted. But it holds the ONLY
+       * `leave.approved` / `overtime.approved` writes in the service, so a reader (and a grep) saw
+       * the decision being audited while the live path above recorded nothing at all. The entries now
+       * live in the type-def hooks, where the engine applies the decision.
+       */
       // Legacy path
       return this.db.transaction(async (tx) => {
         const updated = await this.repo.setOvertimeStatus(

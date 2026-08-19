@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
 import { REQUEST_TYPE } from '@shared-kernel';
 import { leaveRequests } from '../../../../../db/schema';
 import type { LeaveDayPortion } from '../domain/workforce.types';
@@ -23,6 +24,16 @@ export interface LeaveRequestPayload extends Record<string, unknown> {
  * RequestTypeDef for leave requests. Syncs the domain-table status when the
  * engine transitions state, so existing queries against `workforce.leave_requests`
  * continue to work unchanged.
+ *
+ * AND RECORDS THE DECISION, which nothing did. `RequestEngine` writes no audit entry for any
+ * transition — it owns `request_items` and leaves the domain event to the type that defines it — and
+ * these hooks wrote the status change and stopped. The only `leave.approved` / `leave.rejected` writes
+ * in the codebase sat in a `// Legacy path` branch of `WorkforceService.reviewLeave` that
+ * `createLeave` made unreachable the moment it started setting `requestId` on every row.
+ *
+ * So approving leave produced no audit entry at all, on a service whose own docblock calls these "the
+ * decisions people are paid on". Expiry was worse: `onExpire` cancels somebody's leave request with no
+ * record that anything happened, and no actor to attribute it to.
  */
 @Injectable()
 export class LeaveRequestTypeDef implements RequestTypeDef<LeaveRequestPayload>, OnModuleInit {
@@ -33,7 +44,14 @@ export class LeaveRequestTypeDef implements RequestTypeDef<LeaveRequestPayload>,
   /** SLA: notify if not approved within 48 h (2 business days) */
   readonly slaHours = 48;
 
-  constructor(private readonly registry: RequestRegistry) {}
+  private readonly trail;
+
+  constructor(
+    private readonly registry: RequestRegistry,
+    private readonly audit: AuditService,
+  ) {
+    this.trail = audit.forResource(AUDIT_RESOURCE.LEAVE_REQUEST);
+  }
 
   onModuleInit(): void {
     this.registry.register(this);
@@ -50,6 +68,27 @@ export class LeaveRequestTypeDef implements RequestTypeDef<LeaveRequestPayload>,
       .update(leaveRequests)
       .set({ status: 'approved', reviewerId, reviewedAt: now })
       .where(eq(leaveRequests.id, payload.leaveRequestId));
+
+    /*
+     * In the engine's transaction, so the entry commits with the decision and rolls back with it.
+     *
+     * `workingDays` travels on the entry because it is what the approval actually COST — the dates
+     * alone do not say whether this was two days or two days minus an afternoon.
+     *
+     * The engine hands these hooks a reviewer id and no email, and `AuditService` records both, so the
+     * id is carried in both fields — visibly derived rather than silently blank. Same convention as
+     * `RiskAcceptanceTypeDef` and the offboarding hook.
+     */
+    await this.trail.record(
+      AUDIT_ACTION.LEAVE_APPROVED,
+      payload.leaveRequestId,
+      { sub: reviewerId, email: reviewerId },
+      tx,
+      {
+        before: { status: 'pending' },
+        after: { status: 'approved', reviewedAt: now, workingDays: payload.workingDays },
+      },
+    );
   }
 
   async onReject(
@@ -63,6 +102,14 @@ export class LeaveRequestTypeDef implements RequestTypeDef<LeaveRequestPayload>,
       .update(leaveRequests)
       .set({ status: 'rejected', reviewerId, reviewedAt: now })
       .where(eq(leaveRequests.id, payload.leaveRequestId));
+
+    await this.trail.record(
+      AUDIT_ACTION.LEAVE_REJECTED,
+      payload.leaveRequestId,
+      { sub: reviewerId, email: reviewerId },
+      tx,
+      { before: { status: 'pending' }, after: { status: 'rejected', reviewedAt: now } },
+    );
   }
 
   async onExpire(payload: LeaveRequestPayload, _requestId: string, tx: DbExecutor): Promise<void> {
@@ -70,5 +117,29 @@ export class LeaveRequestTypeDef implements RequestTypeDef<LeaveRequestPayload>,
       .update(leaveRequests)
       .set({ status: 'cancelled' })
       .where(eq(leaveRequests.id, payload.leaveRequestId));
+
+    /*
+     * NO ACTOR, because time did this rather than a person.
+     *
+     * `actorId: null` is what distinguishes an expiry sweep from somebody cancelling their own leave —
+     * `ContractExpiryCron` records its sweep the same way, and for the same reason. Naming the
+     * requester would read as "they cancelled it", which is the opposite of what happened: they asked,
+     * and nobody answered in time. The trail interface takes an `Actor`, so this goes through the raw
+     * recorder instead.
+     */
+    await this.audit.record(
+      {
+        actorId: null,
+        actorEmail: null,
+        action: AUDIT_ACTION.LEAVE_CANCELLED,
+        resourceType: AUDIT_RESOURCE.LEAVE_REQUEST,
+        resourceId: payload.leaveRequestId,
+        changes: {
+          before: { status: 'pending' },
+          after: { status: 'cancelled', reason: 'expired without review' },
+        },
+      },
+      tx,
+    );
   }
 }
