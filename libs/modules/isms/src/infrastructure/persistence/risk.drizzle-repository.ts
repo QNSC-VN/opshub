@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { riskTreatments, risks } from '../../../../../../db/schema';
 import type { IRiskRepository } from '../../domain/ports/risk.repository';
@@ -75,11 +75,7 @@ export class RiskDrizzleRepository implements IRiskRepository {
         : undefined,
       // Reference, title and category — what somebody types when they half-remember a risk. Not the
       // DESCRIPTION: it is a paragraph, and matching it makes every search return most of the register.
-      filters.search
-        ? sql`(${risks.reference} ILIKE ${'%' + filters.search + '%'}
-            OR ${risks.title} ILIKE ${'%' + filters.search + '%'}
-            OR ${risks.category} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(filters.search, risks.reference, risks.title, risks.category),
     );
 
     const rows = await this.db

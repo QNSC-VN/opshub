@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import {
   risks,
@@ -121,11 +121,7 @@ export class VendorDrizzleRepository implements IVendorRepository {
         : undefined,
       // The register means who we use NOW, so terminated rows are out unless asked for.
       filters.includeTerminated ? undefined : ne(vendors.status, 'terminated'),
-      filters.search
-        ? sql`(${vendors.name} ILIKE ${'%' + filters.search + '%'}
-            OR ${vendors.legalName} ILIKE ${'%' + filters.search + '%'}
-            OR ${vendors.reference} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(filters.search, vendors.name, vendors.legalName, vendors.reference),
     );
 
     const rows = await this.db

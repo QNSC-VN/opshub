@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { employeePositions, positions } from '../../../../../../db/schema';
 import type { IPositionsRepository } from '../../domain/ports/positions.repository';
@@ -71,13 +71,7 @@ export class PositionsDrizzleRepository implements IPositionsRepository {
       // The SPA had a search box before this existed, and the parameter was simply dropped — a control
       // that looks like it filters and does not. Title, code and department, which is what somebody
       // types when they are looking for a position.
-      filters.search
-        ? or(
-            ilike(positions.title, `%${filters.search}%`),
-            ilike(positions.code, `%${filters.search}%`),
-            ilike(positions.department, `%${filters.search}%`),
-          )
-        : undefined,
+      searchAcross(filters.search, positions.title, positions.code, positions.department),
       filters.department ? eq(positions.department, filters.department) : undefined,
       filters.status ? eq(positions.status, filters.status) : undefined,
     );
