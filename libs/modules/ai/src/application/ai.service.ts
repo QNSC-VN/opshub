@@ -6,9 +6,10 @@ import {
   InjectDrizzle,
   type DrizzleDB,
   RequestEngine,
+  searchAcross,
 } from '@platform';
 import type { Permission } from '@shared-kernel';
-import { desc, eq, and, isNull, gte, or, ilike } from 'drizzle-orm';
+import { desc, eq, and, isNull, gte } from 'drizzle-orm';
 import { employees, complianceFindings, accessGrants } from '../../../../../db/schema';
 import type { ChatRequest, ChatResponse } from '../domain/ai.types';
 
@@ -450,9 +451,7 @@ export class AiService {
     const conditions = [
       status ? eq(employees.status, status as 'active' | 'on_leave' | 'offboarded') : undefined,
       department ? eq(employees.department, department) : undefined,
-      query
-        ? or(ilike(employees.displayName, `%${query}%`), ilike(employees.email, `%${query}%`))
-        : undefined,
+      searchAcross(query, employees.displayName, employees.email),
     ].filter(Boolean);
 
     const rows = await this.db

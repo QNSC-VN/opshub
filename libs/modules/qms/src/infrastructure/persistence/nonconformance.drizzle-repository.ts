@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, notInArray, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { nonconformanceSeverities, nonconformances } from '../../../../../../db/schema';
 import type { INonconformanceRepository } from '../../domain/ports/qms.repository';
@@ -125,11 +125,12 @@ export class NonconformanceDrizzleRepository implements INonconformanceRepositor
       filters.processArea ? eq(nonconformances.processArea, filters.processArea) : undefined,
       filters.openOnly ? notInArray(nonconformances.status, [...SETTLED_STATUSES]) : undefined,
       filters.capaRequiredOnly ? eq(nonconformanceSeverities.requiresCapa, true) : undefined,
-      filters.search
-        ? sql`(${nonconformances.title} ILIKE ${'%' + filters.search + '%'}
-            OR ${nonconformances.reference} ILIKE ${'%' + filters.search + '%'}
-            OR ${nonconformances.requirement} ILIKE ${'%' + filters.search + '%'})`
-        : undefined,
+      searchAcross(
+        filters.search,
+        nonconformances.title,
+        nonconformances.reference,
+        nonconformances.requirement,
+      ),
     );
 
     const rows = await this.db

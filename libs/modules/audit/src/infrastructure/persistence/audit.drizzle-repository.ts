@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, lt, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { auditLogs } from '../../../../../../db/schema';
 import type { IAuditRepository } from '../../domain/ports/audit.repository';
 import type { AuditFilters, AuditLog, CreateAuditLogInput } from '../../domain/audit.types';
@@ -33,7 +33,7 @@ export class AuditDrizzleRepository implements IAuditRepository {
       filters.actorId ? eq(auditLogs.actorId, filters.actorId) : undefined,
       // `ilike` with wrapping wildcards: case-insensitive substring. Trigram-indexing this is the next
       // step if the table grows past a scan, and the query is written so that only the index changes.
-      filters.actorEmail ? ilike(auditLogs.actorEmail, `%${filters.actorEmail}%`) : undefined,
+      searchAcross(filters.actorEmail, auditLogs.actorEmail),
       filters.resourceType ? eq(auditLogs.resourceType, filters.resourceType) : undefined,
       filters.resourceId ? eq(auditLogs.resourceId, filters.resourceId) : undefined,
       filters.action ? eq(auditLogs.action, filters.action) : undefined,

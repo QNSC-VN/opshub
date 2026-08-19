@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { employees } from '../../../../../../db/schema';
 import type { IEmployeeRepository } from '../../domain/ports/employee.repository';
@@ -116,12 +116,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
     const conditions = [
       filters.status ? eq(employees.status, filters.status) : undefined,
       filters.department ? eq(employees.department, filters.department) : undefined,
-      filters.search
-        ? or(
-            ilike(employees.displayName, `%${filters.search}%`),
-            ilike(employees.email, `%${filters.search}%`),
-          )
-        : undefined,
+      searchAcross(filters.search, employees.displayName, employees.email),
     ].filter(Boolean);
     const where = conditions.length ? and(...conditions) : undefined;
 

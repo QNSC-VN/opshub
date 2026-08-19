@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { InjectDrizzle, type DrizzleDB, type DbExecutor, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { assets, assetAssignments } from '../../../../../../db/schema';
 import type { IAssetRepository } from '../../domain/ports/asset.repository';
@@ -54,13 +54,7 @@ export class AssetDrizzleRepository implements IAssetRepository {
       filters.status ? eq(assets.status, filters.status) : undefined,
       filters.type ? eq(assets.type, filters.type) : undefined,
       filters.assignedTo ? eq(assets.assignedTo, filters.assignedTo) : undefined,
-      filters.search
-        ? or(
-            ilike(assets.assetTag, `%${filters.search}%`),
-            ilike(assets.serialNumber, `%${filters.search}%`),
-            ilike(assets.model, `%${filters.search}%`),
-          )
-        : undefined,
+      searchAcross(filters.search, assets.assetTag, assets.serialNumber, assets.model),
     ].filter(Boolean);
     const where = conditions.length ? and(...conditions) : undefined;
 
