@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB, type DbExecutor } from '@platform';
 import { newId } from '@shared-kernel';
 import { softwareLicenses, licenseAssignments } from '../../../../../../db/schema';
@@ -59,7 +59,23 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
     const where = conditions.length ? and(...conditions) : undefined;
 
     const [rows, [countRow]] = await Promise.all([
-      this.db.select().from(softwareLicenses).where(where).limit(limit).offset(offset),
+      /*
+       * ORDERED, because it is PAGED. This was the only `.offset()` in the codebase with no
+       * `ORDER BY` at all: Postgres is free to return rows in any order it likes, and it changes
+       * that order as the plan changes, so paging repeated the same licence on page 2 and dropped
+       * another entirely. Nothing errors and the totals still add up, which is why it survived.
+       *
+       * `desc(createdAt), desc(id)` is the shape every other paged list here uses, and the `id`
+       * tiebreaker is what makes the order TOTAL — two licences created in the same transaction
+       * share a timestamp, and without it their relative order is again arbitrary.
+       */
+      this.db
+        .select()
+        .from(softwareLicenses)
+        .where(where)
+        .orderBy(desc(softwareLicenses.createdAt), desc(softwareLicenses.id))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: count() }).from(softwareLicenses).where(where),
     ]);
 
@@ -119,10 +135,15 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
   async listAssignments(licenseId: string, includeRevoked: boolean): Promise<LicenseAssignment[]> {
     const conditions = [eq(licenseAssignments.licenseId, licenseId)];
     if (!includeRevoked) conditions.push(isNull(licenseAssignments.revokedAt));
-    return this.db
-      .select()
-      .from(licenseAssignments)
-      .where(and(...conditions));
+    return (
+      this.db
+        .select()
+        .from(licenseAssignments)
+        .where(and(...conditions))
+        // Unpaged, so nothing was being LOST here — but the order was still whatever the scan
+        // produced, so the seat list reshuffled between two loads of the same screen.
+        .orderBy(desc(licenseAssignments.assignedAt), desc(licenseAssignments.id))
+    );
   }
 
   async findActiveAssignment(
@@ -171,7 +192,12 @@ export class LicenseDrizzleRepository implements ILicenseRepository {
         softwareLicenses.vendor,
         softwareLicenses.seatCount,
         softwareLicenses.costPerSeatCents,
-      );
+      )
+      // By NAME, because this feeds a utilisation table somebody reads down. Unordered, the rows
+      // arrived in whatever order the aggregate produced and moved between refreshes. `id` is the
+      // tiebreaker for two licences of the same name, and it is a GROUP BY key, so ordering on it
+      // is legal here — an aggregate may only order by its grouping keys.
+      .orderBy(asc(softwareLicenses.name), asc(softwareLicenses.id));
 
     return rows.map((r) => {
       const used = Number(r.usedSeats);

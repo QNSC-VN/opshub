@@ -39,6 +39,9 @@ const MAX_PARTIAL_ORDERINGS = 0;
 /** Sanity floor: if the scanner stops finding queries, fail loudly, not silently. */
 const MIN_ORDER_BYS_FOUND = 30;
 
+/** The same, for the OFFSET scanner — which has its own traversal and so needs its own floor. */
+const MIN_PAGED_READS_FOUND = 10;
+
 const ROOT = join(__dirname, '..');
 
 /**
@@ -217,6 +220,60 @@ function scanOrderBys(): { all: Ordering[]; partial: Ordering[] } {
   return { all, partial };
 }
 
+/**
+ * Paged reads that declare NO ordering at all.
+ *
+ * THE HOLE THIS CLOSES. `scanOrderBys` visits lines containing `.orderBy(`, so it can only judge an
+ * ordering that EXISTS. A query with `.limit()` and `.offset()` and no `.orderBy()` anywhere is
+ * unreachable by it — the worst case of the very defect this file is about, and structurally invisible
+ * to the check written to catch it. `license.list()` was in that state: the only `.offset()` in the
+ * codebase with no ordering, so paging repeated one licence and dropped another, and the ratchet
+ * reported zero violations while it did.
+ *
+ * ONLY `.offset()` COUNTS, not `.limit()`. `.where(eq(t.id, id)).limit(1)` is deterministic because
+ * the predicate already selects one row, and that shape is everywhere — flagging it would produce
+ * dozens of findings that are not defects, which is how a check gets an exemption list and then gets
+ * ignored. An OFFSET without an ORDER BY has no defensible form: it asks the database to skip N rows
+ * of an order it was never given.
+ *
+ * Statement boundaries are `;`, matching `scanOrderBys`.
+ */
+function scanPagedReads(): { paged: Ordering[]; unordered: Ordering[] } {
+  const files = execFileSync('git', ['ls-files', 'libs', 'apps', 'db'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((f) => f.endsWith('.ts') && !f.includes('.spec.') && !f.includes('.test.'))
+    .filter((f) => existsSync(join(ROOT, f)));
+
+  const paged: Ordering[] = [];
+  const unordered: Ordering[] = [];
+
+  for (const file of files) {
+    const source = readFileSync(join(ROOT, file), 'utf8');
+    if (!source.includes('.offset(')) continue;
+
+    let consumed = 0;
+    for (const statement of source.split(';')) {
+      const line = source.slice(0, consumed).split('\n').length;
+      consumed += statement.length + 1;
+
+      // A `.select(` anchors this to a read. `.offset(` on anything else is not a paged query.
+      if (!statement.includes('.offset(') || !statement.includes('.select(')) continue;
+
+      const entry = { file, line, text: statement.trim().replace(/\s+/g, ' ').slice(0, 160) };
+      // Counted whether or not it is a violation: the population is what the floor test below
+      // measures, so a matcher that stops finding paged reads fails loudly instead of reporting a
+      // clean sweep of nothing.
+      paged.push(entry);
+      if (!statement.includes('.orderBy(')) unordered.push(entry);
+    }
+  }
+
+  return { paged, unordered };
+}
+
 describe('query-ordering ratchet (must stay at zero)', () => {
   it('finds the query surface it claims to guard', () => {
     const { all } = scanOrderBys();
@@ -240,5 +297,38 @@ describe('query-ordering ratchet (must stay at zero)', () => {
     }
 
     expect(partial.length).toBe(0);
+  });
+
+  it('finds the paged-read surface it claims to guard', () => {
+    /*
+     * MEASURED THROUGH THE SCANNER, not with an independent grep.
+     *
+     * The first version of this floor counted files matching `.offset(` with `git grep`, which is
+     * true of the repository whatever the scanner does — so breaking the scanner's own matcher left
+     * this passing and the violation check reporting zero. A floor has to exercise the thing it
+     * claims to protect, or it is decoration.
+     */
+    const { paged } = scanPagedReads();
+    expect(
+      paged.length,
+      'Found no paged reads. The scanner is broken, not the repositories.',
+    ).toBeGreaterThanOrEqual(MIN_PAGED_READS_FOUND);
+  });
+
+  it('no paged read omits ORDER BY entirely', () => {
+    const { unordered: offenders } = scanPagedReads();
+
+    if (offenders.length > 0) {
+      const report = offenders.map((o) => `  ${o.file}:${o.line}\n      ${o.text}`).join('\n');
+      throw new Error(
+        `${offenders.length} paged read(s) have OFFSET with no ORDER BY.\n` +
+          `OFFSET asks the database to skip N rows of an order it was never given, so the same ` +
+          `row appears on two pages and another is never returned. Nothing errors and the total ` +
+          `stays correct, which is why this survives review. Add the ordering, ending in the ` +
+          `table's id.\n\n${report}`,
+      );
+    }
+
+    expect(offenders.length).toBe(0);
   });
 });
