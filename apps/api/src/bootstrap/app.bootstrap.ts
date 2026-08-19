@@ -92,11 +92,22 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
       'Authorization',
       'X-Correlation-Id',
       'X-CSRF-Token',
+      // Without this the browser's preflight refuses the request before it is sent, so the global
+      // IdempotencyInterceptor could never see a key — the feature existed and was unreachable.
+      'Idempotency-Key',
       'traceparent',
       'tracestate',
       'baggage',
     ],
-    exposedHeaders: ['X-Correlation-Id', 'RateLimit-Limit', 'RateLimit-Remaining', 'Retry-After'],
+    exposedHeaders: [
+      'X-Correlation-Id',
+      'RateLimit-Limit',
+      'RateLimit-Remaining',
+      'Retry-After',
+      // The other half: a browser cannot read a response header that is not exposed, so a client had
+      // no way to tell a replay from a fresh execution even if the request had got through.
+      'X-Idempotent-Replayed',
+    ],
   });
 
   // Health probes are served at /v1/healthz and /v1/readyz to match the ALB
@@ -108,7 +119,25 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
   if (!config.get('NODE_ENV').startsWith('prod')) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('OpsHub API')
-      .setDescription('Internal operations platform — assets, access, compliance, workforce.')
+      .setDescription(
+        /*
+         * IDEMPOTENCY IS DOCUMENTED HERE, not as a header parameter on every route.
+         *
+         * The interceptor is global, so expressing it in the schema would mean adding the same optional
+         * header to roughly two hundred mutating operations — bloating the spec and the generated
+         * client for a cross-cutting concern that is identical everywhere. The description is where a
+         * consumer reads about behaviour that is not per-route, and the two error codes ARE in the
+         * catalogue, so a client can branch on them.
+         */
+        'Internal operations platform — assets, access, compliance, workforce.\n\n' +
+          '**Idempotent retries.** Send `Idempotency-Key: <uuid>` on any POST, PUT or PATCH and the ' +
+          'response is replayed for 24 hours instead of the request being performed twice. A replay ' +
+          'carries `X-Idempotent-Replayed: true`. The key is scoped to the calling identity.\n\n' +
+          'Only successful responses are stored, so a failed request stays retryable. Reusing a key ' +
+          'with a different body is refused with `IDEMPOTENCY_KEY_REUSED` (422) rather than answered ' +
+          'with the first request\u2019s response. A retry that arrives while the first copy is still ' +
+          'running gets `IDEMPOTENCY_IN_FLIGHT` (409) — retry shortly.',
+      )
       .setVersion(config.get('SERVICE_VERSION'))
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'access-token')
       .build();
