@@ -1,11 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AppConfigService } from '../config/app-config.service';
 import { EMAIL_PROVIDER, type IEmailProvider } from './email.provider';
-import {
-  renderEmailTemplate,
-  type EmailTemplateName,
-  type EmailTemplateVars,
-} from './templates';
+import { renderEmailTemplate, type EmailTemplateName, type EmailTemplateVars } from './templates';
 
 /**
  * EmailService — render a typed template then dispatch via the injected provider.
@@ -16,33 +12,42 @@ import {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly from: string;
+  /**
+   * `undefined` when no sender is configured, never a string containing "undefined".
+   *
+   * `MAIL_FROM_EMAIL` lost its default, because defaulting it made a misconfigured production send
+   * from a domain it may not own. Interpolating the absent value would produce
+   * `OpsHub <undefined>` — a syntactically valid header that fails at the recipient, which is the
+   * same silent failure by a shorter route. The env schema refuses to boot a non-dev provider without
+   * one, so this is only reachable under `dev`, where the provider logs and has nothing to send from.
+   */
+  private readonly from: string | undefined;
 
   constructor(
     @Inject(EMAIL_PROVIDER) private readonly provider: IEmailProvider,
     config: AppConfigService,
   ) {
-    const name  = config.get('MAIL_FROM_NAME');
+    const name = config.get('MAIL_FROM_NAME');
     const email = config.get('MAIL_FROM_EMAIL');
-    this.from = `${name} <${email}>`;
+    this.from = email ? `${name} <${email}>` : undefined;
   }
 
   async sendTemplate<K extends EmailTemplateName>(
-    to:       string,
+    to: string,
     template: K,
-    vars:     EmailTemplateVars[K],
+    vars: EmailTemplateVars[K],
     opts?: { replyTo?: string; idempotencyKey?: string },
   ): Promise<void> {
     const rendered = renderEmailTemplate(template, vars);
     try {
       await this.provider.send({
         to,
-        from:           this.from,
-        replyTo:        opts?.replyTo,
-        subject:        rendered.subject,
-        html:           rendered.html,
-        text:           rendered.text,
-        category:       'transactional',
+        from: this.from,
+        replyTo: opts?.replyTo,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+        category: 'transactional',
         idempotencyKey: opts?.idempotencyKey,
       });
     } catch (err) {
