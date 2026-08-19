@@ -1,7 +1,8 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@shared-kernel';
-import { accessTypeEnum } from '@db/schema/enums';
+import { accessRequestStatusEnum, accessTypeEnum } from '@db/schema/enums';
 
 const accessType = z.enum(accessTypeEnum.enumValues);
 
@@ -20,21 +21,25 @@ export const ReviewAccessRequestSchema = z.object({
 
 export class ReviewAccessRequestDto extends createZodDto(ReviewAccessRequestSchema) {}
 
-export const ListAccessRequestsQuerySchema = z.object({
-  requesterId: z.string().uuid().optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'expired', 'revoked']).optional(),
-}).merge(PaginationQuerySchema);
+export const ListAccessRequestsQuerySchema = z
+  .object({
+    requesterId: z.string().uuid().optional(),
+    status: z.enum(['pending', 'approved', 'rejected', 'expired', 'revoked']).optional(),
+  })
+  .merge(PaginationQuerySchema);
 
 export class ListAccessRequestsQueryDto extends createZodDto(ListAccessRequestsQuerySchema) {}
 
 export class AccessRequestResponseDto {
   id!: string;
   requesterId!: string;
-  accessType!: string;
+  @ApiProperty({ enum: accessTypeEnum.enumValues })
+  accessType!: (typeof accessTypeEnum.enumValues)[number];
   target!: string;
   justification!: string;
   durationHours!: number;
-  status!: string;
+  @ApiProperty({ enum: accessRequestStatusEnum.enumValues })
+  status!: (typeof accessRequestStatusEnum.enumValues)[number];
   reviewerId!: string | null;
   reviewNote!: string | null;
   reviewedAt!: string | null;
@@ -45,7 +50,8 @@ export class AccessGrantResponseDto {
   id!: string;
   requestId!: string;
   granteeId!: string;
-  accessType!: string;
+  @ApiProperty({ enum: accessTypeEnum.enumValues })
+  accessType!: (typeof accessTypeEnum.enumValues)[number];
   target!: string;
   grantedAt!: string;
   expiresAt!: string;

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
+import type { SoftwareListing } from '@/shared/api/types';
 import { Button, FormActions, FormField, Modal, Select, Textarea } from '@/shared/ui';
 
 /**
@@ -100,12 +101,18 @@ interface ReclassifySoftwareModalProps {
   onSuccess: () => void;
 }
 
-const LISTING_OPTIONS = [
+/**
+ * The three values `software_listing` actually has.
+ *
+ * `unknown — seen, not yet assessed` was a fourth option, and choosing it FAILED THE SAVE: the enum
+ * has no such value, so the API refused the write. "Not yet assessed" is what `review` already means,
+ * which is also the column's default.
+ */
+const LISTING_OPTIONS: { value: SoftwareListing; label: string }[] = [
   { value: 'whitelisted', label: 'Whitelisted — allowed on managed devices' },
   { value: 'blacklisted', label: 'Blacklisted — must not be installed' },
   { value: 'review', label: 'Review — a decision is pending' },
-  { value: 'unknown', label: 'Unknown — seen, not yet assessed' },
-] as const;
+];
 
 export function ReclassifySoftwareModal({
   entry,

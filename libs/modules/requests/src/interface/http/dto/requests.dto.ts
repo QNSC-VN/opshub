@@ -9,9 +9,7 @@ export const ListRequestsQuerySchema = z.object({
     .enum(['pending', 'in_review', 'approved', 'rejected', 'cancelled', 'expired'])
     .optional(),
   requesterId: z.string().uuid().optional(),
-  myQueue: z
-    .preprocess((v) => v === 'true' || v === true, z.boolean())
-    .optional(),
+  myQueue: z.preprocess((v) => v === 'true' || v === true, z.boolean()).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(PAGE_SIZE.NOTIFICATION_DEFAULT),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -46,7 +44,10 @@ export class RequestApprovalResponseDto {
   @ApiProperty() approverId!: string;
   @ApiProperty() decision!: string;
   @ApiPropertyOptional({ nullable: true }) note!: string | null;
-  @ApiPropertyOptional({ nullable: true, description: 'Set when approver was acting as delegate for this user' })
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Set when approver was acting as delegate for this user',
+  })
   delegatedFromId!: string | null;
   @ApiProperty() decidedAt!: string;
 }
@@ -69,7 +70,9 @@ export class RequestItemResponseDto {
   slaDeadline!: string | null;
   @ApiPropertyOptional({ nullable: true, description: 'When SLA breach was first detected' })
   slaBreachedAt!: string | null;
-  @ApiProperty({ description: 'Current approval step (1-based). Increments as each step is approved.' })
+  @ApiProperty({
+    description: 'Current approval step (1-based). Increments as each step is approved.',
+  })
   currentStep!: number;
   @ApiProperty({ description: 'Total approval steps required (from TypeDef). 1 = single-step.' })
   totalSteps!: number;

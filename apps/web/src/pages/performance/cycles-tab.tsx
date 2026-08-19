@@ -253,7 +253,9 @@ export function CyclesTab() {
               ]
             : []
         }
-        activity={selected ? { resourceId: selected.id, resourceType: 'review_cycle' } : undefined}
+        activity={
+          selected ? { resourceId: selected.id, resourceType: 'performance_cycle' } : undefined
+        }
       >
         {selected && (
           <>
