@@ -34,7 +34,7 @@ const mockStorage = {
   deleteFile: vi.fn(),
 };
 const mockAudit = createFakeAudit();
-const mockEmployees = { getById: vi.fn() };
+const mockEmployees = { assertExist: vi.fn() };
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ describe('AssetService.assign()', () => {
 
   it('assigns an available asset', async () => {
     mockAssetRepo.findById.mockResolvedValue(ASSET_BASE);
-    mockEmployees.getById.mockResolvedValue({ id: 'emp-1', status: 'active' });
+    mockEmployees.assertExist.mockResolvedValue(undefined);
     const updatedAsset = { ...ASSET_BASE, status: 'assigned' as const, assignedTo: 'emp-1' };
     mockAssetRepo.assign.mockResolvedValue(updatedAsset);
     // After assign, getById is called again to return updated state

@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import {
-  Button,
+  FormActions,
   FormError,
   FormField,
   Input,
@@ -162,14 +162,12 @@ export function AddLicenseModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Adding…' : 'Add license'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Add license"
+          pendingLabel="Adding…"
+        />
       </form>
     </Modal>
   );

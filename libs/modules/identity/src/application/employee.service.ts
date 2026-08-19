@@ -90,6 +90,43 @@ export class EmployeeService {
     return employee;
   }
 
+  /**
+   * Refuse unless every id given names a real employee.
+   *
+   * WHAT THIS REPLACED. Thirty-four call sites wrote `await this.employees.getById(dto.ownerId);` and
+   * discarded the result — a full row fetched, an object built, nothing read from it. The call existed
+   * only to throw, and nothing in it said so: a reader sees an awaited expression with no left-hand
+   * side and has to know that `getById` throws to understand the line is a guard at all. Twelve of
+   * them wrapped it in `if (dto.ownerId)` to skip an optional field, so the guard's shape differed
+   * depending on whether the column was nullable.
+   *
+   * WHY THIS IS LOAD-BEARING and not a nicety: these are CROSS-SCHEMA references, and by deliberate
+   * design they carry no foreign key (`isms.information_assets.owner_id` says so in migration 0022).
+   * The database will not catch a dangling owner. This check is the only thing that does.
+   *
+   * NULLISH IDS ARE SKIPPED, so an optional field needs no `if` around the call and a caller can pass
+   * every reference it has in one line. Passing nothing is not an error — it means there was nothing
+   * to check.
+   *
+   * ONE QUERY, and it names the ids that were missing. The old form fetched one row per reference and
+   * failed on the first, so a form with a bad owner AND a bad custodian told the user about one of
+   * them, and the next submit failed on the other.
+   */
+  async assertExist(...ids: (string | null | undefined)[]): Promise<void> {
+    const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+    if (wanted.length === 0) return;
+
+    const found = new Set(await this.employeeRepo.findExistingIds(wanted));
+    const missing = wanted.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      throw new NotFoundException(
+        ErrorCodes.EMPLOYEE_NOT_FOUND,
+        // Plural on purpose: which reference is wrong is the whole content of this failure.
+        `Employee not found: ${missing.join(', ')}`,
+      );
+    }
+  }
+
   async update(id: string, input: UpdateEmployeeInput, actor: Actor): Promise<Employee> {
     const employee = await this.employeeRepo.findById(id);
     if (!employee) throw new NotFoundException(ErrorCodes.EMPLOYEE_NOT_FOUND, 'Employee not found');

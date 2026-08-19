@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   DataTable,
   DescriptionList,
+  FormActions,
   FormField,
   Input,
   ListPage,
@@ -171,14 +172,12 @@ function SubmitModal({ open, onClose, onSuccess }: SubmitModalProps) {
 
         {err && <p className="text-xs text-danger">{err}</p>}
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Submitting…' : 'Submit request'}
-          </Button>
-        </div>
+        <FormActions
+          loading={loading}
+          onClose={onClose}
+          submitLabel="Submit request"
+          pendingLabel="Submitting…"
+        />
       </form>
     </Modal>
   );

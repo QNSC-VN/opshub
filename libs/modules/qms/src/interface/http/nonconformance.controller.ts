@@ -207,7 +207,7 @@ export class NonconformanceController {
     @CurrentUser() user: JwtPayload,
   ): Promise<NonconformanceResponseDto> {
     // `owner_id` carries no cross-schema FK, so without this a typo would name nobody.
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toDto(await this.service.raise(dto, user));
   }
 
@@ -239,7 +239,7 @@ export class NonconformanceController {
     @Body() dto: UpdateNonconformanceDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<NonconformanceResponseDto> {
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toDto(await this.service.update(id, dto, user));
   }
 

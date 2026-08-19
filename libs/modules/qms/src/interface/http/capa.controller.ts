@@ -120,7 +120,7 @@ export class CapaController {
     @Body() dto: OpenCapaDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<CapaResponseDto> {
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toCapaDto(await this.service.open(nonconformanceId, dto, user));
   }
 

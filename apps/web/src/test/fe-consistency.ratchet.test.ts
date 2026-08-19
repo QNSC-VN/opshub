@@ -159,6 +159,17 @@ const MAX_UNANNOUNCED_FORM_ERROR = 0;
 const MAX_HANDROLLED_PANEL_STATE = 18;
 
 /**
+ * Nineteen forms open-coded the modal footer, and every one of them for the same reason: `FormActions`
+ * hardcoded "Saving…", so a form whose verb was "Terminate" or "Assign" could not use it without
+ * lying about what it was doing. Losing the wording was the wrong trade, so they kept the wording and
+ * lost the component — along with button order, variants and sizes.
+ *
+ * `pendingLabel` removes the reason, so the baseline is zero. A match here is a footer that could have
+ * been the component.
+ */
+const MAX_HANDROLLED_FORM_FOOTER = 0;
+
+/**
  * The command palette owns its overlay, deliberately.
  *
  * It is a COMBOBOX surface, not a titled dialog: it implements `role="combobox"`, `role="option"`,
@@ -319,6 +330,26 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<PanelState\s/g);
     expect(total, 'PanelState is no longer used — the count above proves nothing').toBeGreaterThan(
       8,
+    );
+  });
+
+  it(`hand-rolled modal footers <= ${MAX_HANDROLLED_FORM_FOOTER}`, () => {
+    // The footer's own layout class, which all nineteen copies shared verbatim. Matching the layout
+    // rather than the buttons is what makes this specific: a `justify-end` row elsewhere on a page is
+    // not a form footer, and `pt-1` on this exact row is what `FormActions` renders.
+    const { total, byFile } = countMatches(
+      (rel) => rel.endsWith('.tsx') && !rel.startsWith('shared/ui/'),
+      /className="flex justify-end gap-2 pt-1"/g,
+    );
+    assertRatchet('hand-rolled modal footers', total, MAX_HANDROLLED_FORM_FOOTER, byFile);
+  });
+
+  it('submits through the kit, so no form invents its own button order', () => {
+    // The floor. Cancel-then-submit is a convention, not a preference — a form that reverses it puts
+    // the destructive button where the last one put Cancel.
+    const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<FormActions\s/g);
+    expect(total, 'FormActions is no longer used — the count above proves nothing').toBeGreaterThan(
+      30,
     );
   });
 

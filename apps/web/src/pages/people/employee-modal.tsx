@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormError, FormField, Input, Modal } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal } from '@/shared/ui';
 import { RoleChip } from './people-shared';
 import type { EmployeeResponse } from './people.types';
 
@@ -132,14 +132,11 @@ export function EmployeeModal({ mode, employee, onClose, onSuccess }: EmployeeMo
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Saving…' : mode === 'create' ? 'Create' : 'Save changes'}
-          </Button>
-        </div>
+        <FormActions
+          loading={loading}
+          onClose={onClose}
+          submitLabel={mode === 'create' ? 'Create' : 'Save changes'}
+        />
       </form>
     </Modal>
   );

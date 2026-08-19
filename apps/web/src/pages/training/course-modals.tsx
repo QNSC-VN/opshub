@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, FormError, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal, Textarea } from '@/shared/ui';
 import type { Course } from './training.types';
 
 /**
@@ -155,14 +155,11 @@ export function CourseModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : editing ? 'Save course' : 'Create course'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel={editing ? 'Save course' : 'Create course'}
+        />
       </form>
     </Modal>
   );

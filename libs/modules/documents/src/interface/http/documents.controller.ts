@@ -202,7 +202,7 @@ export class DocumentsController {
   ): Promise<DocumentResponseDto> {
     // The owner must exist: `owner_id` carries no cross-schema FK, matching the rest of the
     // codebase, so a typo would otherwise become a document nobody is accountable for.
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toDocumentDto(await this.service.createDocument(dto, user));
   }
 

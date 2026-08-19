@@ -88,8 +88,7 @@ export class AssetService {
     if (asset.assignedTo) {
       throw new ConflictException(ErrorCodes.ASSET_ALREADY_ASSIGNED, 'Asset is already assigned');
     }
-    // Validates the employee exists (throws EMPLOYEE_NOT_FOUND otherwise).
-    await this.employees.getById(employeeId);
+    await this.employees.assertExist(employeeId);
 
     await this.db.transaction(async (tx) => {
       await this.assetRepo.assign(assetId, employeeId, notes, tx);
