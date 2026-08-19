@@ -286,6 +286,17 @@ export const PERMISSION = {
 
   // ── service catalog ────────────────────────────────────────────────────────
   CATALOG_MANAGE: 'catalog.manage',
+  /**
+   * Approve a request raised against a catalog item.
+   *
+   * Separate from `catalog.manage` because owning the catalogue and deciding an individual
+   * request are different jobs, and the naming convention above reserves explicit verbs for
+   * state transitions. `CatalogRequestTypeDef` previously named `requests.approve` — a code
+   * that exists in no catalogue and no bundle, so every catalog request was unapprovable by
+   * anybody but the `*` holder, silently, with a 403 naming a permission nobody could be
+   * granted.
+   */
+  CATALOG_APPROVE: 'catalog.approve',
   /** Read the controlled-document library beyond what is published to everyone. */
   DOCUMENTS_READ: 'documents.read',
   /** Author documents and open new drafts. */
@@ -382,6 +393,7 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSION.NOTIFICATIONS_MANAGE]: 'Manage notification preferences for all users',
   [PERMISSION.WEBHOOKS_MANAGE]: 'Create and manage outbound webhook subscriptions',
   [PERMISSION.CATALOG_MANAGE]: 'Create / edit / delete service catalog items',
+  [PERMISSION.CATALOG_APPROVE]: 'Approve a service-catalog request',
   [PERMISSION.DOCUMENTS_READ]: 'View all controlled documents, including drafts',
   [PERMISSION.DOCUMENTS_MANAGE]: 'Author controlled documents and open new drafts',
   [PERMISSION.DOCUMENTS_APPROVE]: 'Approve a controlled-document version',
@@ -490,6 +502,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSION.ONBOARDING_PROVISION,
     PERMISSION.WEBHOOKS_MANAGE,
     PERMISSION.CATALOG_MANAGE,
+    PERMISSION.CATALOG_APPROVE,
     PERMISSION.DOCUMENTS_READ,
     PERMISSION.LICENSE_READ,
     PERMISSION.LICENSE_MANAGE,

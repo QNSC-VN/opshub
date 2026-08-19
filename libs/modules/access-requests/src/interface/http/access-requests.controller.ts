@@ -120,13 +120,30 @@ export class AccessRequestsController {
   }
 
   @Post(':id/approve')
-  @RequirePermission('access_request.security_approve')
   /**
+   * THE PERMISSION IS PER STEP, so the route cannot name one.
+   *
+   * This used to be `@RequirePermission('access_request.security_approve')` — the STEP-2 code — on a
+   * route that serves both steps of the chain declared in `AccessRequestTypeDef.approvalSteps`. The
+   * manager tier holds `access_request.approve` and not the security code, so the guard 403'd every
+   * step-1 approver: the two-step chain the type-def declares, and that the catalogue documents as
+   * "manager tier", could not be walked by the tier it was written for. The step-1 approval simply
+   * had no caller.
+   *
+   * `RequestEngine.approve` resolves the step from `request.currentStep`, looks up that step's
+   * `requiredPermission`, and checks it against the actor OR an active delegator — so moving the
+   * decision there is not a relaxation. It is the only place that knows which step is being
+   * approved, which is exactly why a route-level code cannot express this.
+   *
    * Returns the REQUEST as it now stands, not a grant: approval advances one step of a
    * multi-step workflow, and an intermediate step issues no grant — the request stays
    * `pending` for the next approver. Returning a grant here 500'd on exactly that case.
    * The resulting `status` is what tells the caller whether anything further is needed.
    */
+  @AuthorizedInService(
+    "the required permission is the current approval step's, resolved by RequestEngine",
+    'access-request-approval.e2e.spec.ts',
+  )
   @ApiOperation({ summary: 'Approve one step of a request; issues a grant on the final step' })
   @ApiCreatedResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
@@ -143,7 +160,12 @@ export class AccessRequestsController {
   // 200, not Nest's default 201: this is a state transition, not a creation, and `@ApiOkResponse`
   // already promises 200 — without this the generated client's contract disagreed with the server.
   @HttpCode(HttpStatus.OK)
-  @RequirePermission('access_request.security_approve')
+  // Per step, for the same reason as `approve` above: a step-1 approver may refuse at step 1, and
+  // `RequestEngine.reject` runs the identical step-resolution and permission check.
+  @AuthorizedInService(
+    "the required permission is the current approval step's, resolved by RequestEngine",
+    'access-request-approval.e2e.spec.ts',
+  )
   @ApiOperation({ summary: 'Reject a pending request' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)

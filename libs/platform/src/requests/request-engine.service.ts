@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import { MS_PER_HOUR, newId, type Actor } from '@shared-kernel';
+import { MS_PER_HOUR, newId, type Actor, type RequestType } from '@shared-kernel';
 import { InjectDrizzle, type DrizzleDB } from '../database/drizzle.provider';
 import { AuthzService } from '../auth/authz.service';
 import { ActorScope } from '../auth/actor-scope.service';
@@ -53,7 +53,7 @@ export class RequestEngine {
   // ── Submit ────────────────────────────────────────────────────────────────
 
   async submit(
-    type: string,
+    type: RequestType,
     payload: Record<string, unknown>,
     actor: Actor,
     opts?: SubmitRequestOptions,
