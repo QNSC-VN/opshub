@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormField, Input, Modal } from '@/shared/ui';
+import { Button, FormError, FormField, Input, Modal } from '@/shared/ui';
 import { RoleChip } from './people-shared';
 import type { EmployeeResponse } from './people.types';
 
@@ -130,7 +130,7 @@ export function EmployeeModal({ mode, employee, onClose, onSuccess }: EmployeeMo
           )}
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

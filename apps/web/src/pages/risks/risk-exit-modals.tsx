@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { FormActions, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal, Textarea } from '@/shared/ui';
 import { ACCEPTANCE_APPROVAL_THRESHOLD, type Risk } from './risk.types';
 
 /**
@@ -114,7 +114,7 @@ export function AcceptRiskModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}
@@ -186,7 +186,7 @@ export function CloseRiskModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}

@@ -12,6 +12,7 @@ import {
   Button,
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Modal,
   PanelAction,
@@ -100,7 +101,7 @@ function AssignSeatModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Assign seat" />
       </form>
     </Modal>

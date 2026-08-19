@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { useUpload } from '@/shared/api/use-upload';
-import { Button, ConfirmDialog, RowActions } from '@/shared/ui';
+import { Button, ConfirmDialog, FormError, RowActions } from '@/shared/ui';
 import { formatDateTime } from '@/shared/lib/format';
 import { CERTIFICATE_ACCEPT } from './training.types';
 import { useCertificates } from './use-training';
@@ -175,7 +175,7 @@ export function CertificatesPanel({
         </>
       )}
 
-      {error && <p className="text-xs text-danger">{error}</p>}
+      <FormError message={error} />
     </div>
   );
 }

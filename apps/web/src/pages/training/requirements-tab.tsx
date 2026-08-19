@@ -12,6 +12,7 @@ import {
   DataTable,
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -124,7 +125,7 @@ function AddRequirementModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Add requirement" />
       </form>

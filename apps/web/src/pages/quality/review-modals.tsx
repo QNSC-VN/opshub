@@ -5,7 +5,15 @@ import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions, documentOptions } from '@/shared/api/picker-sources';
 import { isoDaysFromNow, todayIso } from '@/shared/lib/format';
-import { EntityPicker, FormActions, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import {
+  EntityPicker,
+  FormActions,
+  FormError,
+  FormField,
+  Input,
+  Modal,
+  Textarea,
+} from '@/shared/ui';
 import type { ManagementReview } from './review.types';
 
 /**
@@ -134,7 +142,7 @@ export function ScheduleReviewModal({
           </FormField>
         </div>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Schedule review" />
       </form>
     </Modal>
@@ -209,7 +217,7 @@ export function HoldReviewModal({
           issued.
         </p>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Record as held" />
       </form>
     </Modal>
@@ -293,7 +301,7 @@ export function CloseReviewModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Close review" />
       </form>
     </Modal>
@@ -354,7 +362,7 @@ export function CancelReviewModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

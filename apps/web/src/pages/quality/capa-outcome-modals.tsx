@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { isoInstantFromDate, todayIso } from '@/shared/lib/format';
-import { FormActions, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal, Textarea } from '@/shared/ui';
 import type { Capa } from './quality.types';
 
 /**
@@ -93,7 +93,7 @@ export function CapaOutcomeModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}
@@ -165,7 +165,7 @@ export function MarkImplementedModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

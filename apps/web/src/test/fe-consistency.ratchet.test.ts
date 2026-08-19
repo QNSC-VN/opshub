@@ -124,6 +124,21 @@ const MAX_HANDROLLED_MODAL = 0;
 const MAX_INVENTED_ERROR_MESSAGE = 1;
 
 /**
+ * Form-level failures rendered as a bare `<p>` instead of `FormError`. MAY ONLY FALL, and is now 0.
+ *
+ * Seventy-two places wrote `{error && <p className="text-xs text-danger">{error}</p>}` — byte-identical,
+ * every one — and not one carried `role="alert"`. The whole SPA contained two. So a submit the API
+ * refused changed the screen and announced nothing: focus stays on the button, the message appears below
+ * it, and a screen-reader user waits for a save that already failed.
+ *
+ * `FormField` had always got this right for FIELD errors, which is exactly why the gap survived — the
+ * validation somebody tests with a screen reader was announced, and the API's refusal was not.
+ *
+ * At 0 this is a floor: the shape cannot come back without failing here.
+ */
+const MAX_UNANNOUNCED_FORM_ERROR = 0;
+
+/**
  * The command palette owns its overlay, deliberately.
  *
  * It is a COMBOBOX surface, not a titled dialog: it implements `role="combobox"`, `role="option"`,
@@ -248,6 +263,26 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     // `toast.error(apiErrorMessage(error, '…'))` both pass; only a bare sentence counts.
     const { total, byFile } = countMatches((f) => /\.tsx?$/.test(f), /toast\.error\(['`]/g);
     assertRatchet('invented failure message count', total, MAX_INVENTED_ERROR_MESSAGE, byFile);
+  });
+
+  it(`form errors rendered without role="alert" <= ${MAX_UNANNOUNCED_FORM_ERROR}`, () => {
+    // The exact shape that was everywhere: a danger-toned paragraph whose only child is an `error`
+    // binding. `FormError` renders the same markup WITH the role, so a match here is a slot that
+    // bypassed it rather than a styling choice.
+    const { total, byFile } = countMatches(
+      (rel) => rel.endsWith('.tsx') && !rel.startsWith('shared/ui/'),
+      /<p className="text-xs text-danger">\{[\w.]*error[\w.]*\}<\/p>/g,
+    );
+    assertRatchet('unannounced form errors', total, MAX_UNANNOUNCED_FORM_ERROR, byFile);
+  });
+
+  it('renders form errors through the kit, so the announcement is not optional', () => {
+    // The converse, and the floor: if `FormError` stops being used the check above passes trivially.
+    const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<FormError\s/g);
+    expect(
+      total,
+      'FormError is no longer used anywhere — the check above proves nothing',
+    ).toBeGreaterThan(50);
   });
 
   it(`largest source file <= ${MAX_FILE_LINES} lines`, () => {

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import type { SoftwareListing } from '@/shared/api/types';
-import { Button, FormActions, FormField, Modal, Select, Textarea } from '@/shared/ui';
+import { Button, FormActions, FormError, FormField, Modal, Select, Textarea } from '@/shared/ui';
 
 /**
  * Resolving a compliance finding.
@@ -174,7 +174,7 @@ export function ReclassifySoftwareModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={loading} onClose={onClose} submitLabel="Save listing" />
       </form>

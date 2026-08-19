@@ -3,7 +3,16 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, EntityPicker, FormField, Input, Modal, Select, Textarea } from '@/shared/ui';
+import {
+  Button,
+  EntityPicker,
+  FormError,
+  FormField,
+  Input,
+  Modal,
+  Select,
+  Textarea,
+} from '@/shared/ui';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import { todayIso } from '@/shared/lib/format';
 import type { Position } from './position.types';
@@ -180,7 +189,7 @@ export function PositionModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
@@ -277,7 +286,7 @@ export function AssignPositionModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

@@ -3,7 +3,15 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { FormActions, FormField, Modal, Select, Textarea, humanizeStatus } from '@/shared/ui';
+import {
+  FormActions,
+  FormError,
+  FormField,
+  Modal,
+  Select,
+  Textarea,
+  humanizeStatus,
+} from '@/shared/ui';
 import { ASSESSMENT_OUTCOMES, type Vendor } from './vendor.types';
 import { useCriticalityLevels } from './use-vendors';
 
@@ -137,7 +145,7 @@ export function RecordAssessmentModal({
           </FormField>
         )}
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}
@@ -222,7 +230,7 @@ export function VendorReasonModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}

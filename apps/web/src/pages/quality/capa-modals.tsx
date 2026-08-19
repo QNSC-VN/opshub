@@ -8,6 +8,7 @@ import { isoDaysFromNow } from '@/shared/lib/format';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -121,7 +122,7 @@ export function OpenCapaModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Open CAPA" />
       </form>
     </Modal>
@@ -249,7 +250,7 @@ export function CapaAnalysisModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Save analysis" />
       </form>
     </Modal>
@@ -323,7 +324,7 @@ export function VerifyCapaModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

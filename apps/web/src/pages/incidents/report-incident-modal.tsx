@@ -5,6 +5,7 @@ import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import {
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -175,7 +176,7 @@ export function ReportIncidentModal({
           </span>
         </label>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Report incident" />
       </form>
