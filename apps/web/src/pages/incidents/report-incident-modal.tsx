@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import {
+  Checkbox,
   FormActions,
   FormError,
   FormField,
@@ -159,22 +160,16 @@ export function ReportIncidentModal({
           </FormField>
         </div>
 
-        {/* A real checkbox with a real label, because this one flag starts a legal deadline. */}
-        <label className="flex cursor-pointer select-none items-start gap-2.5">
-          <input
-            type="checkbox"
-            checked={form.personalDataBreach}
-            onChange={(e) => set('personalDataBreach', e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-          />
-          <span className="text-sm text-fg-muted">
-            Personal data was or may have been exposed
-            <span className="block text-xs text-fg-subtle">
-              Starts the {BREACH_NOTIFICATION_HOURS}-hour notification clock (GDPR Article 33). The
-              deadline is computed by the API from the detection time.
-            </span>
-          </span>
-        </label>
+        {/* A real checkbox with a real label, because this one flag starts a legal deadline. The hint
+            is inside the same label, so the consequence is part of the accessible name rather than
+            text sitting beside the control. */}
+        <Checkbox
+          align="start"
+          checked={form.personalDataBreach}
+          onChange={(value) => set('personalDataBreach', value)}
+          label="Personal data was or may have been exposed"
+          hint={`Starts the ${BREACH_NOTIFICATION_HOURS}-hour notification clock (GDPR Article 33). The deadline is computed by the API from the detection time.`}
+        />
 
         <FormError message={error} />
 

@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import {
   Badge,
-  Button,
+  FormActions,
   FormField,
   Input,
   Modal,
@@ -186,14 +186,7 @@ function EditProfileModal({ employee, onClose, onSuccess }: EditProfileModalProp
 
         {err && <p className="text-xs text-danger">{err}</p>}
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Saving…' : 'Save changes'}
-          </Button>
-        </div>
+        <FormActions loading={loading} onClose={onClose} submitLabel="Save changes" />
       </form>
     </Modal>
   );

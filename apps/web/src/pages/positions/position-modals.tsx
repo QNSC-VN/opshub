@@ -4,8 +4,8 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import {
-  Button,
   EntityPicker,
+  FormActions,
   FormError,
   FormField,
   Input,
@@ -191,14 +191,11 @@ export function PositionModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : editing ? 'Save changes' : 'Create position'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel={editing ? 'Save changes' : 'Create position'}
+        />
       </form>
     </Modal>
   );
@@ -288,14 +285,12 @@ export function AssignPositionModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Assigning…' : 'Assign'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Assign"
+          pendingLabel="Assigning…"
+        />
       </form>
     </Modal>
   );

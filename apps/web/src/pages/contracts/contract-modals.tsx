@@ -4,8 +4,8 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import {
-  Button,
   EntityPicker,
+  FormActions,
   FormError,
   FormField,
   Input,
@@ -246,14 +246,7 @@ export function DraftContractModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Save draft'}
-          </Button>
-        </div>
+        <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Save draft" />
       </form>
     </Modal>
   );
@@ -337,14 +330,12 @@ export function ActivateContractModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Activating…' : 'Activate'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Activate"
+          pendingLabel="Activating…"
+        />
       </form>
     </Modal>
   );
@@ -428,14 +419,13 @@ export function TerminateContractModal({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="danger" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Terminating…' : 'Terminate'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Terminate"
+          pendingLabel="Terminating…"
+          variant="danger"
+        />
       </form>
     </Modal>
   );

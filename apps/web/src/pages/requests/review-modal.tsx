@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormField, Modal, Textarea, humanizeStatus } from '@/shared/ui';
+import { FormActions, FormField, Modal, Textarea, humanizeStatus } from '@/shared/ui';
 import type { RequestItemResponse } from '@/shared/api/types';
 
 /**
@@ -78,19 +78,13 @@ export function ReviewModal({
           />
         </FormField>
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant={isApprove ? 'primary' : 'danger'}
-            size="sm"
-            disabled={loading}
-          >
-            {loading ? 'Working…' : isApprove ? 'Approve' : 'Reject'}
-          </Button>
-        </div>
+        <FormActions
+          loading={loading}
+          onClose={onClose}
+          submitLabel={isApprove ? 'Approve' : 'Reject'}
+          pendingLabel="Working…"
+          variant={isApprove ? 'primary' : 'danger'}
+        />
       </form>
     </Modal>
   );

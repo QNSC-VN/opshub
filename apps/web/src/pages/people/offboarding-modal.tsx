@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
-import { Button, FormError, FormField, Modal, Textarea } from '@/shared/ui';
+import { FormActions, FormError, FormField, Modal, Textarea } from '@/shared/ui';
 import type { EmployeeResponse } from './people.types';
 
 interface OffboardingModalProps {
@@ -54,14 +54,13 @@ export function OffboardingModal({ employee, onClose, onSuccess }: OffboardingMo
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="danger" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Submitting…' : 'Offboard employee'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Offboard employee"
+          pendingLabel="Submitting…"
+          variant="danger"
+        />
       </form>
     </Modal>
   );
