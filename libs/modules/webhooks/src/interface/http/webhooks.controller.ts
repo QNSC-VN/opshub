@@ -51,7 +51,7 @@ function toDeliveryDto(d: WebhookDelivery): WebhookDeliveryResponseDto {
 
 @ApiTags('webhooks')
 @Controller('webhooks')
-@RequirePermission('rbac.manage')
+@RequirePermission('webhooks.manage')
 export class WebhooksController {
   constructor(
     private readonly service: WebhooksService,
@@ -61,7 +61,7 @@ export class WebhooksController {
   // ── Subscriptions ──────────────────────────────────────────────────────────
 
   @Post('subscriptions')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @ApiOperation({ summary: 'Register a new outbound webhook subscription' })
   @ApiResponse({ status: 201, type: WebhookSubscriptionResponseDto })
   @ApiCommonErrors(400, 401, 403)
@@ -87,7 +87,7 @@ export class WebhooksController {
   }
 
   @Get('subscriptions')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @ApiOperation({ summary: 'List all webhook subscriptions' })
   @ApiResponse({ status: 200, type: [WebhookSubscriptionResponseDto] })
   @ApiCommonErrors(401, 403)
@@ -97,7 +97,7 @@ export class WebhooksController {
   }
 
   @Get('subscriptions/:id')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @ApiOperation({ summary: 'Get a webhook subscription by ID' })
   @ApiResponse({ status: 200, type: WebhookSubscriptionResponseDto })
   @ApiCommonErrors(401, 403, 404)
@@ -108,7 +108,7 @@ export class WebhooksController {
   }
 
   @Patch('subscriptions/:id/active')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @ApiOperation({ summary: 'Enable or disable a webhook subscription' })
   @ApiResponse({ status: 200, type: WebhookSubscriptionResponseDto })
   @ApiCommonErrors(401, 403, 404)
@@ -131,7 +131,7 @@ export class WebhooksController {
   }
 
   @Delete('subscriptions/:id')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete a webhook subscription' })
   @ApiCommonErrors(401, 403, 404)
@@ -152,7 +152,7 @@ export class WebhooksController {
   // ── Deliveries ─────────────────────────────────────────────────────────────
 
   @Get('subscriptions/:id/deliveries')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @ApiOperation({ summary: 'List recent delivery attempts for a subscription' })
   @ApiResponse({ status: 200, type: [WebhookDeliveryResponseDto] })
   @ApiCommonErrors(401, 403, 404)
@@ -164,7 +164,7 @@ export class WebhooksController {
   }
 
   @Post('deliveries/:id/retry')
-  @RequirePermission('rbac.manage')
+  @RequirePermission('webhooks.manage')
   @ApiOperation({ summary: 'Manually retry a failed webhook delivery' })
   @ApiResponse({ status: 200, type: WebhookDeliveryResponseDto })
   @ApiCommonErrors(401, 403, 404)

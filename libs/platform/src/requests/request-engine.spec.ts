@@ -22,7 +22,7 @@ import {
 function makeRequest(overrides: Partial<RequestItem> = {}): RequestItem {
   return {
     id: 'req-1',
-    type: 'leave',
+    type: 'leave_request',
     requesterId: 'user-requester',
     assigneeId: null,
     status: 'pending',
@@ -43,10 +43,17 @@ function makeRequest(overrides: Partial<RequestItem> = {}): RequestItem {
   };
 }
 
-/** Standard typeDef stub — single-step, no hooks. */
+/**
+ * Standard typeDef stub — single-step, no hooks.
+ *
+ * `leave_request`, not `leave`: the stub used a type the registry never holds, which typing
+ * `submit(type: RequestType)` turned into a compile error. A stub exercising a non-existent
+ * discriminator still passed, because the registry is mocked — so nothing here depended on the
+ * value being real.
+ */
 function makeTypeDef(overrides: Record<string, unknown> = {}) {
   return {
-    type: 'leave',
+    type: 'leave_request',
     requiredApprovalPermission: 'workforce.approve',
     allowSelfApproval: false,
     defaultExpiryHours: null,
@@ -180,14 +187,14 @@ describe('RequestEngine.submit()', () => {
     const insertChain = makeQueryChain([submittedRow]);
     db.insert.mockReturnValue(insertChain);
 
-    const result = await engine.submit('leave', { days: 3 }, REQUESTER);
+    const result = await engine.submit('leave_request', { days: 3 }, REQUESTER);
 
     expect(db.transaction).toHaveBeenCalledOnce();
     expect(db.insert).toHaveBeenCalled();
     expect(webhookEnqueue.fanout).toHaveBeenCalledWith(
       expect.anything(),
       'request.submitted',
-      expect.objectContaining({ type: 'leave', requesterId: REQUESTER.sub }),
+      expect.objectContaining({ type: 'leave_request', requesterId: REQUESTER.sub }),
     );
     expect(result.requesterId).toBe(REQUESTER.sub);
   });
@@ -200,7 +207,7 @@ describe('RequestEngine.submit()', () => {
     const insertChain = makeQueryChain([submittedRow]);
     db.insert.mockReturnValue(insertChain);
 
-    await engine.submit('leave', { days: 3 }, REQUESTER);
+    await engine.submit('leave_request', { days: 3 }, REQUESTER);
     expect(onSubmit).toHaveBeenCalledOnce();
   });
 
@@ -213,7 +220,7 @@ describe('RequestEngine.submit()', () => {
     db.insert.mockReturnValue(insertChain);
 
     const before = Date.now();
-    await engine.submit('leave', {}, REQUESTER);
+    await engine.submit('leave_request', {}, REQUESTER);
     const after = Date.now();
 
     const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock

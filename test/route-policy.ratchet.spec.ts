@@ -199,4 +199,79 @@ describe('route-policy ratchet (only ever decreases)', () => {
         `ratchet stops measuring.`,
     ).toBe(MAX_AUTHZ_GAPS);
   });
+
+  /*
+   * `@AuthorizedInService(reason, pinnedBy)` IS ONLY HONEST IF THE PINNED SPEC EXISTS.
+   *
+   * That decorator is the one escape from a declared route-level permission: it asserts the check
+   * lives in the service and names the test that proves it. The decorator's own docblock says
+   * `pinnedBy` "is required because this mode moves the check out of the declaration" — but nothing
+   * read the value, so any string satisfied it, and a route could carry a citation as its proof
+   * while the cited test did not exist. The sibling repo shipped exactly that: twelve routes citing
+   * one spec file that was never written, which is how two access defects survived review.
+   *
+   * Both halves matter. A missing file makes the claim unfalsifiable. A file that exists but is not
+   * a test makes it worse — it reads as verified while pointing at the implementation.
+   */
+  it('every @AuthorizedInService pins a spec that exists and is a test', () => {
+    const tracked = new Set(
+      execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+      })
+        .split('\n')
+        .filter(Boolean),
+    );
+    const basenames = new Map<string, string[]>();
+    for (const file of tracked) {
+      const base = file.split('/').pop()!;
+      basenames.set(base, [...(basenames.get(base) ?? []), file]);
+    }
+
+    const files = execFileSync('git', ['ls-files', '*.controller.ts'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(Boolean)
+      .filter((f) => existsSync(join(ROOT, f)));
+
+    const missing: string[] = [];
+    const notATest: string[] = [];
+    let citations = 0;
+
+    for (const file of files) {
+      const source = readFileSync(join(ROOT, file), 'utf8');
+      // The second argument, across the line break prettier puts it on.
+      for (const m of source.matchAll(
+        /@AuthorizedInService\(\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\s*,\s*'([^']+)'/g,
+      )) {
+        citations += 1;
+        const cited = m[1];
+        const hits = basenames.get(cited.split('/').pop()!) ?? [];
+        if (hits.length === 0) missing.push(`${file} cites ${cited}`);
+        else if (!hits.some((h) => /\.(spec|e2e)\.tsx?$/.test(h))) {
+          notATest.push(`${file} cites ${cited} (${hits.join(', ')})`);
+        }
+      }
+    }
+
+    // Floor first: the decorator is in use, so a regex that matched nothing would report perfect
+    // citations for zero routes — the exact way this kind of check passes for the wrong reason.
+    expect(
+      citations,
+      'found no @AuthorizedInService citations to check — the regex is broken',
+    ).toBeGreaterThan(5);
+
+    expect(
+      missing,
+      'These routes moved their authorization into a service and cited a test that does not ' +
+        'exist, so the claim cannot be checked by anybody:\n  ' +
+        missing.join('\n  '),
+    ).toEqual([]);
+    expect(
+      notATest,
+      'These citations name a file that is not a test:\n  ' + notATest.join('\n  '),
+    ).toEqual([]);
+  });
 });

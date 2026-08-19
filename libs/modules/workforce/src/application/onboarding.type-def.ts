@@ -1,6 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { type DbExecutor, InjectDrizzle, type DrizzleDB, RequestRegistry, RequestTypeDef } from '@platform';
+import {
+  type ApprovalStepDef,
+  type DbExecutor,
+  InjectDrizzle,
+  type DrizzleDB,
+  RequestRegistry,
+  RequestTypeDef,
+} from '@platform';
 import { REQUEST_TYPE } from '@shared-kernel';
 import { employees } from '../../../../../db/schema';
 import { GraphProvisioningService } from './graph-provisioning.service';
@@ -32,9 +39,7 @@ export interface OnboardingPayload extends Record<string, unknown> {
  * controller after `engine.submit` returns.
  */
 @Injectable()
-export class OnboardingTypeDef
-  implements RequestTypeDef<OnboardingPayload>, OnModuleInit
-{
+export class OnboardingTypeDef implements RequestTypeDef<OnboardingPayload>, OnModuleInit {
   private readonly logger = new Logger(OnboardingTypeDef.name);
 
   readonly type = REQUEST_TYPE.ONBOARDING;
@@ -44,7 +49,9 @@ export class OnboardingTypeDef
   readonly defaultExpiryHours = 168; // 7 days
   readonly slaHours = 72; // 3 business days end-to-end
 
-  readonly approvalSteps = [
+  // Annotated, not inferred: without `ApprovalStepDef[]` the literals widen `requiredPermission` to
+  // `string`, which is precisely the typing the interface now refuses.
+  readonly approvalSteps: ApprovalStepDef[] = [
     { step: 1, requiredPermission: 'onboarding.approve' },
     { step: 2, requiredPermission: 'onboarding.provision' },
     { step: 3, requiredPermission: 'onboarding.complete' },
@@ -60,7 +67,12 @@ export class OnboardingTypeDef
     this.registry.register(this);
   }
 
-  async onApprove(_payload: OnboardingPayload, _requestId: string, _approverId: string, _tx: DbExecutor): Promise<void> {
+  async onApprove(
+    _payload: OnboardingPayload,
+    _requestId: string,
+    _approverId: string,
+    _tx: DbExecutor,
+  ): Promise<void> {
     // No domain side-effects needed on final approval.
     // The controller records the audit event after the engine call returns.
   }
@@ -75,7 +87,9 @@ export class OnboardingTypeDef
       .limit(1);
 
     if (!row?.entraOid) {
-      this.logger.warn(`Onboarding afterApprove: no Entra OID for employee ${payload.employeeId}, skipping Graph enable`);
+      this.logger.warn(
+        `Onboarding afterApprove: no Entra OID for employee ${payload.employeeId}, skipping Graph enable`,
+      );
       return;
     }
 

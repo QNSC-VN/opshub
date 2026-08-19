@@ -27,6 +27,8 @@ import { FIXTURE, bearer, createTestApp, login, type Session } from './support/h
 let app: NestFastifyApplication;
 let requester: Session;
 let approver: Session;
+/** Holds `access_request.approve` (step 1) and NOT `access_request.security_approve` (step 2). */
+let stepOneApprover: Session;
 
 beforeAll(async () => {
   app = await createTestApp();
@@ -34,6 +36,7 @@ beforeAll(async () => {
   // that used one identity for both would be asserting the refusal instead of the flow.
   requester = await login(app, FIXTURE.NO_PERMISSIONS);
   approver = await login(app, FIXTURE.ADMIN);
+  stepOneApprover = await login(app, FIXTURE.MANAGER);
 });
 
 afterAll(async () => {
@@ -100,6 +103,86 @@ describe('access request approval', () => {
       payload: {},
     });
     expect(missing.statusCode).toBe(404);
+  });
+
+  /*
+   * THE TWO-STEP CHAIN, WALKED BY THE TIER IT WAS WRITTEN FOR.
+   *
+   * `AccessRequestTypeDef.approvalSteps` declares step 1 as `access_request.approve` and step 2 as
+   * `access_request.security_approve`, and `db/permissions.catalog.ts` describes the first as the
+   * "manager tier". The route nevertheless carried `@RequirePermission('…security_approve')`, so the
+   * guard refused every step-1 approver before the engine ever ran — the declared chain had no
+   * caller for its first half, silently, with a 403 naming a permission the manager tier is not
+   * meant to hold.
+   *
+   * These two tests are a PAIR and neither is sufficient alone. The first proves the step-1 approver
+   * now gets through; the second proves that moving the check into the engine did not simply remove
+   * it. `@AuthorizedInService` is only honest if the service really refuses.
+   */
+  it('lets the step-1 tier approve step 1, which the route-level permission forbade', async () => {
+    const id = await submit();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/access-requests/${id}/approve`,
+      headers: bearer(stepOneApprover),
+      payload: { note: 'manager approves step 1' },
+    });
+
+    // 201, not the 403 the route-level permission produced.
+    expect(res.statusCode, res.body).toBe(201);
+
+    /*
+     * STILL `pending`, AND THAT IS CORRECT — two rows carry two statuses.
+     *
+     * The engine advances `requests.request_items.status` to `in_review`, but this endpoint returns
+     * the ACCESS REQUEST, and an access request stays `pending` until a step issues the grant. So
+     * the response body cannot show that the step was applied, and neither can `currentStep` — the
+     * DTO does not carry it. That is why the next test exists: the only thing that distinguishes
+     * "the step was applied" from "the guard let the call through and the engine did nothing" is
+     * what the SECOND approval is now asked for.
+     */
+    expect((JSON.parse(res.body) as { status: string }).status).toBe('pending');
+  });
+
+  it('still refuses that same tier at step 2, so the engine check is real', async () => {
+    const id = await submit();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/v1/access-requests/${id}/approve`,
+      headers: bearer(stepOneApprover),
+      payload: {},
+    });
+    expect(first.statusCode, first.body).toBe(201);
+
+    // Same caller, same route, next step — and now the permission the step names is one they do not
+    // hold. A 403 here is the whole justification for `@AuthorizedInService`: the check moved, it
+    // did not disappear.
+    const second = await app.inject({
+      method: 'POST',
+      url: `/v1/access-requests/${id}/approve`,
+      headers: bearer(stepOneApprover),
+      payload: {},
+    });
+    expect(second.statusCode, second.body).toBe(403);
+    expect(second.body).toContain('access_request.security_approve');
+  });
+
+  it('applies the same per-step rule to a refusal', async () => {
+    const id = await submit();
+
+    // Rejecting at step 1 is a step-1 decision. The route carried the step-2 code here too, so a
+    // manager could not refuse a request they were the named approver of.
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/access-requests/${id}/reject`,
+      headers: bearer(stepOneApprover),
+      payload: { note: 'not justified' },
+    });
+
+    expect(res.statusCode, res.body).toBe(200);
+    expect((JSON.parse(res.body) as { status: string }).status).toBe('rejected');
   });
 
   it('rejects a malformed id with 400 instead of a database error', async () => {

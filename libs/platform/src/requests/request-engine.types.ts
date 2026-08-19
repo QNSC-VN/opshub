@@ -1,3 +1,4 @@
+import type { Permission, RequestType } from '@shared-kernel';
 import type { DbExecutor } from '../database/drizzle.provider';
 import type { requestPriorityEnum } from '../../../../db/schema';
 
@@ -14,8 +15,16 @@ export type RequestPriority = (typeof requestPriorityEnum.enumValues)[number];
 export interface ApprovalStepDef {
   /** 1-based step number. */
   step: number;
-  /** Permission required of the approver at this step. */
-  requiredPermission: string;
+  /**
+   * Permission required of the approver at this step.
+   *
+   * Typed against the catalogue rather than left as a `string`: this value never reaches a
+   * `@RequirePermission` decorator, so `permissions.spec.ts` — which scans for decorator
+   * literals — cannot see it. A code that exists nowhere therefore used to compile, seed
+   * nothing, and deny every caller but the `*` holder. The type is the only place that check
+   * can live.
+   */
+  requiredPermission: Permission;
   /**
    * Optional: resolve the default assignee for this step when the engine
    * advances to it. Called inside the approval transaction.
@@ -112,9 +121,14 @@ export interface RequestFilters {
  */
 export interface RequestTypeDef<TPayload = Record<string, unknown>> {
   /** Unique discriminator, e.g. 'access_request' | 'leave_request' | 'overtime'. */
-  readonly type: string;
-  /** Permission key required of the approver, e.g. 'access_request.approve'. */
-  readonly requiredApprovalPermission: string;
+  readonly type: RequestType;
+  /**
+   * Permission key required of the approver, e.g. 'access_request.approve'. Used for a
+   * single-step type, and as the fallback when `approvalSteps` names no step for the current one.
+   *
+   * Typed for the same reason as `ApprovalStepDef.requiredPermission` — see there.
+   */
+  readonly requiredApprovalPermission: Permission;
   /** When false (default), requester cannot approve their own request (SoD). */
   readonly allowSelfApproval?: boolean;
   /** Auto-expire after N hours with no decision. 0 = no expiry. */
