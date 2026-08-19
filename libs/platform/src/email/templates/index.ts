@@ -103,12 +103,21 @@ function esc(value: string | number): string {
  *
  * `subject` IS ESCAPED FOR THE `<title>` ELEMENT and left raw in the returned `subject` field: a mail
  * header is not HTML, but the copy inside the document is. A subject carrying a notification's title —
- * which is where names and free text arrive — otherwise injects straight into the markup. The `body`
- * argument is NOT escaped here, because callers pass markup they built on purpose; they escape their
- * own values with `esc` at each interpolation.
+ * which is where names and free text arrive — otherwise injects straight into the markup. The `html`
+ * body is NOT escaped here, because callers pass markup they built on purpose; they escape their own
+ * values with `esc` at each interpolation.
+ *
+ * THE PLAIN-TEXT PART IS SUPPLIED, NOT DERIVED. This used to build it by stripping tags from the HTML
+ * with `body.replace(/<[^>]+>/g, '')`, which CodeQL flags as incomplete multi-character sanitization
+ * and is right to: one pass over a nested or malformed construct can leave `<script` behind, and a
+ * regex is the wrong tool for un-HTML-ing HTML in any case. It also produced poor text — escaped
+ * entities read as `&lt;script&gt;`, and the tag soup collapsed into one run-on line.
+ *
+ * So each template writes its own text body from the same values it renders the markup from. Slightly
+ * more to write, exactly correct, and no sanitizer to get wrong.
  */
-function layout(subject: string, body: string): RenderedEmail {
-  const html = `<!DOCTYPE html>
+function layout(subject: string, html: string, text: string): RenderedEmail {
+  const document = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -132,19 +141,12 @@ function layout(subject: string, body: string): RenderedEmail {
 <body>
   <div class="card">
     <h2>OpsHub</h2>
-    ${body}
+    ${html}
     <div class="footer">This is an automated message from OpsHub. Do not reply.</div>
   </div>
 </body>
 </html>`;
-  const text =
-    subject +
-    '\n\n' +
-    body
-      .replace(/<[^>]+>/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-  return { subject, html, text };
+  return { subject, html: document, text: `${subject}\n\n${text.trim()}\n` };
 }
 
 // ── Template implementations ──────────────────────────────────────────────────
@@ -160,6 +162,12 @@ const templates: {
           and is pending approval.</p>
        ${v.reason ? `<p><span class="label">Reason:</span> ${esc(v.reason)}</p>` : ''}
        <a class="btn" href="${esc(v.appUrl)}">View Request</a>`,
+      [
+        `Hi ${v.requesterName},`,
+        `Your request for access to ${v.resourceName} has been received and is pending approval.`,
+        ...(v.reason ? [`Reason: ${v.reason}`] : []),
+        `View it here: ${v.appUrl}`,
+      ].join('\n\n'),
     );
   },
 
@@ -171,6 +179,11 @@ const templates: {
           <span class="value" style="color:#16a34a">approved</span> by
           <span class="value">${esc(v.approverName)}</span>.</p>
        <a class="btn" href="${esc(v.appUrl)}">Open OpsHub</a>`,
+      [
+        `Hi ${v.requesterName},`,
+        `Your request for access to ${v.resourceName} has been approved by ${v.approverName}.`,
+        `Open OpsHub: ${v.appUrl}`,
+      ].join('\n\n'),
     );
   },
 
@@ -183,6 +196,12 @@ const templates: {
           <span class="value">${esc(v.approverName)}</span>.</p>
        ${v.reason ? `<p><span class="label">Reason:</span> ${esc(v.reason)}</p>` : ''}
        <a class="btn" href="${esc(v.appUrl)}">View Request</a>`,
+      [
+        `Hi ${v.requesterName},`,
+        `Your request for access to ${v.resourceName} has been denied by ${v.approverName}.`,
+        ...(v.reason ? [`Reason: ${v.reason}`] : []),
+        `View it here: ${v.appUrl}`,
+      ].join('\n\n'),
     );
   },
 
@@ -194,6 +213,13 @@ const templates: {
        <p><span class="label">Asset:</span> <span class="value">${esc(v.assetName)}</span></p>
        <p><span class="label">Tag:</span> <span class="value">${esc(v.assetTag)}</span></p>
        <a class="btn" href="${esc(v.appUrl)}">View Asset</a>`,
+      [
+        `Hi ${v.employeeName},`,
+        `An asset has been assigned to you in OpsHub.`,
+        `Asset: ${v.assetName}`,
+        `Tag: ${v.assetTag}`,
+        `View it here: ${v.appUrl}`,
+      ].join('\n\n'),
     );
   },
 
@@ -210,6 +236,7 @@ const templates: {
       v.title,
       `<p>${esc(v.body ?? v.title)}</p>
        <a class="btn" href="${esc(v.appUrl)}/notifications">Open OpsHub</a>`,
+      [v.body ?? v.title, `Open OpsHub: ${v.appUrl}/notifications`].join('\n\n'),
     );
   },
 
@@ -220,6 +247,11 @@ const templates: {
        <p>The offboarding checklist for <span class="value">${esc(v.employeeName)}</span> has been
           completed on <span class="value">${esc(v.completedAt)}</span>.</p>
        <a class="btn" href="${esc(v.appUrl)}">View Details</a>`,
+      [
+        `Hi ${v.managerName},`,
+        `The offboarding checklist for ${v.employeeName} was completed on ${v.completedAt}.`,
+        `View the details: ${v.appUrl}`,
+      ].join('\n\n'),
     );
   },
 };

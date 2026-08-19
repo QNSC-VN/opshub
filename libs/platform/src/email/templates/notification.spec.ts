@@ -42,6 +42,32 @@ describe('the notification email template', () => {
     // without it, and spam scoring penalises HTML-only mail.
     expect(rendered.text.trim().length).toBeGreaterThan(0);
     expect(rendered.text).toContain('Access request approved');
+    expect(rendered.text).toContain(`${APP_URL}/notifications`);
+  });
+
+  it('writes the text part from the values, never by stripping tags out of the HTML', () => {
+    const rendered = renderEmailTemplate('notification', {
+      title: 'Risk <script>alert(1)</script> raised',
+      body: 'Owner: "Ops" & <b>Security</b>',
+      appUrl: APP_URL,
+    });
+
+    /*
+     * `layout` used to derive the text part with `body.replace(/<[^>]+>/g, '')`. CodeQL flags that as
+     * incomplete multi-character sanitization and is right to — one pass over a nested construct can
+     * leave `<script` behind — and it also produced bad output, because by then the values had already
+     * been HTML-escaped, so the text read `&lt;script&gt;`.
+     *
+     * Templates now write their own text from the same values. So the text carries the ORIGINAL
+     * characters, un-escaped and un-stripped, which is what a text/plain part should contain, and no
+     * HTML tag or entity appears in it at all.
+     */
+    expect(rendered.text).toContain('Owner: "Ops" & <b>Security</b>');
+    expect(rendered.text).not.toContain('&lt;');
+    expect(rendered.text).not.toContain('&amp;');
+    // And no markup from the shell leaked in.
+    expect(rendered.text).not.toContain('<p>');
+    expect(rendered.text).not.toContain('<!DOCTYPE');
   });
 
   it('falls back to the title when there is no body', () => {
