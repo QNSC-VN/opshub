@@ -339,7 +339,7 @@ export function LeaveTab() {
               ]
             : []
         }
-        activity={selected ? { resourceId: selected.id, resourceType: 'leave' } : undefined}
+        activity={selected ? { resourceId: selected.id, resourceType: 'leave_request' } : undefined}
       >
         {selected && (
           <SlideOverSection title="Supporting document">

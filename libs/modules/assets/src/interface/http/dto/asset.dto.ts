@@ -19,12 +19,14 @@ export const CreateAssetSchema = z.object({
 
 export class CreateAssetDto extends createZodDto(CreateAssetSchema) {}
 
-export const ListAssetsQuerySchema = z.object({
-  status: z.enum(assetStatusEnum.enumValues).optional(),
-  type: assetType.optional(),
-  assignedTo: z.string().uuid().optional(),
-  search: z.string().optional(),
-}).merge(PaginationQuerySchema);
+export const ListAssetsQuerySchema = z
+  .object({
+    status: z.enum(assetStatusEnum.enumValues).optional(),
+    type: assetType.optional(),
+    assignedTo: z.string().uuid().optional(),
+    search: z.string().optional(),
+  })
+  .merge(PaginationQuerySchema);
 
 export class ListAssetsQueryDto extends createZodDto(ListAssetsQuerySchema) {}
 
@@ -64,7 +66,11 @@ export class AssetAssignmentResponseDto {
 export const PresignAssetPhotoSchema = z.object({
   fileName: z.string().min(1).max(255),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  sizeBytes: z.number().int().positive().max(10 * 1024 * 1024),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024),
 });
 export class PresignAssetPhotoDto extends createZodDto(PresignAssetPhotoSchema) {}
 

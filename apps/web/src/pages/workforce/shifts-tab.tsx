@@ -236,7 +236,7 @@ export function ShiftsTab() {
               ]
             : []
         }
-        activity={selected ? { resourceId: selected.id, resourceType: 'shift' } : undefined}
+        activity={selected ? { resourceId: selected.id, resourceType: 'shift_log' } : undefined}
       />
     </>
   );

@@ -56,7 +56,9 @@ describe('EntityDetailPanel', () => {
         onClose={vi.fn()}
         title="Overtime"
         items={ITEMS}
-        activity={{ resourceId: 'r1', resourceType: 'overtime' }}
+        // `overtime_entry`, not `overtime`: the prop is narrowed to the API's vocabulary now, and
+        // this fixture used the value seven real callers also had wrong.
+        activity={{ resourceId: 'r1', resourceType: 'overtime_entry' }}
       />,
     );
     expect(screen.getByTestId('activity')).toBeInTheDocument();

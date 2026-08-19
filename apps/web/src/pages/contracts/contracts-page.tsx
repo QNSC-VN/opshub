@@ -39,11 +39,21 @@ import { COMPENSATION_HIDDEN, type Contract } from './contract.types';
  * date. Computing it here from the row list would only ever see the current page.
  */
 
-const STATUS_FILTERS = [
+/**
+ * TYPED AGAINST THE API'S OWN ENUM, so a value it would reject cannot be offered.
+ *
+ * This listed `expiring_soon`, which is not a `contract_status` — the enum is
+ * draft/active/expired/terminated — so the "Expiring" filter sent a value the query DTO's
+ * `z.enum` refused, and the request 422'd. It was also redundant: the renewal queue is the
+ * `Renewing in 90 days` toggle below, which uses the API's `endingOnOrBefore` filter and works.
+ *
+ * `''` for All is the absence of a filter, hence the union with the empty string.
+ */
+const STATUS_FILTERS: { value: Contract['status'] | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'draft', label: 'Draft' },
   { value: 'active', label: 'Active' },
-  { value: 'expiring_soon', label: 'Expiring' },
+  { value: 'expired', label: 'Expired' },
   { value: 'terminated', label: 'Terminated' },
 ];
 
@@ -144,7 +154,7 @@ export function ContractsPage() {
               Activate
             </Button>
           )}
-          {(c.status === 'active' || c.status === 'expiring_soon') && (
+          {c.status === 'active' && (
             <Button variant="outline" size="sm" onClick={() => setTerminating(c)}>
               Terminate
             </Button>
@@ -297,7 +307,7 @@ export function ContractsPage() {
           ) : undefined
         }
         activity={
-          selected ? { resourceId: selected.id, resourceType: 'employment-contract' } : undefined
+          selected ? { resourceId: selected.id, resourceType: 'employment_contract' } : undefined
         }
       >
         {selected && (

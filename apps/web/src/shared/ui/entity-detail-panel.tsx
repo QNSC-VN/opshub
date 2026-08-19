@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { AuditResourceType } from '@/shared/api/types';
 import { ActivityTimeline } from './activity-timeline';
 import { DescriptionList, type DescriptionItem } from './description-list';
 import { SlideOver, SlideOverSection } from './slide-over';
@@ -16,7 +17,7 @@ export interface EntityDetailPanelProps {
    * What the activity timeline asks about. Omit to leave the timeline out entirely — a record with
    * no audit trail should not show an empty "Activity" heading.
    */
-  activity?: { resourceId: string; resourceType: string };
+  activity?: { resourceId: string; resourceType: AuditResourceType };
   /** Extra sections between the details and the activity — an upload widget, a linked list. */
   children?: ReactNode;
   width?: 'md' | 'lg';
