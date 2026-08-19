@@ -291,6 +291,14 @@ export const AUDIT_ACTION = {
   AUTH_LOGOUT: 'auth.logout',
   AUTH_SWITCH_WORKSPACE: 'auth.switch_workspace',
   AUTH_TOKEN_THEFT_DETECTED: 'auth.token_theft_detected',
+  /**
+   * Sessions ended BY AN ADMINISTRATIVE ACTION rather than by the holder.
+   *
+   * Distinct from `auth.logout`, which the holder does to themselves. Offboarding revokes every
+   * refresh token the leaver holds, and recording that as a logout would attribute the act to the
+   * person it was done to — on the one record an access-removal review reads.
+   */
+  SESSION_REVOKED: 'session.revoked',
   ACCESS_ROLE_ELEVATED: 'access.role_elevated',
 } as const;
 

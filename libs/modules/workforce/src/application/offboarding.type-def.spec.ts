@@ -28,7 +28,11 @@ import {
  *
  * `assetReturnRows` controls what asset_assignments.returning() resolves to.
  */
-function makeTx(assetReturnRows: Array<{ assetId: string }> = []) {
+function makeTx(
+  assetReturnRows: Array<{ assetId: string }> = [],
+  roleReturnRows: Array<{ id: string; roleId: string }> = [],
+  sessionReturnRows: Array<{ id: string }> = [{ id: 'token-1' }],
+) {
   const updateCalls: Array<{ table: unknown; chain: ReturnType<typeof makeUpdateChain> }> = [];
   const deleteCalls: Array<{ table: unknown }> = [];
 
@@ -46,7 +50,12 @@ function makeTx(assetReturnRows: Array<{ assetId: string }> = []) {
   }
 
   const updateMock = vi.fn().mockImplementation((table: unknown) => {
-    const returning = table === assetAssignments ? assetReturnRows : [];
+    const returning =
+      table === assetAssignments
+        ? assetReturnRows
+        : table === refreshTokens
+          ? sessionReturnRows
+          : [];
     const chain = makeUpdateChain(returning);
     updateCalls.push({ table, chain });
     return chain;
@@ -54,7 +63,10 @@ function makeTx(assetReturnRows: Array<{ assetId: string }> = []) {
 
   const deleteMock = vi.fn().mockImplementation((table: unknown) => {
     deleteCalls.push({ table });
-    return { where: vi.fn().mockResolvedValue(undefined) };
+    // `.returning()` because each removed assignment is audited individually — the chain has to
+    // resolve to the removed rows, not to `undefined`.
+    const where = vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue(roleReturnRows) });
+    return { where };
   });
 
   return {
@@ -72,12 +84,37 @@ const PAYLOAD = { employeeId: EMPLOYEE_ID, employeeEmail: 'alice@example.com' };
 
 describe('OffboardingTypeDef.onApprove()', () => {
   let typeDef: OffboardingTypeDef;
+  let record: ReturnType<typeof vi.fn>;
+  let invalidate: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    const mockDb = { select: vi.fn().mockReturnThis(), from: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue([]) };
-    const mockGraph = { isEnabled: vi.fn().mockReturnValue(false), disableEntraUser: vi.fn(), enableEntraUser: vi.fn() };
-    typeDef = new OffboardingTypeDef({ register: vi.fn() } as never, mockDb as never, mockGraph as never);
+    const mockDb = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([]),
+    };
+    const mockGraph = {
+      isEnabled: vi.fn().mockReturnValue(false),
+      disableEntraUser: vi.fn(),
+      enableEntraUser: vi.fn(),
+    };
+    record = vi.fn().mockResolvedValue(undefined);
+    invalidate = vi.fn().mockResolvedValue(undefined);
+    // One recorder shared by every resource: these tests care WHICH action was recorded, and the
+    // resource binding is asserted by the entry's action code rather than by which trail it came from.
+    const mockAudit = { forResource: vi.fn().mockReturnValue({ record }) };
+    typeDef = new OffboardingTypeDef(
+      { register: vi.fn() } as never,
+      mockDb as never,
+      mockGraph as never,
+      { invalidate } as never,
+      mockAudit as never,
+    );
   });
+
+  /** Actions recorded during the call, in order. */
+  const recordedActions = (): string[] => record.mock.calls.map((c) => c[0] as string);
 
   it('updates employees table (sets status → offboarded)', async () => {
     const tx = makeTx();
@@ -130,9 +167,7 @@ describe('OffboardingTypeDef.onApprove()', () => {
     const assetCalls = tx._updateCalls.filter((c) => c.table === assets);
     expect(assetCalls).toHaveLength(2);
     for (const call of assetCalls) {
-      expect(call.chain.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'in_stock' }),
-      );
+      expect(call.chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'in_stock' }));
     }
   });
 
@@ -150,18 +185,118 @@ describe('OffboardingTypeDef.onApprove()', () => {
 
     const tokenCall = tx._updateCalls.find((c) => c.table === refreshTokens);
     expect(tokenCall).toBeDefined();
-    expect(tokenCall!.chain.set).toHaveBeenCalledWith(
-      expect.objectContaining({ revoked: true }),
-    );
+    expect(tokenCall!.chain.set).toHaveBeenCalledWith(expect.objectContaining({ revoked: true }));
   });
 
-  it('performs all 5 cleanup operations (4 updates + 1 delete)', async () => {
+  it('performs all 5 cleanup operations (5 updates + 1 delete)', async () => {
     const tx = makeTx([{ assetId: 'x' }]);
     await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
-    // employees + access_grants + asset_assignments + assets(×1) + refresh_tokens = 5 updates
-    expect(tx._updateCalls).toHaveLength(5);
+    // employees(status) + employees(roles) + access_grants + asset_assignments + assets(×1) +
+    // refresh_tokens = 6 updates. The second `employees` write clears the denormalised role claims;
+    // see the comment at that call site for why it is not a post-commit sync.
+    expect(tx._updateCalls).toHaveLength(6);
+    expect(tx._updateCalls.filter((c) => c.table === employees)).toHaveLength(2);
     // user_role_assignments = 1 delete
     expect(tx._deleteCalls).toHaveLength(1);
+  });
+
+  it('clears the denormalised role claims alongside the assignments', async () => {
+    const tx = makeTx([], [{ id: 'a-1', roleId: 'r-1' }]);
+    await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+    // `employees.roles` feeds the JWT claims and nothing maintained it here, so an offboarded row
+    // still listed the roles whose assignments had just been deleted.
+    const rolesWrite = tx._updateCalls
+      .filter((c) => c.table === employees)
+      .find((c) =>
+        c.chain.set.mock.calls.some((args) =>
+          Array.isArray((args[0] as { roles?: unknown }).roles),
+        ),
+      );
+    expect(rolesWrite, 'no write cleared employees.roles').toBeDefined();
+    expect(rolesWrite!.chain.set).toHaveBeenCalledWith(expect.objectContaining({ roles: [] }));
+  });
+
+  describe('the audit trail — the evidence an access review reads', () => {
+    it('records the status change and the forced logout', async () => {
+      const tx = makeTx();
+      await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+      expect(recordedActions()).toContain('employee.status_changed');
+      // `session.revoked`, not `auth.logout`: the holder did not do this to themselves.
+      expect(recordedActions()).toContain('session.revoked');
+      expect(recordedActions()).not.toContain('auth.logout');
+    });
+
+    it('records one entry per role removed, not one for the batch', async () => {
+      const tx = makeTx(
+        [],
+        [
+          { id: 'assign-1', roleId: 'role-1' },
+          { id: 'assign-2', roleId: 'role-2' },
+        ],
+      );
+      await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+      // An access review asks when this person lost THIS role; "2 roles removed" cannot answer it.
+      const revocations = record.mock.calls.filter((c) => c[0] === 'role.revoked');
+      expect(revocations).toHaveLength(2);
+      expect(revocations.map((c) => c[1] as string)).toEqual(['assign-1', 'assign-2']);
+    });
+
+    it('records one entry per asset returned', async () => {
+      const tx = makeTx([{ assetId: 'asset-A' }, { assetId: 'asset-B' }]);
+      await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+      const returns = record.mock.calls.filter((c) => c[0] === 'asset.unassigned');
+      expect(returns.map((c) => c[1] as string)).toEqual(['asset-A', 'asset-B']);
+    });
+
+    it("names the APPROVER as the actor, and shares the caller's transaction", async () => {
+      const tx = makeTx();
+      await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+      for (const call of record.mock.calls) {
+        expect(call[2]).toMatchObject({ sub: 'hr-user' });
+        // With `tx`, the entry commits with the removal it describes and rolls back with it. An
+        // entry written outside the transaction can describe a change that never happened.
+        expect(call[3], 'an audit entry was written outside the transaction').toBe(tx);
+      }
+    });
+
+    it('writes no entry for a step that removed nothing', async () => {
+      // A leaver with no roles, no assets and no live session. Recording those anyway would put
+      // three events in the trail that did not happen.
+      const tx = makeTx([], [], []);
+      await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+      expect(recordedActions()).not.toContain('role.revoked');
+      expect(recordedActions()).not.toContain('asset.unassigned');
+      expect(recordedActions()).not.toContain('session.revoked');
+      // The status change always happened, so it is always recorded.
+      expect(recordedActions()).toEqual(['employee.status_changed']);
+    });
+  });
+
+  describe('the permission cache', () => {
+    it('is NOT invalidated inside the transaction', async () => {
+      const tx = makeTx();
+      await typeDef.onApprove(PAYLOAD, 'req-1', 'hr-user', tx as never);
+
+      // Invalidating before the commit lets a concurrent request miss the cache, re-resolve from
+      // uncommitted rows, and cache the OLD permissions again — the same stale state by a longer
+      // route. So this must NOT happen here.
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('is invalidated after the commit, even with Graph disabled', async () => {
+      await typeDef.afterApprove(PAYLOAD);
+
+      // `afterApprove` used to open with `if (!graph.isEnabled()) return`, and Graph is disabled in
+      // this fixture — as it is by default everywhere. Anything ordered after that early return does
+      // not run, which is why the invalidation is ordered before it.
+      expect(invalidate).toHaveBeenCalledWith(EMPLOYEE_ID);
+    });
   });
 
   it('onReject is a no-op (mutates no state)', async () => {
@@ -171,4 +306,3 @@ describe('OffboardingTypeDef.onApprove()', () => {
     expect(tx.delete).not.toHaveBeenCalled();
   });
 });
-
