@@ -9,6 +9,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { LeaveSummaryResponse, OvertimeSummaryResponse } from '@/shared/api/types';
 import { dateRange } from './report-config';
 
@@ -24,7 +25,7 @@ export function WorkforceSummary({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   const otQ = useQuery<OvertimeSummaryResponse>({
@@ -36,7 +37,7 @@ export function WorkforceSummary({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   const totalLeave = leaveQ.data?.rows.reduce((s, r) => s + r.count, 0) ?? 0;

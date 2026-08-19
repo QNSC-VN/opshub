@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, Search } from 'lucide-react';
 import { api } from '@/shared/api/client';
+import { POLL, STALE } from '@/shared/api/cache';
 import {
   Badge,
   Button,
@@ -16,7 +17,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDateTime } from '@/shared/lib/format';
+import { formatDateTime, orDash } from '@/shared/lib/format';
 import {
   AUDIT_RESOURCE_TYPES,
   type AuditLogResponse,
@@ -108,8 +109,8 @@ export function AuditLogsPage() {
       if (error || !data) throw new Error('Failed to load audit logs');
       return data;
     },
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: STALE.WATCHED,
+    refetchInterval: POLL.WATCHED,
   });
 
   const columns: DataTableColumn<AuditLogResponse>[] = [
@@ -131,7 +132,7 @@ export function AuditLogsPage() {
     {
       key: 'resourceId',
       header: 'Resource ID',
-      cell: (log) => <span className="font-mono text-xs">{log.resourceId ?? '—'}</span>,
+      cell: (log) => <span className="font-mono text-xs">{orDash(log.resourceId)}</span>,
       className: 'max-w-[140px] truncate',
       hideOnMobile: true,
     },

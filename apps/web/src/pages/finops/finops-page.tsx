@@ -15,7 +15,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate, formatMoney } from '@/shared/lib/format';
+import { EM_DASH, formatDate, formatMoney, orDash } from '@/shared/lib/format';
 import { AddLicenseModal } from './add-license-modal';
 import { SeatUtilizationList, SpendByProductChart } from './finops-charts';
 import { SeatPanel } from './seat-panel';
@@ -82,7 +82,7 @@ export function FinOpsPage() {
       cell: (l) => humanizeStatus(l.licenseType),
       hideOnMobile: true,
     },
-    { key: 'seats', header: 'Seats', align: 'right', cell: (l) => l.seatCount ?? '—' },
+    { key: 'seats', header: 'Seats', align: 'right', cell: (l) => orDash(l.seatCount) },
     {
       key: 'perSeat',
       header: 'Per seat',
@@ -99,13 +99,13 @@ export function FinOpsPage() {
       cell: (l) =>
         l.seatCount != null && l.costPerSeatCents != null
           ? formatMoney(l.seatCount * l.costPerSeatCents)
-          : '—',
+          : EM_DASH,
     },
     {
       key: 'renewal',
       header: 'Renewal',
       cell: (l) => {
-        if (!l.renewalDate) return '—';
+        if (!l.renewalDate) return EM_DASH;
         const days = daysUntilRenewal(l.renewalDate);
         return (
           <span className={isExpiringSoon(l) ? 'text-warning' : undefined}>
@@ -255,7 +255,7 @@ export function FinOpsPage() {
                   value:
                     selected.seatCount != null && selected.costPerSeatCents != null
                       ? formatMoney(selected.seatCount * selected.costPerSeatCents)
-                      : '—',
+                      : EM_DASH,
                 },
                 { label: 'Renewal', value: formatDate(selected.renewalDate) },
                 ...(selected.notes ? [{ label: 'Notes', wide: true, value: selected.notes }] : []),

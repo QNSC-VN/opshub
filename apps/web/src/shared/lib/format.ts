@@ -138,6 +138,24 @@ export function formatDateTime(value: string | Date | null | undefined): string 
 }
 
 /**
+ * The clock time of an instant: `14:32`.
+ *
+ * WHY THIS IS NOT `toLocaleTimeString([], ...)`. The attendance widget used that, and `[]` means the
+ * BROWSER's locale — so "Clocked in at" read `02:32 PM` on one machine and `14:32` on another, while
+ * `formatDateTime` a few pixels away always said `14:32`. Two clocks in one view, disagreeing about how
+ * to write the same minute.
+ *
+ * Same fixed locale as every other formatter here, for the same reason: a screenshot in a bug report
+ * has to mean what the reporter's screen meant.
+ */
+export function formatTime(value: string | Date | null | undefined): string {
+  if (!value) return EM_DASH;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return EM_DASH;
+  return new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+/**
  * How long until an instant, in words: `47m left`, `3h left`, `2d left`, `Expired`.
  *
  * WHY A SEPARATE FORMATTER FROM `formatDateTime`. Some deadlines are read as a MOMENT — "when was this

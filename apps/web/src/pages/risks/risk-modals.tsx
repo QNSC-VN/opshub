@@ -17,6 +17,7 @@ import {
 } from '@/shared/ui';
 import { MatrixFields } from './risk-matrix';
 import { TREATMENT_DECISIONS, type Risk } from './risk.types';
+import { orDash } from '@/shared/lib/format';
 
 /**
  * Identifying and assessing a risk — the two forms that set its factors.
@@ -226,7 +227,7 @@ export function AssessRiskModal({
       onClose={onClose}
       size="sm"
       title={`Assess ${risk.reference}`}
-      description={`Inherent score ${risk.inherentScore ?? '—'}. The residual is what remains after the decision below.`}
+      description={`Inherent score ${orDash(risk.inherentScore)}. The residual is what remains after the decision below.`}
     >
       <form
         onSubmit={(e) => {

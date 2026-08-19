@@ -363,7 +363,7 @@ export function NonconformancesPage() {
                   label: 'Containment due',
                   value: selected.containmentDueOn
                     ? formatDate(selected.containmentDueOn)
-                    : `${selectedGrade?.containmentDueDays ?? '—'} day(s) from detection`,
+                    : `${orDash(selectedGrade?.containmentDueDays)} day(s) from detection`,
                 },
                 {
                   label: 'Owner',

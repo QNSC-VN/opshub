@@ -19,7 +19,7 @@ import {
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
-import { formatDate, todayIso } from '@/shared/lib/format';
+import { formatDate, orDash, todayIso } from '@/shared/lib/format';
 import { AssignPositionModal, PositionModal } from './position-modals';
 import type { Position, PositionAssignment } from './position.types';
 
@@ -130,7 +130,7 @@ export function PositionsPage() {
         </div>
       ),
     },
-    { key: 'level', header: 'Level', cell: (p) => p.level ?? '—', hideOnMobile: true },
+    { key: 'level', header: 'Level', cell: (p) => orDash(p.level), hideOnMobile: true },
     {
       key: 'headcount',
       header: 'Filled',

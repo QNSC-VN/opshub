@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/utils';
+import { formatTime } from '@/shared/lib/format';
 import { responseErrorMessage } from '@/shared/api/errors';
+import { POLL } from '@/shared/api/cache';
 import { sessionFetch } from '@/shared/api/session-fetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -77,7 +79,7 @@ export function AttendanceClock() {
   const statusQ = useQuery({
     queryKey: ['attendance', 'status'],
     queryFn: fetchStatus,
-    refetchInterval: 60_000,
+    refetchInterval: POLL.ACTIVITY,
   });
 
   const isClockedIn = statusQ.data?.isClockedIn ?? false;
@@ -139,15 +141,7 @@ export function AttendanceClock() {
           <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
             {elapsed}
           </p>
-          <p className="text-xs text-fg-subtle">
-            Clocked in at{' '}
-            {current
-              ? new Date(current.clockedInAt).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
-              : '—'}
-          </p>
+          <p className="text-xs text-fg-subtle">Clocked in at {formatTime(current?.clockedInAt)}</p>
         </div>
       ) : (
         <p className="text-sm text-fg-muted">Not clocked in</p>

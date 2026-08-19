@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { POLL } from '@/shared/api/cache';
 import type { AccessGrantResponse, AccessRequestStatus } from '@/shared/api/types';
 
 /**
@@ -48,7 +49,7 @@ export function useMyGrants() {
      * clock. One request a minute on one screen is cheaper than a screen that claims access somebody no
      * longer holds.
      */
-    refetchInterval: 60_000,
+    refetchInterval: POLL.ACTIVITY,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/access-requests/grants/me/active');
       if (error || !data) throw new Error('Failed to load your active access');

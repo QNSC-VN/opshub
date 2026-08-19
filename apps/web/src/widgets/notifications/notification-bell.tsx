@@ -15,6 +15,7 @@ import { ENV } from '@/shared/config/env';
 import { Bell, Check, CheckCheck, X, Inbox } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import { sessionFetch } from '@/shared/api/session-fetch';
 import type { InAppNotification, NotificationListResult } from '@/shared/api/types';
 import { useSSENotifications } from './use-sse-notifications';
@@ -56,7 +57,7 @@ function useNotificationList(enabled: boolean) {
       return res.json() as Promise<NotificationListResult>;
     },
     enabled,
-    staleTime: 30_000,
+    staleTime: STALE.WATCHED,
   });
 }
 

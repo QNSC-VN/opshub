@@ -1,5 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type {
   Capa,
   ContainmentOverdue,
@@ -73,7 +74,7 @@ export function useNonconformances(params: {
 export function useSeverities() {
   return useQuery<Severity[]>({
     queryKey: ['quality', 'severities'],
-    staleTime: 30 * 60_000,
+    staleTime: STALE.REFERENCE,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/nonconformances/severities');
       if (error || !data) throw new Error('Failed to load the severity grades');
@@ -163,7 +164,7 @@ export function useNonconformance(id: string | null) {
 export function useFindingLabels(ids: string[]) {
   const unique = [...new Set(ids)];
   const results = useQueries({
-    queries: unique.map((id) => ({ ...findingQuery(id), staleTime: 5 * 60_000 })),
+    queries: unique.map((id) => ({ ...findingQuery(id), staleTime: STALE.REPORT })),
   });
 
   const byId = new Map<string, Nonconformance>();

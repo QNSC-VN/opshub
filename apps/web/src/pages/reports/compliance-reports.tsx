@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { FindingsSummaryResponse } from '@/shared/api/types';
 import { ChartSkeleton, ErrorMsg } from './report-parts';
 import { SEVERITY_COLORS, ZINC, capitalize, dateRange } from './report-config';
@@ -22,7 +23,7 @@ export function FindingsChart({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   if (isLoading) return <ChartSkeleton />;

@@ -19,6 +19,7 @@ import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
 import { ReclassifySoftwareModal } from './compliance-modals';
 import type { SoftwareResponse } from '@/shared/api/types';
+import { orDash } from '@/shared/lib/format';
 
 /**
  * The software catalogue: what is allowed on managed devices, what is banned, and what nobody has decided.
@@ -107,7 +108,7 @@ export function SoftwareCatalogTab() {
       header: 'Name',
       cell: (r) => <span className="font-medium text-fg">{r.name}</span>,
     },
-    { key: 'publisher', header: 'Publisher', cell: (r) => r.publisher ?? '—' },
+    { key: 'publisher', header: 'Publisher', cell: (r) => orDash(r.publisher) },
     {
       key: 'listing',
       header: 'Listing',
@@ -120,7 +121,7 @@ export function SoftwareCatalogTab() {
       header: 'Notes',
       cell: (r) => (
         <span className="text-xs text-fg-subtle" title={r.notes ?? ''}>
-          {r.notes ?? '—'}
+          {orDash(r.notes)}
         </span>
       ),
       className: 'max-w-xs truncate',

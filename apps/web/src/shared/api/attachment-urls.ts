@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
+import { STALE } from '@/shared/api/cache';
 
 /**
  * The DOWNLOAD URL for a file already attached to a record, per entity.
@@ -19,9 +20,6 @@ import { api } from './client';
  * a broken image, which is worse than fetching again.
  */
 
-/** Well inside the shortest presign window the API issues, so a cached URL is never a dead one. */
-const URL_STALE_TIME = 60_000;
-
 function attachmentQuery<T extends string>(
   tag: T,
   id: string | null,
@@ -30,7 +28,7 @@ function attachmentQuery<T extends string>(
   return {
     queryKey: ['attachment-url', tag, id] as const,
     enabled: !!id,
-    staleTime: URL_STALE_TIME,
+    staleTime: STALE.ACTIVITY,
     queryFn: () => read(id!),
   };
 }

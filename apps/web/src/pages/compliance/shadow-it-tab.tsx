@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { RadioTower, ScanSearch } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { formatDateTime } from '@/shared/lib/format';
+import { formatDateTime, orDash } from '@/shared/lib/format';
 import { usePermissions } from '@/shared/hooks/use-permissions';
 import {
   Badge,
@@ -92,7 +92,7 @@ export function ShadowItPanel() {
       // The device and the person are what make a detection actionable: the same app is a different
       // problem on a developer's laptop and on a shared kiosk.
       cell: (f) => (
-        <span className="font-mono text-xs text-fg-muted">{f.assetId ?? f.employeeId ?? '—'}</span>
+        <span className="font-mono text-xs text-fg-muted">{orDash(f.assetId ?? f.employeeId)}</span>
       ),
       hideOnMobile: true,
     },

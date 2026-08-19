@@ -6,6 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { components } from '@/shared/api/generated/api';
 
 export type MeDto = components['schemas']['MeResponseDto'];
@@ -18,7 +19,7 @@ export function useCurrentUser() {
       if (error || !data) throw new Error('Failed to load user');
       return data as MeDto;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
     retry: 1,
   });
 }

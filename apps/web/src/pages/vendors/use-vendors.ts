@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type {
   CriticalityLevel,
   LinkedRisk,
@@ -57,7 +58,7 @@ export function useVendors(params: {
 export function useCriticalityLevels() {
   return useQuery<CriticalityLevel[]>({
     queryKey: ['vendors', 'criticality-levels'],
-    staleTime: 30 * 60_000,
+    staleTime: STALE.REFERENCE,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/vendors/criticality-levels');
       if (error || !data) throw new Error('Failed to load criticality levels');

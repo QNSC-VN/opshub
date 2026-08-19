@@ -10,6 +10,7 @@ import {
   formatDateTime,
   formatDecimal,
   formatMoney,
+  formatTime,
   formatTimeUntil,
   orDash,
 } from './format';
@@ -60,6 +61,35 @@ describe('formatDateTime', () => {
     expect(formatDateTime(new Date(Date.UTC(2026, 2, 4, 14, 32)))).toMatch(
       /4 Mar 2026, \d{2}:\d{2}/,
     );
+  });
+});
+
+describe('formatTime', () => {
+  it('formats a clock time in 24-hour, not the browser’s preference', () => {
+    /*
+     * THE DRIFT, as a test. The attendance widget used `toLocaleTimeString([], ...)`, and `[]` means
+     * the BROWSER's locale — so "Clocked in at" read `02:32 PM` on one machine and `14:32` on another,
+     * while `formatDateTime` a few pixels away always said `14:32`.
+     */
+    expect(formatTime('2026-03-04T14:32:00.000Z')).toMatch(/^\d{2}:\d{2}$/);
+    expect(formatTime('2026-03-04T14:32:00.000Z')).not.toMatch(/[AP]M/i);
+  });
+
+  it('agrees with formatDateTime about the same instant', () => {
+    // Two clocks in one view must not disagree about how to write one minute. This is the property the
+    // hand-rolled call broke, and it is checked against the OTHER formatter rather than a literal, so
+    // it holds wherever the suite runs.
+    const iso = '2026-03-04T14:32:00.000Z';
+    expect(formatDateTime(iso)).toContain(formatTime(iso));
+  });
+
+  it('em-dashes an absent or unparseable value', () => {
+    // The old call site wrote `current ? ... : '—'` by hand; the guard lives in the formatter now, so
+    // `formatTime(current?.clockedInAt)` is the whole expression.
+    expect(formatTime(null)).toBe(EM_DASH);
+    expect(formatTime(undefined)).toBe(EM_DASH);
+    expect(formatTime('')).toBe(EM_DASH);
+    expect(formatTime('nonsense')).toBe(EM_DASH);
   });
 });
 

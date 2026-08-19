@@ -21,7 +21,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { usePermissions } from '@/shared/hooks/use-permissions';
-import { formatDate, formatDateTime } from '@/shared/lib/format';
+import { formatDate, formatDateTime, orDash } from '@/shared/lib/format';
 import { CreateSubscriptionModal } from './create-subscription-modal';
 import type { WebhookSubscription } from './webhook.types';
 
@@ -332,7 +332,7 @@ export function WebhooksPage() {
                 {
                   key: 'error',
                   header: 'Last error',
-                  cell: (d) => <span className="text-xs text-danger">{d.lastError ?? '—'}</span>,
+                  cell: (d) => <span className="text-xs text-danger">{orDash(d.lastError)}</span>,
                   className: 'max-w-[220px] truncate',
                   hideOnMobile: true,
                 },

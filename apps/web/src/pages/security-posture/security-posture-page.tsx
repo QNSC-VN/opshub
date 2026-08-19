@@ -28,6 +28,7 @@ import {
 } from '@/shared/ui';
 import { FEATURES } from '@/shared/config/features';
 import { cn } from '@/shared/lib/utils';
+import { orDash } from '@/shared/lib/format';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -441,7 +442,7 @@ function SecurityPostureContent() {
                         <CheckVerdict status={c.status} />
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-fg-muted text-xs">
-                        {c.actualValue ?? '—'} / {c.expectedValue ?? '—'}
+                        {orDash(c.actualValue)} / {orDash(c.expectedValue)}
                       </td>
                     </tr>
                   ))}

@@ -21,7 +21,7 @@ import {
 import { useAssetPhotoUrl } from '@/shared/api/attachment-urls';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
-import { formatDate } from '@/shared/lib/format';
+import { EM_DASH, formatDate, orDash } from '@/shared/lib/format';
 import { AddAssetModal } from './add-asset-modal';
 import { AssignAssetModal, AssignmentHistoryPanel } from './asset-lifecycle';
 import { ASSET_NEXT_ACTIONS, ASSET_STATUS_FILTERS, type Asset } from './asset.types';
@@ -106,7 +106,7 @@ export function AssetsPage() {
     {
       key: 'model',
       header: 'Model',
-      cell: (a) => [a.manufacturer, a.model].filter(Boolean).join(' ') || '—',
+      cell: (a) => [a.manufacturer, a.model].filter(Boolean).join(' ') || EM_DASH,
       hideOnMobile: true,
     },
     {
@@ -119,7 +119,7 @@ export function AssetsPage() {
     {
       key: 'assignedTo',
       header: 'Assigned to',
-      cell: (a) => a.assignedTo ?? '—',
+      cell: (a) => orDash(a.assignedTo),
       hideOnMobile: true,
     },
     {

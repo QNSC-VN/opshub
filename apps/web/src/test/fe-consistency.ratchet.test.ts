@@ -170,6 +170,48 @@ const MAX_HANDROLLED_PANEL_STATE = 18;
 const MAX_HANDROLLED_FORM_FOOTER = 0;
 
 /**
+ * A cache window written as a number instead of a named tier. MAY ONLY FALL.
+ *
+ * Twenty-six queries set `staleTime` inline, in six values, and every one of them was answering the
+ * same question — how out of date may this be before it misleads somebody — as a bare literal. Nothing
+ * said why five minutes rather than thirty, so a new query inherited whichever number the file above
+ * it happened to use. Two files had already reached for a constant and named it differently (`STALE`,
+ * `URL_STALE_TIME`), both 60_000, in the same product.
+ *
+ * `STALE` and `POLL` name the tiers for the DATA rather than the duration, so the decision is made once
+ * and a call site picks by asking what kind of thing it is reading. Baseline zero.
+ */
+const MAX_INLINE_CACHE_WINDOW = 0;
+
+/**
+ * An em dash written as a literal instead of `EM_DASH` / `orDash`. MAY ONLY FALL.
+ *
+ * Thirty-four sites wrote `?? '—'` or returned `'—'` while `format.ts` exported both the constant and
+ * the helper — used in two files. It is not the character that matters: it is that "absent" has one
+ * representation, decided in the place that also decides what a date and a number look like when they
+ * are missing.
+ *
+ * `||` CHAINS ARE LEFT ALONE and use `EM_DASH` rather than `orDash`, deliberately: `orDash` treats
+ * only null, undefined and the empty string as absent, and a caller chaining `value || placeholder ||
+ * EM_DASH` is expressing a different fallback that the helper must not silently change.
+ */
+const MAX_INLINE_EM_DASH = 0;
+
+/**
+ * A date or time formatted at the call site instead of through `format.ts`. MAY ONLY FALL.
+ *
+ * The original 25 inline `toLocaleDateString()` calls went first, and TWO survived that migration —
+ * which is exactly why this is a ratchet and not a one-off cleanup. `activity-timeline.tsx` formatted
+ * in `en-US`, so an audit entry older than a month rendered `Mar 4, 2026` beside a `4 Mar 2026`
+ * elsewhere in the same view; `attendance-clock.tsx` used `toLocaleTimeString([], …)`, and `[]` means
+ * the browser's locale, so "Clocked in at" read `02:32 PM` on one machine and `14:32` on another.
+ *
+ * Both are the same defect: a second opinion about how to write a moment, in a product where the first
+ * opinion is deliberate and documented.
+ */
+const MAX_INLINE_DATE_FORMAT = 0;
+
+/**
  * The command palette owns its overlay, deliberately.
  *
  * It is a COMBOBOX surface, not a titled dialog: it implements `role="combobox"`, `role="option"`,
@@ -351,6 +393,56 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     expect(total, 'FormActions is no longer used — the count above proves nothing').toBeGreaterThan(
       30,
     );
+  });
+
+  it(`inline cache windows <= ${MAX_INLINE_CACHE_WINDOW}`, () => {
+    // A numeric literal on either option. `staleTime: STALE.REPORT` does not match; `staleTime: 300_000`
+    // and `staleTime: 5 * 60_000` both do.
+    const { total, byFile } = countMatches(
+      (rel) => /\.tsx?$/.test(rel) && rel !== 'shared/api/cache.ts',
+      /(?:staleTime|refetchInterval):\s*[\d_]/g,
+    );
+    assertRatchet('inline cache windows', total, MAX_INLINE_CACHE_WINDOW, byFile);
+  });
+
+  it('names its cache tiers, so the count above is not zero by deletion', () => {
+    // The floor. Deleting every `staleTime` would satisfy the check above and quietly put half the SPA
+    // back on refetch-per-mount.
+    const { total } = countMatches((rel) => /\.tsx?$/.test(rel), /\b(?:STALE|POLL)\.[A-Z]/g);
+    expect(
+      total,
+      'nothing uses a named cache tier — the count above proves nothing',
+    ).toBeGreaterThan(25);
+  });
+
+  it(`inline em dashes <= ${MAX_INLINE_EM_DASH}`, () => {
+    const { total, byFile } = countMatches(
+      (rel) => /\.tsx?$/.test(rel) && rel !== 'shared/lib/format.ts',
+      /'—'/g,
+    );
+    assertRatchet('inline em dashes', total, MAX_INLINE_EM_DASH, byFile);
+  });
+
+  it(`call-site date formatting <= ${MAX_INLINE_DATE_FORMAT}`, () => {
+    /*
+     * `toLocaleDateString` / `toLocaleTimeString` / `toLocaleString` anywhere but `format.ts`. Matching
+     * the API rather than the locale string is what catches both drifts: one passed the WRONG locale
+     * and one passed NO locale, and a scanner looking for `'en-US'` would have missed the second.
+     */
+    const { total, byFile } = countMatches(
+      (rel) => /\.tsx?$/.test(rel) && rel !== 'shared/lib/format.ts',
+      /\.toLocale(?:Date|Time)?String\(/g,
+    );
+    assertRatchet('call-site date formatting', total, MAX_INLINE_DATE_FORMAT, byFile);
+  });
+
+  it('formats dates through the kit, so there is one opinion about a moment', () => {
+    // The floor for the check above: with no formatter in use, "no inline formatting" is trivially true.
+    const { total } = countMatches(
+      (rel) => /\.tsx?$/.test(rel),
+      /\bformat(?:Date|DateTime|Time|TimeUntil)\(/g,
+    );
+    expect(total, 'nothing formats a date through format.ts').toBeGreaterThan(40);
   });
 
   it(`largest source file <= ${MAX_FILE_LINES} lines`, () => {

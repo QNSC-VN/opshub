@@ -18,7 +18,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
-import { formatDateTime } from '@/shared/lib/format';
+import { formatDateTime, orDash } from '@/shared/lib/format';
 import { SectionCard, SectionHeader } from './rbac-shared';
 import type { DelegationResponse } from '@/shared/api/types';
 
@@ -191,7 +191,7 @@ export function DelegationsTab() {
     {
       key: 'reason',
       header: 'Reason',
-      cell: (d) => <span className="text-xs text-fg-muted">{d.reason ?? '—'}</span>,
+      cell: (d) => <span className="text-xs text-fg-muted">{orDash(d.reason)}</span>,
       className: 'max-w-[180px] truncate',
       hideOnMobile: true,
     },

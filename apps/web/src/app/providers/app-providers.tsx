@@ -5,6 +5,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { Toaster } from 'sonner';
 import { router } from '@/app/router/router';
 import { bootstrapAuth } from '@/shared/api/auth-bootstrap';
+import { STALE } from '@/shared/api/cache';
 import { useThemeStore } from '@/shared/lib/theme';
 
 const queryClient = new QueryClient({
@@ -15,6 +16,14 @@ const queryClient = new QueryClient({
         return failureCount < 1;
       },
       refetchOnWindowFocus: false,
+      /*
+       * STATED, NOT INHERITED. This is TanStack's own default, so nothing changes — but half the
+       * queries in the SPA set a `staleTime` and half do not, and the half that do not were reading as
+       * an omission rather than as a choice. `STALE.NONE` says the choice out loud: refetch on mount,
+       * which is right for a list somebody is about to act on and wrong for a reference catalogue.
+       * A query that wants otherwise names its tier from the same file.
+       */
+      staleTime: STALE.NONE,
     },
   },
 });
@@ -90,13 +99,7 @@ export function AppProviders() {
           background: 'var(--bg-page)',
         }}
       >
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 22 22"
-          fill="none"
-          aria-label="Loading OpsHub"
-        >
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-label="Loading OpsHub">
           <rect width="22" height="22" rx="5" fill="#2563eb" opacity="0.7" />
           <path
             d="M11 5.5C7.96 5.5 5.5 7.96 5.5 11s2.46 5.5 5.5 5.5 5.5-2.46 5.5-5.5S14.04 5.5 11 5.5Zm0 8.25a2.75 2.75 0 1 1 0-5.5 2.75 2.75 0 0 1 0 5.5Z"
@@ -116,4 +119,3 @@ export function AppProviders() {
     </ErrorBoundary>
   );
 }
-

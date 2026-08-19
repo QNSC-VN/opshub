@@ -120,7 +120,7 @@ export function RisksPage() {
       align: 'right',
       cell: (risk) => (
         <Badge tone={scoreTone(risk.inherentScore)}>
-          {risk.inherentScore ?? '—'}
+          {orDash(risk.inherentScore)}
           <span className="ml-1 text-fg-subtle">
             ({risk.inherentLikelihood}×{risk.inherentImpact})
           </span>
@@ -318,7 +318,7 @@ export function RisksPage() {
                 },
                 {
                   label: 'Inherent',
-                  value: `${selected.inherentScore ?? '—'} (${selected.inherentLikelihood}×${selected.inherentImpact})`,
+                  value: `${orDash(selected.inherentScore)} (${selected.inherentLikelihood}×${selected.inherentImpact})`,
                 },
                 {
                   label: 'Residual',
