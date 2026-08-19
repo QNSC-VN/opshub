@@ -139,6 +139,26 @@ const MAX_INVENTED_ERROR_MESSAGE = 1;
 const MAX_UNANNOUNCED_FORM_ERROR = 0;
 
 /**
+ * Panels rendering their own loading / failed / empty triple instead of `PanelState`. MAY ONLY FALL.
+ *
+ * Twenty-five files wrote the same three-branch preamble by hand, and four got it wrong — in the one
+ * direction that matters. `catalogue-tab.tsx` and both panels in `cycles-tab.tsx` had NO error branch
+ * and an empty test of `!isLoading && count === 0`, which is true on failure as well, because `data` is
+ * undefined and the count is therefore zero. So a failed request did not render a blank panel; it
+ * asserted an absence. The performance coverage panel announced "Everybody in scope has a completed
+ * review" in green — a compliance all-clear produced by a broken fetch.
+ *
+ * `PanelState` takes the QUERY rather than three booleans, so `isError` is always checked before
+ * emptiness and a failure cannot be reported as an absence.
+ *
+ * 30 → 18. The remaining eighteen are all CORRECT — they handle every branch — and each carries an
+ * inline comment explaining what its empty message means, which a mechanical rewrite would have
+ * discarded. They are consistency debt rather than defects, so this counts them down rather than
+ * failing on them.
+ */
+const MAX_HANDROLLED_PANEL_STATE = 18;
+
+/**
  * The command palette owns its overlay, deliberately.
  *
  * It is a COMBOBOX surface, not a titled dialog: it implements `role="combobox"`, `role="option"`,
@@ -283,6 +303,23 @@ describe('FE consistency ratchets (only ever decrease)', () => {
       total,
       'FormError is no longer used anywhere — the check above proves nothing',
     ).toBeGreaterThan(50);
+  });
+
+  it(`hand-rolled panel state triples <= ${MAX_HANDROLLED_PANEL_STATE}`, () => {
+    const { total, byFile } = countMatches(
+      (rel) => rel.endsWith('.tsx') && !rel.startsWith('shared/ui/'),
+      /\.isLoading && <p className="text-xs text-fg-subtle">/g,
+    );
+    assertRatchet('hand-rolled panel states', total, MAX_HANDROLLED_PANEL_STATE, byFile);
+  });
+
+  it('renders panel states through the kit, so the error branch is not optional', () => {
+    // The floor. Without it the count above falls to zero by deleting panels rather than fixing them,
+    // and the four that reported a failure as an absence would be free to come back.
+    const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<PanelState\s/g);
+    expect(total, 'PanelState is no longer used — the count above proves nothing').toBeGreaterThan(
+      8,
+    );
   });
 
   it(`largest source file <= ${MAX_FILE_LINES} lines`, () => {

@@ -4,7 +4,15 @@ import { ListChecks, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, RowActions, Select, StatusBadge, humanizeStatus, statusTone } from '@/shared/ui';
+import {
+  Button,
+  PanelState,
+  RowActions,
+  Select,
+  StatusBadge,
+  humanizeStatus,
+  statusTone,
+} from '@/shared/ui';
 import { formatDate } from '@/shared/lib/format';
 import { AddTreatmentModal } from './treatment-modals';
 import { TREATMENT_STATUSES } from './risk.types';
@@ -51,13 +59,12 @@ export function TreatmentsPanel({ risk, canManage }: { risk: Risk; canManage: bo
         <AddTreatmentModal risk={risk} onClose={() => setAdding(false)} onSuccess={invalidate} />
       )}
 
-      {treatments.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {treatments.isError && (
-        <p className="text-xs text-danger">Failed to load the treatment plan.</p>
-      )}
-      {!treatments.isLoading && !treatments.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">No treatment actions</p>
-      )}
+      <PanelState
+        query={treatments}
+        count={rows.length}
+        empty="No treatment actions"
+        error="Failed to load the treatment plan."
+      />
 
       {rows.map((treatment) => (
         <div

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Briefcase, FileText } from 'lucide-react';
 import { api } from '@/shared/api/client';
-import { Badge, StatusBadge, humanizeStatus, statusTone } from '@/shared/ui';
+import { Badge, PanelState, StatusBadge, humanizeStatus, statusTone } from '@/shared/ui';
 import { formatDate } from '@/shared/lib/format';
 import type { ContractResponse, EmployeePositionHistory } from '@/shared/api/types';
 
@@ -83,11 +83,12 @@ export function MyContracts() {
 
   return (
     <div className="flex flex-col gap-2">
-      {contracts.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {contracts.isError && <p className="text-xs text-danger">Failed to load your contracts.</p>}
-      {!contracts.isLoading && !contracts.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">No contract on record yet</p>
-      )}
+      <PanelState
+        query={contracts}
+        count={rows.length}
+        empty="No contract on record yet"
+        error="Failed to load your contracts."
+      />
 
       {rows.map((contract) => (
         <div key={contract.id} className="rounded-md border border-border bg-surface px-2.5 py-2">

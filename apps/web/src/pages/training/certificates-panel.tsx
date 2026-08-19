@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { useUpload } from '@/shared/api/use-upload';
-import { Button, ConfirmDialog, FormError, RowActions } from '@/shared/ui';
+import { Button, ConfirmDialog, FormError, PanelState, RowActions } from '@/shared/ui';
 import { formatDateTime } from '@/shared/lib/format';
 import { CERTIFICATE_ACCEPT } from './training.types';
 import { useCertificates } from './use-training';
@@ -103,13 +103,12 @@ export function CertificatesPanel({
         variant="danger"
       />
 
-      {certificates.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {certificates.isError && (
-        <p className="text-xs text-danger">Failed to load the certificates.</p>
-      )}
-      {!certificates.isLoading && !certificates.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">No certificate attached</p>
-      )}
+      <PanelState
+        query={certificates}
+        count={rows.length}
+        empty="No certificate attached"
+        error="Failed to load the certificates."
+      />
 
       {rows.map((certificate) => (
         <div

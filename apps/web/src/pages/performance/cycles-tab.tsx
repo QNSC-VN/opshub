@@ -20,6 +20,7 @@ import {
   humanizeStatus,
   statusTone,
   type DataTableColumn,
+  PanelState,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { formatDate } from '@/shared/lib/format';
@@ -260,10 +261,16 @@ export function CyclesTab() {
         {selected && (
           <>
             <SlideOverSection title={`Progress (${totalReviews})`}>
-              {progress.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-              {!progress.isLoading && totalReviews === 0 && (
-                <p className="text-xs text-fg-subtle">No reviews in this cycle yet</p>
-              )}
+              {/* `PanelState`, because this had no error branch and its empty test read
+                  `!isLoading && totalReviews === 0` — true on failure as well, since `data` is
+                  undefined and the count is therefore zero. A failed load claimed "No reviews in this
+                  cycle yet": not a blank panel, a false statement. */}
+              <PanelState
+                query={progress}
+                count={totalReviews}
+                empty="No reviews in this cycle yet"
+                error="Failed to load this cycle's progress."
+              />
               <div className="flex flex-wrap gap-1.5">
                 {(progress.data ?? []).map((row) => (
                   <Badge key={row.status} tone={statusTone(row.status)}>
@@ -274,12 +281,18 @@ export function CyclesTab() {
             </SlideOverSection>
 
             <SlideOverSection title={`Not covered (${coverage.data?.length ?? 0})`}>
-              {coverage.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
               {/* An empty coverage report is the GOOD outcome, so it says so rather than showing an
-                  empty list that reads as a failed fetch. */}
-              {!coverage.isLoading && (coverage.data?.length ?? 0) === 0 && (
-                <p className="text-xs text-success">Everybody in scope has a completed review</p>
-              )}
+                  empty list that reads as a failed fetch — hence `emptyTone="success"`.
+                  Through `PanelState` because this was the worst instance of the missing-error bug:
+                  no error branch, and an empty test true on failure, so a broken request announced a
+                  compliance all-clear in green. */}
+              <PanelState
+                query={coverage}
+                count={coverage.data?.length ?? 0}
+                empty="Everybody in scope has a completed review"
+                emptyTone="success"
+                error="Failed to load the coverage report."
+              />
               <div className="flex flex-col gap-1.5">
                 {(coverage.data ?? []).map((gap) => (
                   <div
