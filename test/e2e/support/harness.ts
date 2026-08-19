@@ -189,6 +189,8 @@ export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 export interface ApiResponse {
   status: number;
   body: unknown;
+  /** Response headers, for the assertions that are about a header rather than a body. */
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 /**
@@ -205,14 +207,26 @@ export async function apiRequest(
   method: HttpMethod,
   url: string,
   payload?: Record<string, unknown>,
+  /**
+   * Extra request headers, merged over the bearer token.
+   *
+   * For behaviour that lives in a HEADER rather than a body — `Idempotency-Key` is the first — so a
+   * suite that needs one does not drop to a hand-rolled `app.inject` and lose the `/v1` prefix, the
+   * auth, and the envelope parsing that everything else here shares.
+   */
+  headers?: Record<string, string>,
 ): Promise<ApiResponse> {
   const res = await app.inject({
     method,
     url: `/v1${url}`,
-    headers: bearer(session),
+    headers: { ...bearer(session), ...headers },
     ...(payload === undefined ? {} : { payload }),
   });
-  return { status: res.statusCode, body: (res.body ? JSON.parse(res.body) : {}) as unknown };
+  return {
+    status: res.statusCode,
+    body: (res.body ? JSON.parse(res.body) : {}) as unknown,
+    headers: res.headers as Record<string, string | string[] | undefined>,
+  };
 }
 
 /**

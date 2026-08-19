@@ -267,6 +267,23 @@ export const ErrorCodes = {
   PERFORMANCE_EMPLOYEE_APPROVAL: 'PERFORMANCE_EMPLOYEE_APPROVAL',
   /** Only the assigned reviewer may write the review. */
   PERFORMANCE_NOT_THE_REVIEWER: 'PERFORMANCE_NOT_THE_REVIEWER',
+
+  // Idempotency
+  /**
+   * The same `Idempotency-Key` arrived with a DIFFERENT request body.
+   *
+   * A retry replays the same request; a different body under the same key is a client bug, and
+   * answering it with the first request's response would report success for work never done. 422,
+   * because the request is well-formed and still unacceptable.
+   */
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+  /**
+   * A request with this `Idempotency-Key` is still running.
+   *
+   * The exact case the header exists for — a client timed out and retried — so both copies must not
+   * execute. The second is told to wait rather than being served a half-finished answer.
+   */
+  IDEMPOTENCY_IN_FLIGHT: 'IDEMPOTENCY_IN_FLIGHT',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
