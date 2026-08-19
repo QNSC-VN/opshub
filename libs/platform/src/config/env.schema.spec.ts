@@ -267,3 +267,47 @@ describe('EnvSchema — the DEFAULT rate-limit ceiling', () => {
     expect(result.data.RATE_LIMIT_DEFAULT_LIMIT).toBe(50);
   });
 });
+
+describe('EnvSchema — email sender', () => {
+  /*
+   * `MAIL_FROM_EMAIL` used to default to `no-reply@opshub.app`, so a deployment configured with a real
+   * provider and no sender booted happily and sent from a domain it may not own — which fails SPF and
+   * DKIM at the recipient. That is silent non-delivery, or delivery to spam, and neither shows up in
+   * our logs. The sibling repo added the same refusal after finding both of its environments in
+   * exactly that state.
+   */
+  it('refuses to boot a non-dev provider with no sender', () => {
+    const result = EnvSchema.safeParse(env({ EMAIL_PROVIDER: 'resend' }));
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const issue = result.error.issues.find((i) => i.path[0] === 'MAIL_FROM_EMAIL');
+    expect(issue, 'the refusal did not name the variable at fault').toBeDefined();
+    // The message has to say what to do about it, not just that something is wrong.
+    expect(issue!.message).toContain('SPF');
+  });
+
+  it('accepts a non-dev provider once a sender is set', () => {
+    const result = EnvSchema.safeParse(
+      env({ EMAIL_PROVIDER: 'resend', MAIL_FROM_EMAIL: 'ops@example.test' }),
+    );
+    expect(result.success, JSON.stringify(result.success ? {} : result.error.issues)).toBe(true);
+  });
+
+  it('leaves the dev provider alone, because it has nothing to send from', () => {
+    // `DevEmailProvider` logs instead of sending. Requiring a sender there would make every
+    // developer and CI environment configure a mail identity for mail that never leaves the process.
+    const result = EnvSchema.safeParse(env());
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.EMAIL_PROVIDER).toBe('dev');
+    expect(result.data.MAIL_FROM_EMAIL).toBeUndefined();
+  });
+
+  it('does not invent a sender when one is absent', () => {
+    // The default is what made the misconfiguration silent, so its absence is the assertion.
+    const result = EnvSchema.safeParse(env());
+    if (!result.success) throw new Error('expected parse to succeed');
+    expect(result.data.MAIL_FROM_EMAIL).not.toBe('no-reply@opshub.app');
+  });
+});
