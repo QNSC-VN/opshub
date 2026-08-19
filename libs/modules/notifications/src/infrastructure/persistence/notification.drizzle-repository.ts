@@ -14,21 +14,26 @@ import type {
 export class NotificationDrizzleRepository implements INotificationRepository {
   constructor(@InjectDrizzle() private readonly db: DrizzleDB) {}
 
-  private get executor(): DbExecutor { return this.db; }
+  private get executor(): DbExecutor {
+    return this.db;
+  }
 
   async create(input: CreateNotificationInput, executor?: DbExecutor): Promise<Notification> {
     const db = (executor ?? this.executor) as DrizzleDB;
-    const [row] = await db.insert(inAppNotifications).values({
-      recipientId:   input.recipientId,
-      actorId:       input.actorId       ?? null,
-      type:          input.type,
-      title:         input.title,
-      body:          input.body          ?? null,
-      resourceType:  input.resourceType  ?? null,
-      resourceId:    input.resourceId    ?? null,
-      metadata:      input.metadata      ?? {},
-      sourceEventId: input.sourceEventId ?? null,
-    }).returning();
+    const [row] = await db
+      .insert(inAppNotifications)
+      .values({
+        recipientId: input.recipientId,
+        actorId: input.actorId ?? null,
+        type: input.type,
+        title: input.title,
+        body: input.body ?? null,
+        resourceType: input.resourceType ?? null,
+        resourceId: input.resourceId ?? null,
+        metadata: input.metadata ?? {},
+        sourceEventId: input.sourceEventId ?? null,
+      })
+      .returning();
     return this.mapRow(row);
   }
 
@@ -41,7 +46,10 @@ export class NotificationDrizzleRepository implements INotificationRepository {
     return row ? this.mapRow(row) : null;
   }
 
-  async list(recipientId: string, filters: NotificationListFilters): Promise<NotificationListResult> {
+  async list(
+    recipientId: string,
+    filters: NotificationListFilters,
+  ): Promise<NotificationListResult> {
     const conditions = [
       eq(inAppNotifications.recipientId, recipientId),
       ...(filters.isRead !== undefined ? [eq(inAppNotifications.isRead, filters.isRead)] : []),
@@ -56,10 +64,8 @@ export class NotificationDrizzleRepository implements INotificationRepository {
       .limit(filters.limit + 1);
 
     const hasMore = rows.length > filters.limit;
-    const items   = rows.slice(0, filters.limit).map((r) => this.mapRow(r));
-    const nextCursor = hasMore
-      ? btoa(items[items.length - 1].createdAt.toISOString())
-      : null;
+    const items = rows.slice(0, filters.limit).map((r) => this.mapRow(r));
+    const nextCursor = hasMore ? btoa(items[items.length - 1].createdAt.toISOString()) : null;
 
     return { items, nextCursor };
   }
@@ -68,12 +74,7 @@ export class NotificationDrizzleRepository implements INotificationRepository {
     await this.db
       .update(inAppNotifications)
       .set({ isRead: true, readAt: new Date() })
-      .where(
-        and(
-          eq(inAppNotifications.id, id),
-          eq(inAppNotifications.recipientId, recipientId),
-        ),
-      );
+      .where(and(eq(inAppNotifications.id, id), eq(inAppNotifications.recipientId, recipientId)));
   }
 
   async markAllRead(recipientId: string): Promise<void> {
@@ -81,10 +82,7 @@ export class NotificationDrizzleRepository implements INotificationRepository {
       .update(inAppNotifications)
       .set({ isRead: true, readAt: new Date() })
       .where(
-        and(
-          eq(inAppNotifications.recipientId, recipientId),
-          eq(inAppNotifications.isRead, false),
-        ),
+        and(eq(inAppNotifications.recipientId, recipientId), eq(inAppNotifications.isRead, false)),
       );
   }
 
@@ -93,16 +91,13 @@ export class NotificationDrizzleRepository implements INotificationRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(inAppNotifications)
       .where(
-        and(
-          eq(inAppNotifications.recipientId, recipientId),
-          eq(inAppNotifications.isRead, false),
-        ),
+        and(eq(inAppNotifications.recipientId, recipientId), eq(inAppNotifications.isRead, false)),
       );
     return count;
   }
 
-  async existsBySourceEventId(sourceEventId: string): Promise<boolean> {
-    const [row] = await this.db
+  async existsBySourceEventId(sourceEventId: string, executor?: DbExecutor): Promise<boolean> {
+    const [row] = await ((executor ?? this.db) as DrizzleDB)
       .select({ id: inAppNotifications.id })
       .from(inAppNotifications)
       .where(eq(inAppNotifications.sourceEventId, sourceEventId))
@@ -112,18 +107,18 @@ export class NotificationDrizzleRepository implements INotificationRepository {
 
   private mapRow(row: typeof inAppNotifications.$inferSelect): Notification {
     return {
-      id:            row.id,
-      recipientId:   row.recipientId,
-      actorId:       row.actorId,
-      type:          row.type,
-      title:         row.title,
-      body:          row.body,
-      resourceType:  row.resourceType,
-      resourceId:    row.resourceId,
-      metadata:      row.metadata,
-      isRead:        row.isRead,
-      readAt:        row.readAt,
-      createdAt:     row.createdAt,
+      id: row.id,
+      recipientId: row.recipientId,
+      actorId: row.actorId,
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      resourceType: row.resourceType,
+      resourceId: row.resourceId,
+      metadata: row.metadata,
+      isRead: row.isRead,
+      readAt: row.readAt,
+      createdAt: row.createdAt,
       sourceEventId: row.sourceEventId,
     };
   }
