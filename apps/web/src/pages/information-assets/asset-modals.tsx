@@ -5,6 +5,7 @@ import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import {
+  Checkbox,
   EntityPicker,
   FormActions,
   FormError,
@@ -250,21 +251,13 @@ export function RegisterAssetModal({
           </FormField>
         </div>
 
-        <label className="flex cursor-pointer select-none items-start gap-2.5">
-          <input
-            type="checkbox"
-            checked={form.personalData}
-            onChange={(e) => set('personalData', e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-          />
-          <span className="text-sm text-fg-muted">
-            Holds personal data
-            <span className="block text-xs text-fg-subtle">
-              Brings it into the GDPR register, and into the breach assessment when an incident
-              touches it.
-            </span>
-          </span>
-        </label>
+        <Checkbox
+          align="start"
+          checked={form.personalData}
+          onChange={(value) => set('personalData', value)}
+          label="Holds personal data"
+          hint="Brings it into the GDPR register, and into the breach assessment when an incident touches it."
+        />
 
         <FormError message={error} />
 

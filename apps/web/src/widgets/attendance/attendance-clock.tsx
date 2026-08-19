@@ -1,3 +1,4 @@
+import { Checkbox } from '@/shared/ui';
 import { useState, useEffect } from 'react';
 import { ENV } from '@/shared/config/env';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -153,21 +154,25 @@ export function AttendanceClock() {
       )}
 
       {/* Actions */}
+      {/* `size="sm"` keeps this compact in a widget rather than a form. The box itself changes: this
+          copy had drifted to `border-border accent-accent` with NO focus ring, so it was the one
+          checkbox in the product with no visible keyboard focus. */}
       {!isClockedIn && (
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
-          <input
-            type="checkbox"
-            checked={isRemote}
-            onChange={(e) => setIsRemote(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-border accent-accent"
-          />
-          {isRemote ? (
-            <Wifi className="h-3 w-3 text-blue-500" />
-          ) : (
-            <WifiOff className="h-3 w-3 text-fg-subtle" />
-          )}
-          Working remotely
-        </label>
+        <Checkbox
+          size="sm"
+          checked={isRemote}
+          onChange={setIsRemote}
+          label={
+            <span className="inline-flex items-center gap-2">
+              {isRemote ? (
+                <Wifi className="h-3 w-3 text-blue-500" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-fg-subtle" />
+              )}
+              Working remotely
+            </span>
+          }
+        />
       )}
 
       <button

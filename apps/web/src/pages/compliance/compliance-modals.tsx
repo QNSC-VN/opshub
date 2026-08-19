@@ -3,7 +3,16 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import type { SoftwareListing } from '@/shared/api/types';
-import { Button, FormActions, FormError, FormField, Modal, Select, Textarea } from '@/shared/ui';
+import {
+  Button,
+  Checkbox,
+  FormActions,
+  FormError,
+  FormField,
+  Modal,
+  Select,
+  Textarea,
+} from '@/shared/ui';
 
 /**
  * Resolving a compliance finding.
@@ -58,17 +67,11 @@ export function ResolveModal({ findingId, open, onClose, onSuccess }: ResolveMod
           />
         </FormField>
 
-        <label className="flex cursor-pointer select-none items-center gap-2.5">
-          <input
-            type="checkbox"
-            checked={riskAccepted}
-            onChange={(e) => setRiskAccepted(e.target.checked)}
-            className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-          />
-          <span className="text-sm text-fg-muted">
-            Accept residual risk (mark as risk accepted)
-          </span>
-        </label>
+        <Checkbox
+          checked={riskAccepted}
+          onChange={setRiskAccepted}
+          label="Accept residual risk (mark as risk accepted)"
+        />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

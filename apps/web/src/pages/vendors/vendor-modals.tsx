@@ -5,6 +5,7 @@ import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import {
+  Checkbox,
   EntityPicker,
   FormActions,
   FormError,
@@ -209,20 +210,13 @@ export function RegisterVendorModal({
           </FormField>
         </div>
 
-        <label className="flex cursor-pointer select-none items-start gap-2.5">
-          <input
-            type="checkbox"
-            checked={form.dataProcessor}
-            onChange={(e) => set('dataProcessor', e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-          />
-          <span className="text-sm text-fg-muted">
-            Processes personal data on our behalf
-            <span className="block text-xs text-fg-subtle">
-              Makes them a processor under GDPR Article 28, which needs a data-processing agreement.
-            </span>
-          </span>
-        </label>
+        <Checkbox
+          align="start"
+          checked={form.dataProcessor}
+          onChange={(value) => set('dataProcessor', value)}
+          label="Processes personal data on our behalf"
+          hint="Makes them a processor under GDPR Article 28, which needs a data-processing agreement."
+        />
 
         {form.dataProcessor && (
           <FormField
