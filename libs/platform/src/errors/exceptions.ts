@@ -38,9 +38,23 @@ export class ValidationException extends DomainException {
   }
 }
 
+/**
+ * A 403 with a reason.
+ *
+ * WHY THE CODE IS A PARAMETER. It was hardcoded to `FORBIDDEN`, so every refusal on this path told a
+ * client the same thing — and separation of duties is not the same refusal as a missing permission.
+ * "You may not approve your own request" is answered by asking a colleague; "you lack
+ * `document.approve`" is answered by asking for access. Both arrived as `FORBIDDEN`, and the
+ * distinction survived only as a prefix smuggled into the human-readable message
+ * (`'REQUEST_SOD_VIOLATION: Requester cannot approve their own request'`), where no client can act on
+ * it and `ErrorCodes.REQUEST_SOD_VIOLATION` sat in the catalogue unemitted.
+ *
+ * MESSAGE STILL FIRST, so the thirty-odd existing call sites are unchanged and a bare
+ * `new PermissionDeniedException()` still means a plain `FORBIDDEN`.
+ */
 export class PermissionDeniedException extends DomainException {
-  constructor(message = 'Permission denied') {
-    super('FORBIDDEN', message, 'PERMISSION_DENIED');
+  constructor(message = 'Permission denied', code: ErrorCode = 'FORBIDDEN') {
+    super(code, message, 'PERMISSION_DENIED');
   }
 }
 

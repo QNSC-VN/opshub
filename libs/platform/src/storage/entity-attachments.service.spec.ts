@@ -68,14 +68,12 @@ function makeService(over: { count?: number; linked?: boolean } = {}) {
   const db = { select, insert, delete: del } as unknown as DrizzleDB;
 
   const storage = {
-    presignUpload: vi
-      .fn()
-      .mockResolvedValue({
-        fileId: 'file-1',
-        uploadUrl: 'https://s3/put',
-        key: FILE.key,
-        requiredHeaders: { 'Content-Type': 'application/pdf' },
-      }),
+    presignUpload: vi.fn().mockResolvedValue({
+      fileId: 'file-1',
+      uploadUrl: 'https://s3/put',
+      key: FILE.key,
+      requiredHeaders: { 'Content-Type': 'application/pdf' },
+    }),
     confirmUpload: vi
       .fn()
       .mockResolvedValue({ fileId: 'file-1', key: FILE.key, url: 'https://s3/get' }),
@@ -216,6 +214,13 @@ describe('remove', () => {
 
     await expect(service.remove(REF, 'file-1', 'someone-else')).rejects.toMatchObject({
       code: 'FORBIDDEN',
+      /*
+       * THE STATUS, which this test did not check and so did not catch. The refusal threw
+       * `PreconditionFailedException(ErrorCodes.FORBIDDEN, …)` — a 412 carrying a `FORBIDDEN` code, a
+       * response contradicting itself. 412 invites the caller to change something and retry; nothing
+       * they change will help. Asserting the code alone passed either way.
+       */
+      httpStatus: 403,
     });
     expect(del).not.toHaveBeenCalled();
   });
