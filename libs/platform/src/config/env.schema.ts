@@ -184,7 +184,16 @@ export const EnvSchema = z
     // ── Email ──────────────────────────────────────────────────────────────────
     EMAIL_PROVIDER: z.enum(['dev', 'resend']).default('dev'),
     MAIL_FROM_NAME: z.string().default('OpsHub'),
-    MAIL_FROM_EMAIL: z.string().email().default('no-reply@opshub.app'),
+    /**
+     * NO DEFAULT, deliberately — see the refusal in the `superRefine` below.
+     *
+     * This defaulted to `no-reply@opshub.app`, a domain a given deployment may not own. So a
+     * production configured with `EMAIL_PROVIDER=resend` and no sender did not fail: it sent from an
+     * address that fails SPF and DKIM at the receiving end, which is silent non-delivery or delivery
+     * to spam, and nothing in our logs explains either. The sibling repo added the same refusal after
+     * finding both of its deployed environments running exactly that way.
+     */
+    MAIL_FROM_EMAIL: z.string().email().optional(),
     MAIL_REPLY_TO: z.string().email().optional(),
     RESEND_API_KEY: z.string().optional(),
 
@@ -204,6 +213,26 @@ export const EnvSchema = z
           'RATE_LIMIT_DEFAULT_LIMIT cannot exceed 200 when NODE_ENV=production: the default tier is a ' +
           'protective control, and an environment that raises it stops describing production. Lowering ' +
           'it is allowed.',
+      });
+    }
+
+    /*
+     * A NON-DEV EMAIL PROVIDER MUST HAVE A SENDER. Placed above the early return below for the same
+     * reason the rate-limit check is: everything after that line is dead in the configuration
+     * developers and CI actually run, and a check that cannot fire is not a check.
+     *
+     * `dev` is exempt because `DevEmailProvider` logs instead of sending, so it has nothing to be
+     * from. Anything else reaches a real mail service, and reaching one without a verified sender is
+     * the failure this refuses to boot into.
+     */
+    if (env.EMAIL_PROVIDER !== 'dev' && !env.MAIL_FROM_EMAIL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MAIL_FROM_EMAIL'],
+        message:
+          `MAIL_FROM_EMAIL is required when EMAIL_PROVIDER is "${env.EMAIL_PROVIDER}": mail sent from ` +
+          'an unverified address fails SPF and DKIM at the recipient, which looks like silent ' +
+          'non-delivery rather than a misconfiguration. Set a sender on a domain this deployment owns.',
       });
     }
 

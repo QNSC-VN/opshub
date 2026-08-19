@@ -90,11 +90,17 @@ export default defineConfig({
       // before. `pnpm check:coverage-floors` fails in BOTH directions — it refused the raise
       // until the floors moved up, then refused the delete until they moved down — which is
       // why the number can be trusted to track reality rather than intent.
+      // Raised 2026-08-19 when the email path's specs landed — `resend.provider.spec.ts` and the
+      // sender-refusal cases in `env.schema.spec.ts`. Measured lines 37.06 / statements 36.75 /
+      // branches 28.37 / functions 24.89, and `check:coverage-floors` refused the change until these
+      // moved: lines had drifted 3.06 behind, which is exactly the "protects nothing" case it guards.
+      // Set about a point under actual, so run-to-run variance does not fail a branch that added no
+      // code.
       thresholds: {
-        lines: 34,
-        functions: 22,
-        branches: 26,
-        statements: 34,
+        lines: 36,
+        functions: 24,
+        branches: 27,
+        statements: 36,
       },
     },
   },
