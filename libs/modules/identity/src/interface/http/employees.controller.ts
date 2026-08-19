@@ -212,7 +212,10 @@ export class EmployeesController {
   }
 
   @Delete(':id/avatar')
-  @RequirePermission('employee.write')
+  // Descriptored like the three avatar routes above it, which it was not. `:id` is the SUBJECT
+  // employee, so a `dept`-scoped `employee.write` holder could presign and confirm a photo and then
+  // be denied when deleting one — the same row, the same permission, a different answer.
+  @RequirePermission('employee.write', { resource: 'employee', from: 'param', field: 'id' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete the employee avatar' })
   @ApiNoContentResponse()
