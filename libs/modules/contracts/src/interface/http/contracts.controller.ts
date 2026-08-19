@@ -168,7 +168,7 @@ export class ContractsController {
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<ContractResponseDto[]> {
-    await this.employees.getById(employeeId);
+    await this.employees.assertExist(employeeId);
     const rows = await this.service.listForEmployee(employeeId);
     const pay = await this.maySeePay(user, rows);
     return rows.map((c) => toContractDto(c, pay));
@@ -190,7 +190,7 @@ export class ContractsController {
   ): Promise<ContractResponseDto> {
     // `employee_id` carries no cross-schema FK, matching every other module, so without this a typo
     // would become a contract for somebody who does not exist.
-    await this.employees.getById(dto.employeeId);
+    await this.employees.assertExist(dto.employeeId);
     return toContractDto(await this.service.draftContract(dto, user), true);
   }
 

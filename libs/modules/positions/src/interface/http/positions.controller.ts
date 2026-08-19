@@ -189,7 +189,7 @@ export class PositionsController {
   ): Promise<EmployeePositionResponseDto> {
     // `employee_id` carries no cross-schema FK, matching every other module, so a typo would
     // otherwise become an assignment for somebody who does not exist.
-    await this.employees.getById(dto.employeeId);
+    await this.employees.assertExist(dto.employeeId);
     return toAssignmentDto(
       await this.service.assign(
         {
@@ -229,7 +229,7 @@ export class PositionsController {
   async employeeHistory(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
   ): Promise<EmployeePositionHistoryResponseDto[]> {
-    await this.employees.getById(employeeId);
+    await this.employees.assertExist(employeeId);
     return (await this.service.listAssignmentsForEmployee(employeeId)).map(toHistoryDto);
   }
 }

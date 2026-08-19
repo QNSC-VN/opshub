@@ -223,7 +223,7 @@ export class VendorController {
     @CurrentUser() user: JwtPayload,
   ): Promise<VendorResponseDto> {
     // `owner_id` carries no cross-schema FK, so without this a typo would name nobody.
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toDto(await this.service.register(dto, user));
   }
 
@@ -252,7 +252,7 @@ export class VendorController {
     @Body() dto: UpdateVendorDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<VendorResponseDto> {
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toDto(await this.service.update(id, dto, user));
   }
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DbExecutor, type DrizzleDB, searchAcross } from '@platform';
 import { newId } from '@shared-kernel';
 import { employees } from '../../../../../../db/schema';
@@ -36,6 +36,15 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
   async findById(id: string): Promise<Employee | null> {
     const [row] = await this.db.select().from(employees).where(eq(employees.id, id)).limit(1);
     return row ?? null;
+  }
+
+  async findExistingIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(inArray(employees.id, ids));
+    return rows.map((row) => row.id);
   }
 
   async findByEmail(email: string): Promise<Employee | null> {

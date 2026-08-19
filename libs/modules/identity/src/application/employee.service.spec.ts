@@ -11,6 +11,7 @@ import { ConflictException, NotFoundException } from '@platform';
 const mockEmployeeRepo = {
   findByEmail: vi.fn(),
   findById: vi.fn(),
+  findExistingIds: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   updateStatus: vi.fn(),
@@ -217,5 +218,72 @@ describe('EmployeeService.confirmAvatar()', () => {
 
     expect(mockStorage.findByKey).not.toHaveBeenCalled();
     expect(mockStorage.deleteFile).not.toHaveBeenCalled();
+  });
+
+  /*
+   * `assertExist` — the reference guard that thirty-four call sites open-coded.
+   *
+   * These references are CROSS-SCHEMA and by design carry no foreign key, so this is the only thing
+   * standing between a typo'd uuid and a risk owned by nobody. The properties worth pinning are
+   * therefore: it refuses when an id is missing, it says WHICH ones, it does not go to the database
+   * when there is nothing to check, and one query covers every reference.
+   */
+  describe('assertExist', () => {
+    it('names every missing id, not the first one it hit', async () => {
+      // The old form fetched one row per reference and threw on the first, so a form with a bad owner
+      // AND a bad custodian reported one of them and failed again on the next submit.
+      mockEmployeeRepo.findExistingIds.mockResolvedValue(['emp-1']);
+
+      await expect(makeService().assertExist('emp-1', 'ghost-a', 'ghost-b')).rejects.toThrow(
+        /ghost-a, ghost-b/,
+      );
+    });
+
+    it('resolves when every id is real', async () => {
+      mockEmployeeRepo.findExistingIds.mockResolvedValue(['emp-1', 'emp-2']);
+      await expect(makeService().assertExist('emp-1', 'emp-2')).resolves.toBeUndefined();
+    });
+
+    it('checks every reference in ONE query', async () => {
+      mockEmployeeRepo.findExistingIds.mockResolvedValue(['emp-1', 'emp-2']);
+
+      await makeService().assertExist('emp-1', 'emp-2');
+
+      expect(mockEmployeeRepo.findExistingIds).toHaveBeenCalledTimes(1);
+      expect(mockEmployeeRepo.findExistingIds).toHaveBeenCalledWith(['emp-1', 'emp-2']);
+    });
+
+    it('skips nullish ids, so an optional field needs no `if` around the call', async () => {
+      mockEmployeeRepo.findExistingIds.mockResolvedValue(['emp-1']);
+
+      await makeService().assertExist('emp-1', null, undefined);
+
+      // Twelve call sites wrapped the old call in `if (dto.custodianId)`. The skip lives here now, so
+      // the guard reads the same whether the column is nullable or not.
+      expect(mockEmployeeRepo.findExistingIds).toHaveBeenCalledWith(['emp-1']);
+    });
+
+    it('does not touch the database when there is nothing to check', async () => {
+      // An update DTO where every reference is absent. Passing nothing is not an error — it means
+      // there was nothing to validate — and it must not cost a round trip or an empty `IN ()`.
+      await expect(makeService().assertExist(null, undefined)).resolves.toBeUndefined();
+      expect(mockEmployeeRepo.findExistingIds).not.toHaveBeenCalled();
+    });
+
+    it('asks about a repeated id once', async () => {
+      // A reviewer reassigned to the employee's own manager, say: the same uuid twice in one call.
+      mockEmployeeRepo.findExistingIds.mockResolvedValue(['emp-1']);
+
+      await makeService().assertExist('emp-1', 'emp-1');
+
+      expect(mockEmployeeRepo.findExistingIds).toHaveBeenCalledWith(['emp-1']);
+    });
+
+    it('refuses with EMPLOYEE_NOT_FOUND, the code the old call threw', async () => {
+      // The status code and the error code are part of the contract: the SPA maps this to "that person
+      // does not exist", and a different code would render as a generic failure.
+      mockEmployeeRepo.findExistingIds.mockResolvedValue([]);
+      await expect(makeService().assertExist('ghost')).rejects.toThrow(NotFoundException);
+    });
   });
 });

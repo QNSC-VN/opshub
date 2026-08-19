@@ -181,7 +181,7 @@ export class ControlController {
     @CurrentUser() user: JwtPayload,
   ): Promise<SoaEntryResponseDto> {
     // `owner_id` carries no cross-schema FK, so without this a typo would name nobody.
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toEntryDto(await this.service.setEntry(controlId, dto, user));
   }
 

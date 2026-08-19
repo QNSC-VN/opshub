@@ -236,7 +236,7 @@ export class IncidentController {
     @CurrentUser() user: JwtPayload,
   ): Promise<IncidentResponseDto> {
     // `assigned_to` carries no cross-schema FK, so without this a typo would assign it to nobody.
-    await this.employees.getById(dto.assignedTo);
+    await this.employees.assertExist(dto.assignedTo);
     return toIncidentDto(await this.service.triage(id, dto.assignedTo, user));
   }
 
