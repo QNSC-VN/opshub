@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { EmployeeResponse, AssetResponse } from '@/shared/api/types';
 import { useCommandPaletteStore } from './use-command-palette';
 import { usePermissions } from '@/shared/hooks/use-permissions';
@@ -180,7 +181,7 @@ function useLivePeopleSearch(query: string, enabled: boolean) {
       }));
     },
     enabled: enabled && query.length >= 2,
-    staleTime: 10_000,
+    staleTime: STALE.LIVE,
   });
 }
 
@@ -202,7 +203,7 @@ function useLiveAssetSearch(query: string, enabled: boolean) {
       }));
     },
     enabled: enabled && query.length >= 2,
-    staleTime: 10_000,
+    staleTime: STALE.LIVE,
   });
 }
 

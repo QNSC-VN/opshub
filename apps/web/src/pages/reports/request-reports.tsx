@@ -26,6 +26,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { api } from '@/shared/api/client';
+import { POLL, STALE } from '@/shared/api/cache';
 import type {
   ThroughputResponse,
   SlaComplianceResponse,
@@ -57,7 +58,7 @@ export function ThroughputChart({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   if (isLoading) return <ChartSkeleton />;
@@ -134,7 +135,7 @@ export function SlaChart({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   if (isLoading) return <ChartSkeleton />;
@@ -188,7 +189,7 @@ export function CycleTimeChart({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   if (isLoading) return <ChartSkeleton />;
@@ -240,8 +241,8 @@ export function QueueTable() {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: STALE.ACTIVITY,
+    refetchInterval: POLL.ACTIVITY,
   });
 
   if (isLoading) return <div className="h-24 animate-pulse rounded-lg bg-surface-muted" />;
@@ -312,7 +313,7 @@ export function RequestMixChart({ days }: { days: number }) {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   if (isLoading) return <ChartSkeleton />;

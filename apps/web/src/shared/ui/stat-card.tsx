@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from 'react';
 import { cn } from '@/shared/lib/utils';
 import type { BadgeTone } from './badge';
+import { orDash } from '@/shared/lib/format';
 
 /** Icon tint per tone. Tokens, not palette values, so the card flips with the theme. */
 const ICON_TONE: Record<BadgeTone, string> = {
@@ -84,7 +85,7 @@ export function StatCard({
             {loading ? (
               <span className="inline-block h-6 w-8 animate-pulse rounded bg-surface-hover" />
             ) : (
-              (value ?? '—')
+              orDash(value)
             )}
           </p>
           {hint && <p className="mt-0.5 text-xs text-fg-muted">{hint}</p>}

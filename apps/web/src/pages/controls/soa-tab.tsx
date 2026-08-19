@@ -207,7 +207,7 @@ export function SoaTab() {
                 <span className="font-mono">{risk.reference}</span> · {risk.title}
                 <span className="text-fg-subtle">
                   {' '}
-                  (residual {risk.residualScore ?? risk.inherentScore ?? '—'})
+                  (residual {orDash(risk.residualScore ?? risk.inherentScore)})
                 </span>
               </li>
             ))}

@@ -24,6 +24,7 @@ import { OnboardingWizard } from './onboarding-wizard';
 import { OffboardingModal } from './offboarding-modal';
 import { Avatar, EmployeeStatusBadge, RoleChip, StatusSelect } from './people-shared';
 import { STATUS_FILTERS, type EmployeeResponse } from './people.types';
+import { orDash } from '@/shared/lib/format';
 
 /*
  * WHAT THIS SCREEN NO LONGER CARRIES
@@ -126,11 +127,11 @@ export function PeoplePage() {
         </div>
       ),
     },
-    { key: 'department', header: 'Department', cell: (emp) => emp.department ?? '—' },
+    { key: 'department', header: 'Department', cell: (emp) => orDash(emp.department) },
     {
       key: 'jobTitle',
       header: 'Job title',
-      cell: (emp) => emp.jobTitle ?? '—',
+      cell: (emp) => orDash(emp.jobTitle),
       hideOnMobile: true,
     },
     {

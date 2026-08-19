@@ -21,7 +21,7 @@ import {
   type FormModalProps,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate, formatDateTime } from '@/shared/lib/format';
+import { formatDate, formatDateTime, orDash } from '@/shared/lib/format';
 import type { ShiftLogResponse, ShiftType } from '@/shared/api/types';
 
 /**
@@ -166,7 +166,7 @@ export function ShiftsTab() {
     {
       key: 'note',
       header: 'Note',
-      cell: (s) => <span className="text-xs text-fg-subtle">{s.note ?? '—'}</span>,
+      cell: (s) => <span className="text-xs text-fg-subtle">{orDash(s.note)}</span>,
       className: 'max-w-xs truncate',
       hideOnMobile: true,
     },

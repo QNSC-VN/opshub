@@ -26,7 +26,7 @@ import {
   type FormModalProps,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate, orDash } from '@/shared/lib/format';
 import type { TimesheetResponse, TimesheetStatus } from '@/shared/api/types';
 import { asHoursAndMinutes } from './duration';
 
@@ -167,7 +167,7 @@ export function TimesheetsTab() {
     {
       key: 'note',
       header: 'Note',
-      cell: (t) => <span className="text-xs text-fg-subtle">{t.note ?? '—'}</span>,
+      cell: (t) => <span className="text-xs text-fg-subtle">{orDash(t.note)}</span>,
       className: 'max-w-xs truncate',
       hideOnMobile: true,
     },

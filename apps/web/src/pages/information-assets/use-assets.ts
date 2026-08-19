@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type {
   AssetDevice,
   ClassificationChange,
@@ -76,7 +77,7 @@ export function useClassificationLevels() {
   return useQuery<ClassificationLevel[]>({
     queryKey: ['information-assets', 'classification-levels'],
     // Reference data; it changes when policy changes, not per mount.
-    staleTime: 30 * 60_000,
+    staleTime: STALE.REFERENCE,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/information-assets/classification-levels');
       if (error || !data) throw new Error('Failed to load classification levels');

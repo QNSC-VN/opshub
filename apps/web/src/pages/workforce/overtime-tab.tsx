@@ -26,7 +26,7 @@ import {
   type FormModalProps,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate, orDash } from '@/shared/lib/format';
 import type { OvertimeResponse, OvertimeStatus } from '@/shared/api/types';
 
 const OT_FILTERS: { value: OvertimeStatus | ''; label: string }[] = [
@@ -141,7 +141,7 @@ export function OvertimeTab() {
     {
       key: 'reason',
       header: 'Reason',
-      cell: (o) => <span className="text-xs text-fg-subtle">{o.reason ?? '—'}</span>,
+      cell: (o) => <span className="text-xs text-fg-subtle">{orDash(o.reason)}</span>,
       className: 'max-w-xs truncate',
       hideOnMobile: true,
     },

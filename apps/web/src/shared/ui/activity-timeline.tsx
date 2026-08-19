@@ -15,7 +15,9 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Clock, User } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { formatDate } from '@/shared/lib/format';
 import { api } from '@/shared/api/client';
+import { POLL, STALE } from '@/shared/api/cache';
 import type { AuditResourceType } from '@/shared/api/types';
 import type { AuditLogResponse } from '@/shared/api/types';
 
@@ -31,11 +33,12 @@ function relativeTs(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  /*
+   * `formatDate`, not a second `toLocaleDateString`. This was the one date in the SPA still formatted
+   * in `en-US`, so an audit entry older than a month rendered `Mar 4, 2026` beside a `4 Mar 2026`
+   * everywhere else on the same screen — two orderings of the same day, in one view.
+   */
+  return formatDate(iso);
 }
 
 /** Map an action string to a visual tone. */
@@ -175,8 +178,8 @@ export function ActivityTimeline({ resourceId, resourceType, limit = 30 }: Activ
       if (error || !data) throw new Error('Failed to load activity');
       return data;
     },
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: STALE.ACTIVITY,
+    refetchInterval: POLL.ACTIVITY,
   });
 
   if (isLoading) return <TimelineSkeleton />;

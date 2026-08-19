@@ -1,5 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { CoverageGap, Cycle, CycleProgress, Goal, RatingLevel } from './performance.types';
 
 /**
@@ -114,7 +115,7 @@ export function useRatingScale() {
   return useQuery<RatingLevel[]>({
     queryKey: ['performance', 'rating-scale'],
     // The scale changes about never; refetching it per mount is pure noise.
-    staleTime: 30 * 60_000,
+    staleTime: STALE.REFERENCE,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/performance/rating-scale');
       if (error || !data) throw new Error('Failed to load the rating scale');
@@ -166,7 +167,7 @@ export function useCycleLabels(cycleIds: string[]) {
     queries: unique.map((id) => ({
       queryKey: ['performance', 'cycle', id],
       // A cycle's reference and dates do not change once it exists.
-      staleTime: 10 * 60_000,
+      staleTime: STALE.RECORD,
       queryFn: async () => {
         const { data, error } = await api.GET('/v1/performance/cycles/{id}', {
           params: { path: { id } },

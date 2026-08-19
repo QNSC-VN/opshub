@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { components } from '@/shared/api/generated/api';
 
 /**
@@ -50,7 +51,7 @@ export function useLeaveBalances(params: { employeeId?: string; year: number }) 
 export function useLeavePolicies() {
   return useQuery<LeavePolicy[]>({
     queryKey: ['workforce', 'leave', 'policies'],
-    staleTime: 30 * 60_000,
+    staleTime: STALE.REFERENCE,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/workforce/leave/policies');
       if (error || !data) throw new Error('Failed to load the leave policies');

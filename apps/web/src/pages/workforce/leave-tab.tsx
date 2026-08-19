@@ -30,7 +30,7 @@ import {
 } from '@/shared/ui';
 import { useLeaveDocumentUrl } from '@/shared/api/attachment-urls';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate, orDash } from '@/shared/lib/format';
 import type { LeaveResponse, LeaveStatus, LeaveType } from '@/shared/api/types';
 
 const LEAVE_FILTERS: { value: LeaveStatus | ''; label: string }[] = [
@@ -191,13 +191,13 @@ export function LeaveTab() {
       key: 'days',
       header: 'Days',
       // The cost the API froze at submit — half days included, which is why it is `numeric(5,2)`.
-      cell: (l) => (l.workingDays === null ? '—' : l.workingDays),
+      cell: (l) => orDash(l.workingDays),
       align: 'right',
     },
     {
       key: 'reason',
       header: 'Reason',
-      cell: (l) => <span className="text-xs text-fg-subtle">{l.reason ?? '—'}</span>,
+      cell: (l) => <span className="text-xs text-fg-subtle">{orDash(l.reason)}</span>,
       className: 'max-w-xs truncate',
       hideOnMobile: true,
     },

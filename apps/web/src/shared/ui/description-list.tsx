@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/shared/lib/utils';
+import { EM_DASH } from '@/shared/lib/format';
 
 export interface DescriptionItem {
   label: string;
-  /** `null`/`undefined` renders the em dash, so callers stop writing `?? '—'` at every site. */
+  /** `null`/`undefined` renders the em dash, so callers stop writing `?? EM_DASH` at every site. */
   value: ReactNode;
   /** Span both columns — for a long note or a list of chips. */
   wide?: boolean;
@@ -41,7 +42,7 @@ export function DescriptionList({ items, columns = 2, className }: DescriptionLi
           <dt className="text-xs text-fg-subtle">{item.label}</dt>
           <dd className="mt-0.5 text-fg">
             {item.value === null || item.value === undefined || item.value === ''
-              ? '—'
+              ? EM_DASH
               : item.value}
           </dd>
         </div>

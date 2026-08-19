@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 
 /**
  * The five counts the dashboard tiles read.
@@ -7,11 +8,9 @@ import { api } from '@/shared/api/client';
  * Each is `limit: 1` and takes `pageInfo.total` — the cheapest way to ask "how many" against a paged
  * endpoint, and the reason none of these needs a dedicated count route.
  *
- * `staleTime: 60_000` on all of them: a home screen that refetched five counts on every focus change
- * would be five requests for numbers nobody watches change by the second.
+ * `STALE.ACTIVITY` on all of them: a home screen that refetched five counts on every mount would be
+ * five requests for numbers nobody watches change by the second.
  */
-
-const STALE = 60_000;
 
 /** Every count, keyed. One hook per tile would mean each persona listing the ones it wants. */
 export interface DashboardCounts {
@@ -28,7 +27,7 @@ export interface CountResult {
 }
 
 function useTotal(key: string[], fetch: () => Promise<number>): CountResult {
-  const q = useQuery({ queryKey: key, queryFn: fetch, staleTime: STALE });
+  const q = useQuery({ queryKey: key, queryFn: fetch, staleTime: STALE.ACTIVITY });
   return { data: q.data, isLoading: q.isLoading };
 }
 

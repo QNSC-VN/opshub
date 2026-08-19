@@ -22,7 +22,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate, orDash } from '@/shared/lib/format';
 import { FEATURES } from '@/shared/config/features';
 import { ShadowItPanel } from './shadow-it-tab';
 import { ResolveModal } from './compliance-modals';
@@ -73,7 +73,7 @@ function findingColumns(actions: {
       key: 'version',
       header: 'Version',
       cell: (f) => (
-        <span className="font-mono text-xs text-fg-muted">{f.softwareVersion ?? '—'}</span>
+        <span className="font-mono text-xs text-fg-muted">{orDash(f.softwareVersion)}</span>
       ),
       hideOnMobile: true,
     },

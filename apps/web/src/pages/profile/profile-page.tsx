@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { User, Mail, Briefcase, Building2, ExternalLink, CheckCircle2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import {
   Badge,
   FormActions,
@@ -27,7 +28,7 @@ import {
   humanizeStatus,
   statusTone,
 } from '@/shared/ui';
-import { formatDate } from '@/shared/lib/format';
+import { EM_DASH, formatDate } from '@/shared/lib/format';
 import { MyContracts, MyRoleHistory } from './my-employment';
 import type { components } from '@/shared/api/generated/api';
 
@@ -77,7 +78,7 @@ function FieldRow({
       <Icon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
       <span className="w-28 shrink-0 text-xs font-medium text-fg-muted">{label}</span>
       <span className={`text-sm ${value ? 'text-fg' : 'text-fg-subtle italic'}`}>
-        {value || placeholder || '—'}
+        {value || placeholder || EM_DASH}
       </span>
     </div>
   );
@@ -200,7 +201,7 @@ function useMe() {
       if (error || !data) throw new Error('Failed to load profile');
       return data as MeDto;
     },
-    staleTime: 5 * 60_000, // 5 min — JWT claims don't change often
+    staleTime: STALE.REPORT,
   });
 }
 

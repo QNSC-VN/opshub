@@ -16,6 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { api } from '@/shared/api/client';
+import { STALE } from '@/shared/api/cache';
 import type { AssetUtilizationResponse } from '@/shared/api/types';
 import { ChartSkeleton, ErrorMsg } from './report-parts';
 import { BLUE, GREEN, ZINC, capitalize } from './report-config';
@@ -28,7 +29,7 @@ export function AssetUtilizationChart() {
       if (error || !data) throw new Error();
       return data;
     },
-    staleTime: 5 * 60_000,
+    staleTime: STALE.REPORT,
   });
 
   if (isLoading) return <ChartSkeleton />;

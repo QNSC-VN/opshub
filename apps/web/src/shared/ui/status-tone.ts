@@ -18,6 +18,7 @@
  * lookup table nobody can attribute to a caller is worse than a local one.
  */
 import type { BadgeTone } from './badge';
+import { EM_DASH } from '@/shared/lib/format';
 
 /**
  * The request-engine decision states, and the domain statuses that mirror them.
@@ -122,7 +123,7 @@ export function statusTone(status: string | null | undefined): BadgeTone {
 
 /** `needs_improvement` → `Needs improvement`. The label every enum needs and no page should retype. */
 export function humanizeStatus(status: string | null | undefined): string {
-  if (!status) return '—';
+  if (!status) return EM_DASH;
   const spaced = status.replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
