@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AppConfigService, InjectDrizzle, type DrizzleDB } from '@platform';
-import { Client } from '@microsoft/microsoft-graph-client';
-import { ClientSecretCredential } from '@azure/identity';
-import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js';
+import { GraphClientService, InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { eq, and } from 'drizzle-orm';
 import { complianceFindings, softwareCatalog } from '../../../../../db/schema';
@@ -29,26 +26,16 @@ export class ShadowItDetectionService {
   private readonly logger = new Logger(ShadowItDetectionService.name);
 
   constructor(
-    private readonly config: AppConfigService,
+    private readonly graph: GraphClientService,
     @InjectDrizzle() private readonly db: DrizzleDB,
   ) {}
 
+  /**
+   * True when Graph is configured. Delegated: the answer is a property of the deployment, not of this
+   * service, and five copies of it could disagree.
+   */
   isEnabled(): boolean {
-    const tenantId = this.config.get('ENTRA_TENANT_ID');
-    const clientId = this.config.get('ENTRA_CLIENT_ID');
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET');
-    return Boolean(tenantId && clientId && clientSecret);
-  }
-
-  private buildClient(): Client {
-    const tenantId = this.config.get('ENTRA_TENANT_ID')!;
-    const clientId = this.config.get('ENTRA_CLIENT_ID')!;
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET')!;
-    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-      scopes: ['https://graph.microsoft.com/.default'],
-    });
-    return Client.initWithMiddleware({ authProvider });
+    return this.graph.isEnabled();
   }
 
   /**
@@ -62,7 +49,7 @@ export class ShadowItDetectionService {
   async detectShadowIt(): Promise<{ scanned: number; newFindings: number }> {
     if (!this.isEnabled()) return { scanned: 0, newFindings: 0 };
 
-    const client = this.buildClient();
+    const client = this.graph.client();
     const catalog = await this.loadCatalog();
 
     let url: string | undefined =

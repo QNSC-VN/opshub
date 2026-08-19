@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AppConfigService, InjectDrizzle, type DrizzleDB } from '@platform';
-import { Client } from '@microsoft/microsoft-graph-client';
-import { ClientSecretCredential } from '@azure/identity';
-import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js';
+import { GraphClientService, InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { desc, sql, gte } from 'drizzle-orm';
-import { secureScoreSnapshots, baselineChecks, baselineCheckCategoryEnum, baselineCheckStatusEnum } from '../../../../../db/schema';
+import {
+  secureScoreSnapshots,
+  baselineChecks,
+  baselineCheckCategoryEnum,
+  baselineCheckStatusEnum,
+} from '../../../../../db/schema';
 
 // ── Graph types ───────────────────────────────────────────────────────────────
 
@@ -33,26 +35,16 @@ export class GraphSecureScoreService {
   private readonly logger = new Logger(GraphSecureScoreService.name);
 
   constructor(
-    private readonly config: AppConfigService,
+    private readonly graph: GraphClientService,
     @InjectDrizzle() private readonly db: DrizzleDB,
   ) {}
 
+  /**
+   * True when Graph is configured. Delegated: the answer is a property of the deployment, not of this
+   * service, and five copies of it could disagree.
+   */
   isEnabled(): boolean {
-    const tenantId = this.config.get('ENTRA_TENANT_ID');
-    const clientId = this.config.get('ENTRA_CLIENT_ID');
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET');
-    return Boolean(tenantId && clientId && clientSecret);
-  }
-
-  private buildClient(): Client {
-    const tenantId = this.config.get('ENTRA_TENANT_ID')!;
-    const clientId = this.config.get('ENTRA_CLIENT_ID')!;
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET')!;
-    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-      scopes: ['https://graph.microsoft.com/.default'],
-    });
-    return Client.initWithMiddleware({ authProvider });
+    return this.graph.isEnabled();
   }
 
   /**
@@ -62,7 +54,7 @@ export class GraphSecureScoreService {
   async syncSecureScore(): Promise<{ score: number; maxScore: number; percentage: number } | null> {
     if (!this.isEnabled()) return null;
 
-    const client = this.buildClient();
+    const client = this.graph.client();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const res: { value: GraphSecureScore[] } = await client
       .api('/security/secureScores?$top=1')
@@ -72,9 +64,7 @@ export class GraphSecureScoreService {
     if (!latest) return null;
 
     const scoreDate = latest.createdDateTime.split('T')[0];
-    const percentage = latest.maxScore > 0
-      ? (latest.currentScore / latest.maxScore) * 100
-      : 0;
+    const percentage = latest.maxScore > 0 ? (latest.currentScore / latest.maxScore) * 100 : 0;
 
     // Upsert: skip if snapshot for this date already exists
     await this.db
@@ -88,7 +78,9 @@ export class GraphSecureScoreService {
       })
       .onConflictDoNothing();
 
-    this.logger.log(`Secure Score synced: ${latest.currentScore}/${latest.maxScore} (${percentage.toFixed(1)}%)`);
+    this.logger.log(
+      `Secure Score synced: ${latest.currentScore}/${latest.maxScore} (${percentage.toFixed(1)}%)`,
+    );
     return { score: latest.currentScore, maxScore: latest.maxScore, percentage };
   }
 
@@ -99,7 +91,7 @@ export class GraphSecureScoreService {
   async syncBaselineChecks(): Promise<number> {
     if (!this.isEnabled()) return 0;
 
-    const client = this.buildClient();
+    const client = this.graph.client();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const res: { value: GraphSecureScoreControl[] } = await client
       .api('/security/secureScoreControlProfiles?$top=100')
@@ -134,17 +126,26 @@ export class GraphSecureScoreService {
     return rows.length;
   }
 
-  private mapControlStatus(status: string | null): (typeof baselineCheckStatusEnum.enumValues)[number] {
+  private mapControlStatus(
+    status: string | null,
+  ): (typeof baselineCheckStatusEnum.enumValues)[number] {
     switch (status) {
-      case 'implemented': return 'pass';
-      case 'notImplemented': return 'fail';
-      case 'planned': return 'warning';
-      case 'ignored': return 'warning';
-      default: return 'not_applicable';
+      case 'implemented':
+        return 'pass';
+      case 'notImplemented':
+        return 'fail';
+      case 'planned':
+        return 'warning';
+      case 'ignored':
+        return 'warning';
+      default:
+        return 'not_applicable';
     }
   }
 
-  private mapControlCategory(category: string): (typeof baselineCheckCategoryEnum.enumValues)[number] {
+  private mapControlCategory(
+    category: string,
+  ): (typeof baselineCheckCategoryEnum.enumValues)[number] {
     const lower = category?.toLowerCase() ?? '';
     if (lower.includes('asr') || lower.includes('attack')) return 'asr';
     if (lower.includes('firewall') || lower.includes('network')) return 'firewall';
@@ -162,14 +163,22 @@ export class GraphSecureScoreService {
     const cutoffDate = cutoff.toISOString().split('T')[0];
 
     return this.db
-      .select({ scoreDate: secureScoreSnapshots.scoreDate, percentageScore: secureScoreSnapshots.percentageScore })
+      .select({
+        scoreDate: secureScoreSnapshots.scoreDate,
+        percentageScore: secureScoreSnapshots.percentageScore,
+      })
       .from(secureScoreSnapshots)
       .where(gte(secureScoreSnapshots.scoreDate, cutoffDate))
       .orderBy(secureScoreSnapshots.scoreDate, secureScoreSnapshots.id)
       .limit(days);
   }
 
-  async getLatestScore(): Promise<{ score: string; maxScore: string; percentageScore: string; scoreDate: string } | null> {
+  async getLatestScore(): Promise<{
+    score: string;
+    maxScore: string;
+    percentageScore: string;
+    scoreDate: string;
+  } | null> {
     const rows = await this.db
       .select()
       .from(secureScoreSnapshots)
@@ -178,7 +187,7 @@ export class GraphSecureScoreService {
     return rows[0] ?? null;
   }
 
-  async getBaselineChecks(category?: string): Promise<typeof baselineChecks.$inferSelect[]> {
+  async getBaselineChecks(category?: string): Promise<(typeof baselineChecks.$inferSelect)[]> {
     const query = this.db
       .select()
       .from(baselineChecks)
@@ -190,12 +199,15 @@ export class GraphSecureScoreService {
     return query;
   }
 
-  async getBaselineSummary(): Promise<Record<string, { pass: number; fail: number; warning: number; total: number }>> {
+  async getBaselineSummary(): Promise<
+    Record<string, { pass: number; fail: number; warning: number; total: number }>
+  > {
     const rows = await this.db
       .select({ category: baselineChecks.category, status: baselineChecks.status })
       .from(baselineChecks);
 
-    const summary: Record<string, { pass: number; fail: number; warning: number; total: number }> = {};
+    const summary: Record<string, { pass: number; fail: number; warning: number; total: number }> =
+      {};
     for (const row of rows) {
       if (!summary[row.category]) {
         summary[row.category] = { pass: 0, fail: 0, warning: 0, total: 0 };

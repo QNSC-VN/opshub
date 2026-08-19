@@ -16,4 +16,5 @@ export * from './requests/index';
 export * from './authz/delegation.service';
 export * from './webhooks/webhook-enqueue.service';
 export * from './storage/index';
+export * from './graph/index';
 export * from './scheduling/index';

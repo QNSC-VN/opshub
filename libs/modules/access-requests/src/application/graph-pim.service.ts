@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AppConfigService } from '@platform';
-import { Client } from '@microsoft/microsoft-graph-client';
-import { ClientSecretCredential } from '@azure/identity';
-import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js';
+import { GraphClientService } from '@platform';
 
 /**
  * Integrates with Entra PIM (Privileged Identity Management) via Microsoft Graph.
@@ -16,26 +13,14 @@ import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-grap
 export class GraphPimService {
   private readonly logger = new Logger(GraphPimService.name);
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(private readonly graph: GraphClientService) {}
 
+  /**
+   * True when Graph is configured. Delegated: the answer is a property of the deployment, not of this
+   * service, and five copies of it could disagree.
+   */
   isEnabled(): boolean {
-    return Boolean(
-      this.config.get('ENTRA_TENANT_ID') &&
-        this.config.get('ENTRA_CLIENT_ID') &&
-        this.config.get('GRAPH_CLIENT_SECRET'),
-    );
-  }
-
-  private buildClient(): Client {
-    const tenantId = this.config.get('ENTRA_TENANT_ID')!;
-    const clientId = this.config.get('ENTRA_CLIENT_ID')!;
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET')!;
-
-    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-      scopes: ['https://graph.microsoft.com/.default'],
-    });
-    return Client.initWithMiddleware({ authProvider });
+    return this.graph.isEnabled();
   }
 
   /**
@@ -56,7 +41,7 @@ export class GraphPimService {
   ): Promise<void> {
     if (!this.isEnabled()) return;
 
-    const client = this.buildClient();
+    const client = this.graph.client();
 
     const body = {
       action: 'adminAssign',
@@ -97,7 +82,7 @@ export class GraphPimService {
   ): Promise<void> {
     if (!this.isEnabled()) return;
 
-    const client = this.buildClient();
+    const client = this.graph.client();
 
     const body = {
       action: 'adminRemove',

@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AppConfigService, InjectDrizzle, type DrizzleDB } from '@platform';
-import { Client } from '@microsoft/microsoft-graph-client';
-import { ClientSecretCredential } from '@azure/identity';
-import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js';
+import { GraphClientService, InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { complianceFindings } from '../../../../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -16,7 +13,14 @@ interface GraphDevice {
   deviceName: string | null;
   operatingSystem: string | null;
   osVersion: string | null;
-  complianceState: 'compliant' | 'noncompliant' | 'unknown' | 'notApplicable' | 'inGracePeriod' | 'configManager' | null;
+  complianceState:
+    | 'compliant'
+    | 'noncompliant'
+    | 'unknown'
+    | 'notApplicable'
+    | 'inGracePeriod'
+    | 'configManager'
+    | null;
   isEncrypted: boolean;
   userId: string | null;
   userPrincipalName: string | null;
@@ -37,29 +41,16 @@ export class GraphSyncService {
   private deltaLink: string | null = null;
 
   constructor(
-    private readonly config: AppConfigService,
+    private readonly graph: GraphClientService,
     @InjectDrizzle() private readonly db: DrizzleDB,
   ) {}
 
-  /** True when all three Graph env vars are set. */
+  /**
+   * True when Graph is configured. Delegated: the answer is a property of the deployment, not of this
+   * service, and five copies of it could disagree.
+   */
   isEnabled(): boolean {
-    const tenantId = this.config.get('ENTRA_TENANT_ID');
-    const clientId = this.config.get('ENTRA_CLIENT_ID');
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET');
-    return Boolean(tenantId && clientId && clientSecret);
-  }
-
-  private buildClient(): Client {
-    const tenantId = this.config.get('ENTRA_TENANT_ID')!;
-    const clientId = this.config.get('ENTRA_CLIENT_ID')!;
-    const clientSecret = this.config.get('GRAPH_CLIENT_SECRET')!;
-
-    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-      scopes: ['https://graph.microsoft.com/.default'],
-    });
-
-    return Client.initWithMiddleware({ authProvider });
+    return this.graph.isEnabled();
   }
 
   /**
@@ -69,11 +60,11 @@ export class GraphSyncService {
   async syncDevices(): Promise<{ devices: number; findings: number }> {
     if (!this.isEnabled()) return { devices: 0, findings: 0 };
 
-    const client = this.buildClient();
+    const client = this.graph.client();
 
-    const select = 'id,deviceName,operatingSystem,osVersion,complianceState,isEncrypted,userId,userPrincipalName,lastSyncDateTime';
-    const startUrl = this.deltaLink
-      ?? `/deviceManagement/managedDevices/delta?$select=${select}`;
+    const select =
+      'id,deviceName,operatingSystem,osVersion,complianceState,isEncrypted,userId,userPrincipalName,lastSyncDateTime';
+    const startUrl = this.deltaLink ?? `/deviceManagement/managedDevices/delta?$select=${select}`;
 
     let url: string | undefined = startUrl;
     let totalDevices = 0;
