@@ -2753,7 +2753,7 @@ export interface paths {
     };
     /**
      * Who has not been reviewed in this cycle
-     * @description Active employees with NO review, and those whose review has stalled short of acknowledgement. Both are "not done": a report showing only the first would call a cycle complete while half its reviews sat unsigned. Missing reviews come first.
+     * @description Active employees with NO review, and those whose review has stalled short of acknowledgement. Both are "not done": a report showing only the first would call a cycle complete while half its reviews sat unsigned. Missing reviews come first. Paged: `pageInfo.total` is every outstanding person, not the size of this page, so a caller can tell a complete answer from a first page.
      */
     get: operations['PerformanceController_coverage'];
     put?: never;
@@ -15691,7 +15691,10 @@ export interface operations {
   };
   PerformanceController_coverage: {
     parameters: {
-      query?: never;
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -15700,12 +15703,21 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+      /** @description Paginated list */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CoverageGapResponseDto'][];
+          'application/json': {
+            data?: components['schemas']['CoverageGapResponseDto'][];
+            pageInfo?: {
+              total: number;
+              limit: number;
+              offset: number;
+              hasNextPage: boolean;
+            };
+          };
         };
       };
       /** @description Unauthorized — missing or invalid authentication */

@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
 import { STALE } from '@/shared/api/cache';
-import type { CoverageGap, Cycle, CycleProgress, Goal, RatingLevel } from './performance.types';
+import type { Cycle, CycleProgress, Goal, RatingLevel } from './performance.types';
 
 /**
  * Every read the performance screens make.
@@ -76,19 +76,40 @@ export function useCycleProgress(cycleId: string | null) {
  * The report a cycle exists for: "did everybody get reviewed" is not answerable from the review list,
  * because the people missing from it are the answer.
  */
-export function useCycleCoverage(cycleId: string | null) {
-  return useQuery<CoverageGap[]>({
-    queryKey: ['performance', 'cycle-coverage', cycleId],
+/**
+ * Who has not been reviewed, one page at a time.
+ *
+ * PAGED BECAUSE THE REPORT USED TO LIE. The endpoint capped at 500 rows and returned a bare array, so
+ * past five hundred active employees the panel showed a subset and the section heading counted the
+ * subset — a coverage report that gets shorter as the organisation grows.
+ *
+ * `offset` is part of the query key, so paging is a normal fetch with its own cache entry rather than
+ * state the component has to reconcile.
+ */
+export function useCycleCoverage(cycleId: string | null, offset = 0) {
+  return useQuery({
+    queryKey: ['performance', 'cycle-coverage', cycleId, offset],
     enabled: !!cycleId,
     queryFn: async () => {
       const { data, error } = await api.GET('/v1/performance/cycles/{id}/coverage', {
-        params: { path: { id: cycleId! } },
+        params: { path: { id: cycleId! }, query: { offset, limit: COVERAGE_PAGE_SIZE } },
       });
       if (error || !data) throw new Error('Failed to load coverage');
+      // The envelope, unwrapped by the caller — same shape as `useCycles` above, because a second
+      // convention for reading a paged response is how `data.data` becomes `data.rows` in one file.
       return data;
     },
   });
 }
+
+/**
+ * How many gaps a page of the coverage report holds.
+ *
+ * Small on purpose: this renders inside a slide-over section, not a full-width table, and a chaser
+ * works through it a screenful at a time. `pageInfo.total` still reports everybody outstanding, so the
+ * number here changes how much scrolling there is and not what the report claims.
+ */
+export const COVERAGE_PAGE_SIZE = 25;
 
 export function useReviewGoals(reviewId: string | null) {
   return useQuery<Goal[]>({

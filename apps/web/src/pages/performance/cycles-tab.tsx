@@ -52,7 +52,21 @@ export function CyclesTab() {
 
   const cycles = useCycles(status, list.limit, list.offset);
   const progress = useCycleProgress(selected?.id ?? null);
-  const coverage = useCycleCoverage(selected?.id ?? null);
+  const [coverageOffset, setCoverageOffset] = useState(0);
+  const coverage = useCycleCoverage(selected?.id ?? null, coverageOffset);
+
+  /**
+   * Opening a cycle starts its coverage report at the beginning.
+   *
+   * The offset belongs to the REPORT, not to the panel: page to 50 in a cycle with hundreds
+   * outstanding, close it, open one with three, and the request asks for rows 51–75 of three. The API
+   * answers correctly — an empty page — and the panel would show "Everybody in scope has a completed
+   * review" in green over a cycle nobody has reviewed.
+   */
+  function openCycle(cycle: Cycle): void {
+    setCoverageOffset(0);
+    setSelected(cycle);
+  }
   const invalidate = () => qc.invalidateQueries({ queryKey: ['performance'] });
 
   async function runTransition() {
@@ -205,7 +219,7 @@ export function CyclesTab() {
         errorMessage="Failed to load review cycles."
         emptyMessage="No review cycles yet"
         emptyIcon={CalendarRange}
-        onRowClick={setSelected}
+        onRowClick={openCycle}
         isRowActive={(cycle) => cycle.id === selected?.id}
       />
 
@@ -280,7 +294,11 @@ export function CyclesTab() {
               </div>
             </SlideOverSection>
 
-            <SlideOverSection title={`Not covered (${coverage.data?.length ?? 0})`}>
+            {/* THE HEADING COUNTS EVERYBODY OUTSTANDING, not the rows on screen. It used to count the
+                array the endpoint returned, which the endpoint capped at 500 — so past five hundred
+                active employees the report got shorter as the organisation got bigger, and the number
+                beside "Not covered" was the size of a page dressed up as a total. */}
+            <SlideOverSection title={`Not covered (${coverage.data?.pageInfo?.total ?? 0})`}>
               {/* An empty coverage report is the GOOD outcome, so it says so rather than showing an
                   empty list that reads as a failed fetch — hence `emptyTone="success"`.
                   Through `PanelState` because this was the worst instance of the missing-error bug:
@@ -288,13 +306,13 @@ export function CyclesTab() {
                   compliance all-clear in green. */}
               <PanelState
                 query={coverage}
-                count={coverage.data?.length ?? 0}
+                count={coverage.data?.pageInfo?.total ?? 0}
                 empty="Everybody in scope has a completed review"
                 emptyTone="success"
                 error="Failed to load the coverage report."
               />
               <div className="flex flex-col gap-1.5">
-                {(coverage.data ?? []).map((gap) => (
+                {(coverage.data?.data ?? []).map((gap) => (
                   <div
                     key={gap.employeeId}
                     className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5"
@@ -311,6 +329,13 @@ export function CyclesTab() {
                   </div>
                 ))}
               </div>
+              {/* The kit's pager, reading the API's own `pageInfo` — it renders nothing when everything
+                  fits on one page, so the common case is unchanged. */}
+              <PaginationFooter
+                pageInfo={coverage.data?.pageInfo}
+                onOffsetChange={setCoverageOffset}
+                noun="outstanding"
+              />
             </SlideOverSection>
           </>
         )}

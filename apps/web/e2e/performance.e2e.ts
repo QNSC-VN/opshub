@@ -157,6 +157,29 @@ test.describe('performance', () => {
     await expect(drawer.getByRole('heading', { name: /^Not covered \(\d+\)$/ })).toBeVisible({
       timeout: 15_000,
     });
+
+    /*
+     * THE HEADING IS THE TOTAL, NOT THE PAGE.
+     *
+     * This assertion used to be `\(\d+\)` and nothing more, which passed either way — and the endpoint
+     * capped at 500 rows while the panel counted the array it got back. So on any organisation past five
+     * hundred active employees the number beside "Not covered" was the size of a page presented as a
+     * total, on the one screen where a smaller number reads as progress.
+     *
+     * Compared against the API's own `pageInfo.total` rather than a literal, because the count depends
+     * on how many active employees the database has — which differs between a fresh CI database and a
+     * developer's. What must hold everywhere is that the screen and the API agree.
+     */
+    const report = await request.get(`/v1/performance/cycles/${cycle.id}/coverage?limit=1`);
+    const { pageInfo } = (await report.json()) as { pageInfo: { total: number } };
+    await expect(
+      drawer.getByRole('heading', { name: `Not covered (${pageInfo.total})` }),
+    ).toBeVisible();
+
+    // And the panel renders a PAGE of that total, so the two numbers are allowed to differ — what is not
+    // allowed is the heading quietly becoming the smaller one.
+    const rendered = await drawer.locator('p.truncate.text-xs.font-medium').count();
+    expect(rendered).toBeLessThanOrEqual(pageInfo.total);
   });
 
   test('writes a review: goals must total 100 before it can be sent for approval', async ({

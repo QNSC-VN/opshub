@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, countDistinct, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DbExecutor, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import {
@@ -405,7 +405,11 @@ export class PerformanceDrizzleRepository implements IPerformanceRepository {
   }
 
   // ── Reporting ──────────────────────────────────────────────────────────────
-  async coverageGaps(cycleId: string, limit: number): Promise<CoverageGap[]> {
+  async coverageGaps(
+    cycleId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: CoverageGap[]; total: number }> {
     /*
      * A LEFT JOIN and not an anti-join alone, because two different gaps matter: an employee with no
      * review at all, and one whose review has stalled short of `acknowledged`. Both are "not done",
@@ -415,7 +419,7 @@ export class PerformanceDrizzleRepository implements IPerformanceRepository {
      * The employee's position comes from the LIVE assignment here — this is a question about now,
      * not a record of then, which is the opposite of `reviews.position_id`.
      */
-    return (
+    const [rows, [tally]] = await Promise.all([
       this.db
         .select({
           employeeId: employees.id,
@@ -455,7 +459,35 @@ export class PerformanceDrizzleRepository implements IPerformanceRepository {
           asc(employees.id),
         )
         .limit(limit)
-    );
+        .offset(offset),
+      /*
+       * THE TOTAL IS COUNTED OVER THE SAME PREDICATE, in a second query rather than a window function,
+       * matching every other paged read here. It is the number that makes the truncation visible: a
+       * report that returns fifty rows and says nothing about the other eight hundred is a report that
+       * says the cycle is nearly done.
+       *
+       * `countDistinct` on the employee, not `count()`: an employee with two rows in
+       * `employee_positions` — which the live-assignment join does not prevent, only narrows — would
+       * otherwise be counted twice and inflate the denominator of a compliance figure.
+       */
+      this.db
+        .select({ total: countDistinct(employees.id) })
+        .from(employees)
+        .leftJoin(
+          performanceReviews,
+          and(
+            eq(performanceReviews.employeeId, employees.id),
+            eq(performanceReviews.cycleId, cycleId),
+          ),
+        )
+        .where(
+          and(
+            eq(employees.status, 'active'),
+            sql`(${performanceReviews.id} IS NULL OR ${performanceReviews.status} NOT IN ('acknowledged', 'cancelled'))`,
+          ),
+        ),
+    ]);
+    return { rows, total: Number(tally?.total ?? 0) };
   }
 
   async cycleProgress(cycleId: string, tx?: DbExecutor): Promise<CycleProgress[]> {
