@@ -280,16 +280,41 @@ describe('RequestEngine.approve() — single-step', () => {
     expect(result.status).toBe('approved');
   });
 
-  it('throws PermissionDeniedException when actor lacks permission', async () => {
+  it('refuses a missing permission as FORBIDDEN', async () => {
     const { engine } = buildEngine({
       requestRow: makeRequest(),
       actorHasPermission: false,
     });
 
-    await expect(engine.approve('req-1', null, ACTOR)).rejects.toThrow(PermissionDeniedException);
+    await expect(engine.approve('req-1', null, ACTOR)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 
-  it('throws PermissionDeniedException on SoD violation (requester = approver)', async () => {
+  it('refuses self-approval as REQUEST_SOD_VIOLATION, not as a missing permission', async () => {
+    const sameUser = 'user-requester';
+    const { engine } = buildEngine({
+      requestRow: makeRequest({ requesterId: sameUser }),
+      actorHasPermission: true,
+    });
+
+    /*
+     * THE DISTINCTION, as a test. Both refusals are 403 and both were `FORBIDDEN`, so a client could
+     * not tell "ask a colleague to approve this" from "ask for access" — and the difference survived
+     * only as a prefix on the message, where nothing can act on it. The code carries it now.
+     */
+    await expect(
+      engine.approve('req-1', null, { sub: sameUser, email: 'x@x.com' }),
+    ).rejects.toMatchObject({
+      code: 'REQUEST_SOD_VIOLATION',
+      // Still a 403. `httpStatus`, not `category`: the shared base converts the category to a status
+      // and does not keep it, so this pins the number that actually reaches the client.
+      httpStatus: 403,
+    });
+  });
+
+  it('says nothing about SoD in the message that the code does not say', async () => {
+    // The prefix is gone. A message that repeats the code is a second place to keep them in step.
     const sameUser = 'user-requester';
     const { engine } = buildEngine({
       requestRow: makeRequest({ requesterId: sameUser }),
@@ -298,7 +323,7 @@ describe('RequestEngine.approve() — single-step', () => {
 
     await expect(
       engine.approve('req-1', null, { sub: sameUser, email: 'x@x.com' }),
-    ).rejects.toThrow(PermissionDeniedException);
+    ).rejects.toThrow(/^Requester cannot approve their own request$/);
   });
 
   it('throws NotFoundException when request does not exist', async () => {
@@ -438,11 +463,16 @@ describe('RequestEngine.reject()', () => {
     await expect(engine.reject('req-1', null, ACTOR)).rejects.toThrow(PermissionDeniedException);
   });
 
-  it('enforces SoD on reject — requester cannot reject own request', async () => {
+  it('enforces SoD on reject with the same code as on approve', async () => {
+    // Rejecting your own request is the same violation as approving it — an approver who can reject
+    // can close the request, which is the decision SoD exists to separate.
     const { engine } = buildEngine({
       requestRow: makeRequest({ requesterId: ACTOR.sub }),
     });
-    await expect(engine.reject('req-1', null, ACTOR)).rejects.toThrow(PermissionDeniedException);
+    await expect(engine.reject('req-1', null, ACTOR)).rejects.toMatchObject({
+      code: 'REQUEST_SOD_VIOLATION',
+      httpStatus: 403,
+    });
   });
 });
 
