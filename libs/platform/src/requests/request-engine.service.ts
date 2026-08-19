@@ -9,6 +9,7 @@ import {
   PreconditionFailedException,
   PermissionDeniedException,
 } from '../errors/exceptions';
+import { ErrorCodes } from '../errors/error-codes';
 import { WebhookEnqueueService } from '../webhooks/webhook-enqueue.service';
 import { requestItems, requestApprovals, requestComments } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
@@ -144,7 +145,10 @@ export class RequestEngine {
 
     if (!def.allowSelfApproval && request.requesterId === sodSubject) {
       throw new PermissionDeniedException(
-        'REQUEST_SOD_VIOLATION: Requester cannot approve their own request',
+        'Requester cannot approve their own request',
+        // The CODE, not a prefix on the message. A client distinguishing this from a missing
+        // permission is the difference between "ask a colleague" and "ask for access".
+        ErrorCodes.REQUEST_SOD_VIOLATION,
       );
     }
 
@@ -284,7 +288,10 @@ export class RequestEngine {
     const sodSubject = activeDelegation ? activeDelegation.fromUserId : actor.sub;
     if (!def.allowSelfApproval && request.requesterId === sodSubject) {
       throw new PermissionDeniedException(
-        'REQUEST_SOD_VIOLATION: Requester cannot reject their own request',
+        'Requester cannot reject their own request',
+        // The CODE, not a prefix on the message. A client distinguishing this from a missing
+        // permission is the difference between "ask a colleague" and "ask for access".
+        ErrorCodes.REQUEST_SOD_VIOLATION,
       );
     }
 

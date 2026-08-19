@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { and, asc, count, eq } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB } from '../database/index';
-import { NotFoundException, PreconditionFailedException } from '../errors/exceptions';
+import {
+  NotFoundException,
+  PermissionDeniedException,
+  PreconditionFailedException,
+} from '../errors/exceptions';
 import { ErrorCodes } from '../errors/error-codes';
 import { attachments, storedFiles } from '../../../../db/schema';
 import { StorageService } from './storage.service';
@@ -206,10 +210,14 @@ export class EntityAttachmentsService {
     const file = await this.requireLink(ref, fileId);
 
     if (!force && file.uploaderId !== deletedBy) {
-      throw new PreconditionFailedException(
-        ErrorCodes.FORBIDDEN,
-        'Only the uploader may remove this file',
-      );
+      /*
+       * 403, NOT 412. This threw `PreconditionFailedException(ErrorCodes.FORBIDDEN, …)` — a response
+       * that contradicted itself: the status said "a precondition on this request failed", which
+       * invites the caller to change something and retry, while the code said `FORBIDDEN`, which
+       * means no retry will help. A client mapping 403 to "you are not allowed to do that" showed a
+       * generic failure instead.
+       */
+      throw new PermissionDeniedException('Only the uploader may remove this file');
     }
 
     await this.db
