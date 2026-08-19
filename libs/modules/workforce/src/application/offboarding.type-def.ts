@@ -1,6 +1,14 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
-import { type DbExecutor, InjectDrizzle, type DrizzleDB, RequestRegistry, RequestTypeDef } from '@platform';
+import {
+  AuthzService,
+  type DbExecutor,
+  InjectDrizzle,
+  type DrizzleDB,
+  RequestRegistry,
+  RequestTypeDef,
+} from '@platform';
+import { AUDIT_ACTION, AUDIT_RESOURCE, AuditService } from '@modules/audit';
 import { REQUEST_TYPE } from '@shared-kernel';
 import {
   employees,
@@ -24,17 +32,32 @@ export interface OffboardingPayload extends Record<string, unknown> {
  *
  * `onApprove` atomically:
  *   1. Sets employee status → `offboarded`
- *   2. Removes all RBAC role assignments
+ *   2. Removes all RBAC role assignments, and clears the cached role claims with them
  *   3. Revokes all active access grants
  *   4. Returns all assigned hardware assets (sets returnedAt, status → in_stock)
  *   5. Revokes all active refresh tokens (forces immediate logout)
  *
  * All five operations share the same transaction, so either all succeed or none do.
+ *
+ * EVERY REMOVAL IS AUDITED, AND THAT WAS THE DEFECT. This hook wrote all five steps and recorded
+ * NOTHING — no `role.revoked`, no `access_grant.revoked`, no `asset.unassigned` — because it writes
+ * the tables directly instead of going through the services that own them, and those services are
+ * where the audit calls live. Every one of those events is audited when a person does it by hand, so
+ * an access-removal review saw a leaver whose privileges vanished with no record of who took them or
+ * when. That is precisely the evidence ISO 27001 A.8 asks for, on the one path that most needs it.
+ *
+ * The entries use the SAME action codes and resource types the owning services use, so the trail
+ * reads identically whether access was removed one row at a time or by this workflow.
+ *
+ * STILL A LAYER VIOLATION: the writes belong to `AuthzAdminService`, `AssetService`,
+ * `AccessRequestService` and the refresh-token repository, and each of those exposes only a
+ * transaction-OWNING method, which cannot be called from inside the engine's `tx` without nesting.
+ * The fix is a `tx`-accepting method on each, the way `RiskAcceptanceTypeDef` calls
+ * `RisksService.applyAcceptance(..., tx)`. That is a wider change than the missing evidence, so it is
+ * left for its own commit; this one closes the audit and cache holes.
  */
 @Injectable()
-export class OffboardingTypeDef
-  implements RequestTypeDef<OffboardingPayload>, OnModuleInit
-{
+export class OffboardingTypeDef implements RequestTypeDef<OffboardingPayload>, OnModuleInit {
   private readonly logger = new Logger(OffboardingTypeDef.name);
 
   readonly type = REQUEST_TYPE.OFFBOARDING;
@@ -43,11 +66,27 @@ export class OffboardingTypeDef
   readonly defaultExpiryHours = 72; // 3 days
   readonly slaHours = 24; // same-day SLA for security
 
+  private readonly employeeTrail;
+  private readonly roleAssignmentTrail;
+  private readonly grantTrail;
+  private readonly assetTrail;
+  private readonly sessionTrail;
+
   constructor(
     private readonly registry: RequestRegistry,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly graphProvisioning: GraphProvisioningService,
-  ) {}
+    private readonly authz: AuthzService,
+    audit: AuditService,
+  ) {
+    // One trail per resource the workflow touches, bound once — the same shape the owning services
+    // use, so the entries this hook writes are indistinguishable from the ones they write.
+    this.employeeTrail = audit.forResource(AUDIT_RESOURCE.EMPLOYEE);
+    this.roleAssignmentTrail = audit.forResource(AUDIT_RESOURCE.ROLE_ASSIGNMENT);
+    this.grantTrail = audit.forResource(AUDIT_RESOURCE.ACCESS_GRANT);
+    this.assetTrail = audit.forResource(AUDIT_RESOURCE.ASSET);
+    this.sessionTrail = audit.forResource(AUDIT_RESOURCE.SESSION);
+  }
 
   onModuleInit(): void {
     this.registry.register(this);
@@ -56,28 +95,75 @@ export class OffboardingTypeDef
   async onApprove(
     payload: OffboardingPayload,
     _requestId: string,
-    _approverId: string,
+    approverId: string,
     tx: DbExecutor,
   ): Promise<void> {
     const now = new Date();
     const { employeeId } = payload;
+    // The APPROVER is the actor on every entry below: they authorised the removal. The engine hands
+    // this hook an id and no email, and both fields are recorded — so the id is carried in both,
+    // visibly derived rather than silently blank. Same reasoning as `RiskAcceptanceTypeDef`.
+    const actor = { sub: approverId, email: approverId };
 
     // 1. Mark employee as offboarded
     await tx
       .update(employees)
       .set({ status: 'offboarded', updatedAt: now })
       .where(eq(employees.id, employeeId));
+    await this.employeeTrail.record(AUDIT_ACTION.EMPLOYEE_STATUS_CHANGED, employeeId, actor, tx, {
+      after: { status: 'offboarded', reason: payload.reason ?? null },
+    });
 
-    // 2. Remove all RBAC role assignments
-    await tx
+    /*
+     * 2. Remove all RBAC role assignments.
+     *
+     * `returning()` so each removal can be recorded individually. One entry per assignment, not one
+     * summarising them: an access review asks "when did this person lose THIS role", and a single
+     * row saying "5 roles removed" cannot answer it.
+     */
+    const removedRoles = await tx
       .delete(userRoleAssignments)
-      .where(eq(userRoleAssignments.userId, employeeId));
+      .where(eq(userRoleAssignments.userId, employeeId))
+      .returning({ id: userRoleAssignments.id, roleId: userRoleAssignments.roleId });
+
+    for (const assignment of removedRoles) {
+      await this.roleAssignmentTrail.record(AUDIT_ACTION.ROLE_REVOKED, assignment.id, actor, tx, {
+        before: { userId: employeeId, roleId: assignment.roleId },
+      });
+    }
+
+    /*
+     * The cached role claims go with them, IN THIS TRANSACTION.
+     *
+     * `employees.roles` is a denormalised copy of the active assignments that feeds the JWT claims,
+     * and nothing here maintained it — so an offboarded employee's row still listed `it-admin` after
+     * every assignment behind it was gone. `AuthzAdminService` keeps it in step by calling
+     * `syncEmployeeRoleClaims` after its own transaction; here the answer is known without a query,
+     * because step 2 removed ALL of them, and setting it inside the transaction means the copy can
+     * never disagree with the rows it copies.
+     */
+    await tx
+      .update(employees)
+      .set({ roles: [], updatedAt: now })
+      .where(eq(employees.id, employeeId));
 
     // 3. Revoke all active access grants
-    await tx
+    const revokedGrants = await tx
       .update(accessGrants)
       .set({ revokedAt: now })
-      .where(and(eq(accessGrants.granteeId, employeeId), isNull(accessGrants.revokedAt)));
+      .where(and(eq(accessGrants.granteeId, employeeId), isNull(accessGrants.revokedAt)))
+      .returning({
+        id: accessGrants.id,
+        accessType: accessGrants.accessType,
+        target: accessGrants.target,
+      });
+
+    for (const grant of revokedGrants) {
+      await this.grantTrail.record(AUDIT_ACTION.ACCESS_GRANT_REVOKED, grant.id, actor, tx, {
+        before: { granteeId: employeeId, accessType: grant.accessType, target: grant.target },
+        after: { revokedAt: now, reason: 'offboarding' },
+      });
+    }
 
     // 4. Return all active asset assignments + reset asset status to in_stock
     const activeAssignments = await tx
@@ -86,21 +172,36 @@ export class OffboardingTypeDef
       .where(and(eq(assetAssignments.employeeId, employeeId), isNull(assetAssignments.returnedAt)))
       .returning({ assetId: assetAssignments.assetId });
 
-    if (activeAssignments.length > 0) {
-      const assetIds = activeAssignments.map((a) => a.assetId);
-      for (const assetId of assetIds) {
-        await tx
-          .update(assets)
-          .set({ status: 'in_stock', updatedAt: now })
-          .where(eq(assets.id, assetId));
-      }
+    for (const { assetId } of activeAssignments) {
+      await tx
+        .update(assets)
+        .set({ status: 'in_stock', updatedAt: now })
+        .where(eq(assets.id, assetId));
+      // Audited against the ASSET, the same resource `AssetService.unassign` uses — so "where has
+      // this laptop been" reads the same whether it came back by hand or with a leaver.
+      await this.assetTrail.record(AUDIT_ACTION.ASSET_UNASSIGNED, assetId, actor, tx, {
+        before: { assignedTo: employeeId },
+        after: { status: 'in_stock', reason: 'offboarding' },
+      });
     }
 
     // 5. Revoke all refresh tokens (forces immediate logout across all sessions)
-    await tx
+    const revokedSessions = await tx
       .update(refreshTokens)
       .set({ revoked: true })
-      .where(and(eq(refreshTokens.employeeId, employeeId), eq(refreshTokens.revoked, false)));
+      .where(and(eq(refreshTokens.employeeId, employeeId), eq(refreshTokens.revoked, false)))
+      .returning({ id: refreshTokens.id });
+
+    if (revokedSessions.length > 0) {
+      /*
+       * ONE entry for the set, unlike the roles above — deliberately. A refresh token is not a thing
+       * anybody reviews individually; the reviewable fact is "every session was ended at this
+       * moment". `session.revoked` rather than `auth.logout`, because the holder did not do this.
+       */
+      await this.sessionTrail.record(AUDIT_ACTION.SESSION_REVOKED, employeeId, actor, tx, {
+        after: { revokedSessions: revokedSessions.length, reason: 'offboarding' },
+      });
+    }
   }
 
   async onReject(
@@ -112,7 +213,29 @@ export class OffboardingTypeDef
     // Nothing to undo — no domain state was changed on submit.
   }
 
+  /**
+   * Post-commit work: drop the cached permissions, then disable the Entra account.
+   *
+   * THE CACHE INVALIDATION IS THE SECURITY-CRITICAL HALF, and it was missing entirely.
+   * `AuthzService` caches a principal's resolved permissions for `CACHE_TTL_SECONDS = 300`, and every
+   * other privilege-removal path calls `invalidate` — `AuthzAdminService.revokeAssignment` does it on
+   * the line after its transaction. This hook did not, so for up to five minutes after being
+   * offboarded a leaver's requests were still authorised against the roles they no longer held. Their
+   * session was revoked, but an access token already in hand keeps working until it expires.
+   *
+   * AFTER THE COMMIT, NOT INSIDE IT. `afterApprove` is the engine's post-commit hook, which is where
+   * this belongs: invalidating inside the transaction leaves a window in which a concurrent request
+   * misses the cache, re-resolves from rows that have not yet committed, and caches the OLD
+   * permissions again — arriving at the same stale state by a longer route. Rally's `removeMember`
+   * records the same ordering rule for the same reason.
+   *
+   * ORDERED BEFORE THE GRAPH CALL, and outside its early return. The previous body opened with
+   * `if (!this.graphProvisioning.isEnabled()) return`, so anything added after it would silently not
+   * run in every environment without Graph configured — which is all of them by default.
+   */
   async afterApprove(payload: OffboardingPayload): Promise<void> {
+    await this.authz.invalidate(payload.employeeId);
+
     if (!this.graphProvisioning.isEnabled()) return;
 
     const [row] = await this.db
@@ -122,7 +245,9 @@ export class OffboardingTypeDef
       .limit(1);
 
     if (!row?.entraOid) {
-      this.logger.warn(`Offboarding afterApprove: no Entra OID for employee ${payload.employeeId}, skipping Graph disable`);
+      this.logger.warn(
+        `Offboarding afterApprove: no Entra OID for employee ${payload.employeeId}, skipping Graph disable`,
+      );
       return;
     }
 
