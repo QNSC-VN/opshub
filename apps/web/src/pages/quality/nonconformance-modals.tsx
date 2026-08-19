@@ -8,6 +8,7 @@ import { isoInstantFromDate, todayIso } from '@/shared/lib/format';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -230,7 +231,7 @@ export function RaiseNonconformanceModal({
           </FormField>
         </div>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Raise finding" />
       </form>
     </Modal>
@@ -324,7 +325,7 @@ export function ContainNonconformanceModal({
           </p>
         )}
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

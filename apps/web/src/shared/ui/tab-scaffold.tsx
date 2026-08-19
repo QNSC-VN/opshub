@@ -58,6 +58,30 @@ export function FormActions({
   );
 }
 
+/**
+ * A form-level failure, announced.
+ *
+ * WHY THIS IS A COMPONENT AND NOT A `<p>`. Seventy-one places wrote
+ * `<FormError message={error} />` — byte-identical, every one of them —
+ * and not one carried `role="alert"`. So a submit that failed changed the screen and told a screen
+ * reader nothing: focus stays on the button, the message appears somewhere below it, and the user is
+ * left waiting for a save that already refused. The whole SPA had two `role="alert"` in it.
+ *
+ * `FormField` already gets this right for FIELD errors, which is what made the gap easy to miss — the
+ * validation people test with a screen reader was announced, and the API refusal was not.
+ *
+ * `role="alert"` implies `aria-live="assertive"`, so it interrupts rather than queueing. That is the
+ * right level here: the user pressed a button and is waiting for the outcome.
+ */
+export function FormError({ message }: { message: string | undefined }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="text-xs text-danger">
+      {message}
+    </p>
+  );
+}
+
 /** The actions cell. `stopPropagation` once here rather than in every table column that has one. */
 export function RowActions({ children }: { children: ReactNode }) {
   return (

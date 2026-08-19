@@ -4,7 +4,15 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
-import { EntityPicker, FormActions, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import {
+  EntityPicker,
+  FormActions,
+  FormError,
+  FormField,
+  Input,
+  Modal,
+  Textarea,
+} from '@/shared/ui';
 import type { Incident } from './incident.types';
 
 /**
@@ -75,7 +83,7 @@ export function TriageIncidentModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Triage" />
       </form>
@@ -141,7 +149,7 @@ export function ContainIncidentModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Mark contained" />
       </form>
@@ -215,7 +223,7 @@ export function ResolveIncidentModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Resolve" />
       </form>
@@ -294,7 +302,7 @@ export function CloseIncidentModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Close incident" />
       </form>

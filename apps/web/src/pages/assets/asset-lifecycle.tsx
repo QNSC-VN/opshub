@@ -6,7 +6,15 @@ import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import { formatDate, orDash } from '@/shared/lib/format';
-import { Badge, EntityPicker, FormActions, FormField, Modal, Textarea } from '@/shared/ui';
+import {
+  Badge,
+  EntityPicker,
+  FormActions,
+  FormError,
+  FormField,
+  Modal,
+  Textarea,
+} from '@/shared/ui';
 import type { Asset } from './asset.types';
 import { useAssetAssignments } from './use-assets';
 
@@ -85,7 +93,7 @@ export function AssignAssetModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Assign asset" />
       </form>
     </Modal>

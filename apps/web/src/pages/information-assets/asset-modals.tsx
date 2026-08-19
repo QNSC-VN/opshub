@@ -7,6 +7,7 @@ import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -265,7 +266,7 @@ export function RegisterAssetModal({
           </span>
         </label>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Register asset" />
       </form>
@@ -369,7 +370,7 @@ export function ReclassifyAssetModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}

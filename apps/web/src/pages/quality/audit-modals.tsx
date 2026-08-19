@@ -5,7 +5,15 @@ import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions, documentOptions } from '@/shared/api/picker-sources';
 import { isoDaysFromNow, isoInstantFromDate, todayIso } from '@/shared/lib/format';
-import { EntityPicker, FormActions, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import {
+  EntityPicker,
+  FormActions,
+  FormError,
+  FormField,
+  Input,
+  Modal,
+  Textarea,
+} from '@/shared/ui';
 import type { InternalAudit } from './audit.types';
 
 /**
@@ -186,7 +194,7 @@ export function PlanAuditModal({
           </FormField>
         </div>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Plan audit" />
       </form>
     </Modal>
@@ -254,7 +262,7 @@ export function StartAuditModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Start fieldwork" />
       </form>
     </Modal>
@@ -344,7 +352,7 @@ export function ReportAuditModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Report results" />
       </form>
     </Modal>
@@ -411,7 +419,7 @@ export function CancelAuditModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

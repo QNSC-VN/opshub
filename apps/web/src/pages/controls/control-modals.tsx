@@ -7,6 +7,7 @@ import { activeEmployeeOptions } from '@/shared/api/picker-sources';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -120,7 +121,7 @@ export function CreateControlModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Create control" />
       </form>
@@ -278,7 +279,7 @@ export function SetSoaEntryModal({
           </>
         )}
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Save entry" />
       </form>
@@ -363,7 +364,7 @@ export function EditControlModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Save control" />
       </form>

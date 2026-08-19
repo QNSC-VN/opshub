@@ -4,7 +4,15 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions, courseOptions } from '@/shared/api/picker-sources';
-import { EntityPicker, FormActions, FormField, Input, Modal, Textarea } from '@/shared/ui';
+import {
+  EntityPicker,
+  FormActions,
+  FormError,
+  FormField,
+  Input,
+  Modal,
+  Textarea,
+} from '@/shared/ui';
 import { todayIso } from '@/shared/lib/format';
 import type { TrainingRecord } from './training.types';
 
@@ -145,7 +153,7 @@ export function RecordCompletionModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}
@@ -226,7 +234,7 @@ export function RevokeRecordModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}

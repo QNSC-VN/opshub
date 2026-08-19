@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
-import { Button, FormField, Modal, Textarea } from '@/shared/ui';
+import { Button, FormError, FormField, Modal, Textarea } from '@/shared/ui';
 import type { EmployeeResponse } from './people.types';
 
 interface OffboardingModalProps {
@@ -52,7 +52,7 @@ export function OffboardingModal({ employee, onClose, onSuccess }: OffboardingMo
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

@@ -6,6 +6,7 @@ import { apiErrorMessage } from '@/shared/api/errors';
 import {
   Button,
   EntityPicker,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -243,7 +244,7 @@ export function DraftContractModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
@@ -334,7 +335,7 @@ export function ActivateContractModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
@@ -425,7 +426,7 @@ export function TerminateContractModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

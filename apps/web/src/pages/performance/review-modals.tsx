@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { activeEmployeeOptions } from '@/shared/api/picker-sources';
-import { EntityPicker, FormActions, FormField, Modal } from '@/shared/ui';
+import { EntityPicker, FormActions, FormError, FormField, Modal } from '@/shared/ui';
 import type { Cycle, Review } from './performance.types';
 
 /**
@@ -93,7 +93,7 @@ export function CreateReviewModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Create review" />
       </form>
@@ -157,7 +157,7 @@ export function ReassignReviewerModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Reassign" />
       </form>

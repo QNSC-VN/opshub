@@ -2,7 +2,16 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormField, Input, Modal, Select, Textarea, humanizeStatus } from '@/shared/ui';
+import {
+  Button,
+  FormError,
+  FormField,
+  Input,
+  Modal,
+  Select,
+  Textarea,
+  humanizeStatus,
+} from '@/shared/ui';
 
 /** The types the API accepts. Declared once here, used by the form and nothing else. */
 const ASSET_TYPES = [
@@ -139,7 +148,7 @@ export function AddAssetModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

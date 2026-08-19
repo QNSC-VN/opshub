@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { FormActions, FormField, Modal, Textarea } from '@/shared/ui';
+import { FormActions, FormError, FormField, Modal, Textarea } from '@/shared/ui';
 import type { Nonconformance } from './quality.types';
 
 /**
@@ -86,7 +86,7 @@ export function CloseNonconformanceModal({
           The row and its CAPAs stay as the audit evidence.
         </p>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Close finding" />
       </form>
     </Modal>
@@ -154,7 +154,7 @@ export function VoidNonconformanceModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

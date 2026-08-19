@@ -8,6 +8,7 @@ import { todayIso } from '@/shared/lib/format';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -176,7 +177,7 @@ export function SetEntitlementModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Set entitlement" />
       </form>
     </Modal>
@@ -275,7 +276,7 @@ export function RunCarryOverModal({
           </div>
         )}
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}
@@ -365,7 +366,7 @@ export function DeclareHolidayModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Declare holiday" />
       </form>
     </Modal>

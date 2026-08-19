@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormField, Input, Modal } from '@/shared/ui';
+import { Button, FormError, FormField, Input, Modal } from '@/shared/ui';
 import { cn } from '@/shared/lib/utils';
 import { ALL_EVENTS, type EventType } from './webhook.types';
 
@@ -142,7 +142,7 @@ export function CreateSubscriptionModal({
           })}
         </fieldset>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>

@@ -6,6 +6,7 @@ import { apiErrorMessage } from '@/shared/api/errors';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -140,7 +141,7 @@ export function RenewContractModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Renew contract" />
       </form>
     </Modal>

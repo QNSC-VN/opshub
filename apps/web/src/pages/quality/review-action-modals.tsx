@@ -8,6 +8,7 @@ import { isoDaysFromNow } from '@/shared/lib/format';
 import {
   EntityPicker,
   FormActions,
+  FormError,
   FormField,
   Input,
   Modal,
@@ -135,7 +136,7 @@ export function RaiseActionModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Raise action" />
       </form>
     </Modal>
@@ -214,7 +215,7 @@ export function ActionOutcomeModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
         <FormActions
           loading={mutation.isPending}
           onClose={onClose}

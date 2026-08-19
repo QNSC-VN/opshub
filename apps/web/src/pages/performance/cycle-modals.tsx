@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { FormActions, FormField, Input, Modal } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal } from '@/shared/ui';
 import type { FormModalProps } from '@/shared/ui';
 
 /**
@@ -138,7 +138,7 @@ export function CreateCycleModal({ open, onClose, onSuccess }: FormModalProps) {
           </FormField>
         </div>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Create cycle" />
       </form>

@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { FormActions, FormField, Input, Modal, Select, Textarea } from '@/shared/ui';
+import { FormActions, FormError, FormField, Input, Modal, Select, Textarea } from '@/shared/ui';
 import { useRatingScale } from './use-performance';
 import type { Review } from './performance.types';
 
@@ -76,7 +76,7 @@ export function SelfAssessmentModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Submit" />
       </form>
@@ -197,7 +197,7 @@ export function RateReviewModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Save rating" />
       </form>
@@ -265,7 +265,7 @@ export function CancelReviewModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions
           loading={mutation.isPending}
@@ -387,7 +387,7 @@ export function SetGoalModal({
           />
         </FormField>
 
-        {error && <p className="text-xs text-danger">{error}</p>}
+        <FormError message={error} />
 
         <FormActions loading={mutation.isPending} onClose={onClose} submitLabel="Add goal" />
       </form>
