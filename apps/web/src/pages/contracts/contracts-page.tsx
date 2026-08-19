@@ -17,6 +17,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
+import { usePermissions } from '@/shared/hooks/use-permissions';
 import { formatDate, isoDaysFromNow } from '@/shared/lib/format';
 import { ContractHistoryPanel, RenewContractModal } from './contract-renewal';
 import {
@@ -84,6 +85,14 @@ export function ContractsPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('active');
   const [renewalsOnly, setRenewalsOnly] = useState(false);
+  /*
+   * GATED ON THE PERMISSION THE API ENFORCES. Every write route on this controller carries
+   * `@RequirePermission('contract.manage')`, and this page offered Draft, Activate, Terminate and Renew
+   * to anyone who could READ a contract — so `contract.read` alone saw four buttons that answer 403.
+   * Twenty-five other pages gate their affordances this way; these four were simply missed.
+   */
+  const { can } = usePermissions();
+  const canManage = can('contract.manage');
   const [drafting, setDrafting] = useState(false);
   const [terminating, setTerminating] = useState<Contract | null>(null);
   const [activating, setActivating] = useState<Contract | null>(null);
@@ -149,12 +158,12 @@ export function ContractsPage() {
       align: 'right',
       cell: (c) => (
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {c.status === 'draft' && (
+          {canManage && c.status === 'draft' && (
             <Button variant="outline" size="sm" onClick={() => setActivating(c)}>
               Activate
             </Button>
           )}
-          {c.status === 'active' && (
+          {canManage && c.status === 'active' && (
             <Button variant="outline" size="sm" onClick={() => setTerminating(c)}>
               Terminate
             </Button>
@@ -197,10 +206,12 @@ export function ContractsPage() {
         title="Contracts"
         description="Employment terms, their lifecycle, and what renews soon."
         actions={
-          <Button variant="primary" onClick={() => setDrafting(true)}>
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            Draft contract
-          </Button>
+          canManage ? (
+            <Button variant="primary" onClick={() => setDrafting(true)}>
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              Draft contract
+            </Button>
+          ) : undefined
         }
         filters={
           <>
@@ -300,7 +311,7 @@ export function ContractsPage() {
         headerActions={
           // Only an ACTIVE contract can be renewed — the service refuses any other outgoing status, and a
           // renewal is a swap between two contracts rather than an edit to one.
-          selected && selected.status === 'active' ? (
+          canManage && selected && selected.status === 'active' ? (
             <PanelAction tone="accent" onClick={() => setRenewing(selected)}>
               Renew
             </PanelAction>

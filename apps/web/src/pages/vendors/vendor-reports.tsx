@@ -1,7 +1,6 @@
 import { AlertTriangle, CalendarClock, Wallet } from 'lucide-react';
-import { Badge, humanizeStatus } from '@/shared/ui';
+import { Badge, humanizeStatus, statusTone } from '@/shared/ui';
 import { formatDate, formatMoney } from '@/shared/lib/format';
-import { criticalityTone } from './vendor.types';
 import { useCriticalWithoutRisk, useReviewGaps, useUnassessedSpend } from './use-vendors';
 
 /**
@@ -28,7 +27,7 @@ export function ReviewGapsBanner() {
         {rows.slice(0, 5).map((gap) => (
           <li key={gap.id} className="text-xs text-fg-muted">
             <span className="font-mono">{gap.reference}</span> · {gap.name}
-            <Badge tone={criticalityTone(gap.criticality)}>{humanizeStatus(gap.criticality)}</Badge>
+            <Badge tone={statusTone(gap.criticality)}>{humanizeStatus(gap.criticality)}</Badge>
             {/* `daysOverdue` is the API's, and `lastAssessedAt: null` means never — a different and worse
                 answer than "late", so it is spelled out. */}
             <span className="text-warning">
