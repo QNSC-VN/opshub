@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { InjectDrizzle, NotFoundException, ErrorCodes } from '@platform';
 import type { DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { webhookSubscriptions, webhookDeliveries } from '../../../../../db/schema';
-import type { WebhookSubscription, WebhookDelivery, CreateSubscriptionInput } from '../domain/webhook.types';
+import type {
+  WebhookSubscription,
+  WebhookDelivery,
+  CreateSubscriptionInput,
+} from '../domain/webhook.types';
 
 function rowToSubscription(r: typeof webhookSubscriptions.$inferSelect): WebhookSubscription {
   return {
@@ -64,7 +68,8 @@ export class WebhooksService {
       .from(webhookSubscriptions)
       .where(eq(webhookSubscriptions.id, id))
       .limit(1);
-    if (!row) throw new NotFoundException(ErrorCodes.WEBHOOK_NOT_FOUND, 'Webhook subscription not found');
+    if (!row)
+      throw new NotFoundException(ErrorCodes.WEBHOOK_NOT_FOUND, 'Webhook subscription not found');
     return rowToSubscription(row);
   }
 
@@ -74,7 +79,8 @@ export class WebhooksService {
       .set({ active, updatedAt: new Date() })
       .where(eq(webhookSubscriptions.id, id))
       .returning();
-    if (!row) throw new NotFoundException(ErrorCodes.WEBHOOK_NOT_FOUND, 'Webhook subscription not found');
+    if (!row)
+      throw new NotFoundException(ErrorCodes.WEBHOOK_NOT_FOUND, 'Webhook subscription not found');
     return rowToSubscription(row);
   }
 
@@ -89,6 +95,10 @@ export class WebhooksService {
       .select()
       .from(webhookDeliveries)
       .where(eq(webhookDeliveries.subscriptionId, subscriptionId))
+      // NEWEST FIRST, and capped. Unordered, this returned an arbitrary 100 of however many
+      // deliveries the subscription has — on the screen somebody opens to find out why the last one
+      // failed, which is the one attempt it was least likely to include.
+      .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
       .limit(100);
     return rows.map(rowToDelivery);
   }
@@ -102,7 +112,8 @@ export class WebhooksService {
       .set({ status: 'pending', nextAttemptAt: new Date(), lastError: null })
       .where(eq(webhookDeliveries.id, deliveryId))
       .returning();
-    if (!row) throw new NotFoundException(ErrorCodes.DELIVERY_NOT_FOUND, 'Webhook delivery not found');
+    if (!row)
+      throw new NotFoundException(ErrorCodes.DELIVERY_NOT_FOUND, 'Webhook delivery not found');
     return rowToDelivery(row);
   }
 }

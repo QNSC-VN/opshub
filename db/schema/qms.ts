@@ -172,8 +172,14 @@ export const nonconformances = qmsSchema.table(
      *
      * `SET NULL`: an audit is never deleted, but if one ever were, the finding and its CAPA are the
      * evidence and must outlive it.
+     *
+     * The constraint has existed in the database since migration 0025; only this declaration was
+     * missing it, so the schema file described a weaker guarantee than the database enforces.
+     * Declaring it changes nothing at runtime — it makes the file agree with reality.
      */
-    internalAuditId: uuid('internal_audit_id'),
+    internalAuditId: uuid('internal_audit_id').references(() => internalAudits.id, {
+      onDelete: 'set null',
+    }),
 
     /** The immediate fix. Paired with `contained_at` by `ck_nc_contained_pair`. */
     containmentAction: text('containment_action'),
