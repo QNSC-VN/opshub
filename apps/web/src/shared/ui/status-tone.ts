@@ -51,6 +51,15 @@ export const APPROVAL_TONE: Record<string, BadgeTone> = {
  * colour, and splitting it into red-and-orange put a raw `orange-700` into the one screen that tried
  * — which then did not flip in dark mode. The distinction is carried by the WORD, which is why
  * `StatusBadge` always renders text and never colour alone.
+ *
+ * TWO PAGES USED TO DISAGREE WITH THIS. `incident.types.ts` and `vendor.types.ts` each carried a
+ * byte-identical local function mapping `high` to amber, `medium` to blue and everything else to
+ * neutral — so one severity had two colours depending on which screen you were looking at, and the
+ * split this map exists to prevent was live on two of them. Both are gone; those pages call
+ * `statusTone` like the other thirty.
+ *
+ * Vendor CRITICALITY comes through here too. It is a different word for the same shape of judgement —
+ * how bad is this — and giving it its own colour scale would mean a reader learning two.
  */
 export const SEVERITY_TONE: Record<string, BadgeTone> = {
   critical: 'red',

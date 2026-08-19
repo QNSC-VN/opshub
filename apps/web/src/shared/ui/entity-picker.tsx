@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useDebounced } from '@/shared/hooks/use-debounced';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
@@ -105,11 +106,8 @@ export function EntityPicker({
     picked && picked.value === value ? picked.label : value ? (selectedLabel ?? value) : '';
 
   // Debounced, because every keystroke is a request otherwise — and a directory search is not free.
-  const [debounced, setDebounced] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(term), 250);
-    return () => clearTimeout(timer);
-  }, [term]);
+  // The implementation is shared with the command palette, which searches the same endpoints.
+  const debounced = useDebounced(term);
 
   const options = useQuery({
     queryKey: ['entity-picker', queryKey, debounced],

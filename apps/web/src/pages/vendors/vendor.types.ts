@@ -42,14 +42,6 @@ export const CRITICALITIES = ['low', 'medium', 'high', 'critical'] as const;
 /** What an assessment concluded. `pass_with_conditions` is a pass that owes something. */
 export const ASSESSMENT_OUTCOMES = ['pass', 'pass_with_conditions', 'fail'] as const;
 
-/** Criticality → badge tone, matching the incident severity scale so one reader learns one thing. */
-export function criticalityTone(criticality: string): 'neutral' | 'blue' | 'amber' | 'red' {
-  if (criticality === 'critical') return 'red';
-  if (criticality === 'high') return 'amber';
-  if (criticality === 'medium') return 'blue';
-  return 'neutral';
-}
-
 /** Assessment outcome → tone. A conditional pass is not a pass, and does not look like one. */
 export function outcomeTone(
   outcome: string | null | undefined,

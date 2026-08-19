@@ -20,6 +20,7 @@ import {
   type BadgeTone,
   type DataTableColumn,
 } from '@/shared/ui';
+import { usePermissions } from '@/shared/hooks/use-permissions';
 import { formatDate, formatDateTime } from '@/shared/lib/format';
 import { CreateSubscriptionModal } from './create-subscription-modal';
 import type { WebhookSubscription } from './webhook.types';
@@ -75,6 +76,15 @@ export function WebhooksPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<WebhookSubscription | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  /*
+   * GATED ON THE PERMISSION THE API ENFORCES. All eight webhook routes carry
+   * `@RequirePermission('webhooks.manage')`, and this page offered Create, Enable/Disable and Delete
+   * with no check. The nav item that leads here already gates on `webhooks.manage`, so in practice this
+   * was reachable only by a holder — but the page must not depend on the nav being right, and until
+   * recently those routes required `rbac.manage` instead, so the nav and the routes disagreed.
+   */
+  const canManage = usePermissions().can('webhooks.manage');
 
   const subscriptions = useSubscriptions();
   const deliveries = useDeliveries(selected?.id ?? null);
@@ -172,23 +182,27 @@ export function WebhooksPage() {
       align: 'right',
       cell: (sub) => (
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={toggle.isPending}
-            onClick={() => toggle.mutate(sub)}
-          >
-            {sub.active ? 'Disable' : 'Enable'}
-          </Button>
-          <button
-            type="button"
-            aria-label={`Delete subscription for ${sub.url}`}
-            title="Delete subscription"
-            onClick={() => setPendingDeleteId(sub.id)}
-            className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {canManage && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={toggle.isPending}
+              onClick={() => toggle.mutate(sub)}
+            >
+              {sub.active ? 'Disable' : 'Enable'}
+            </Button>
+          )}
+          {canManage && (
+            <button
+              type="button"
+              aria-label={`Delete subscription for ${sub.url}`}
+              title="Delete subscription"
+              onClick={() => setPendingDeleteId(sub.id)}
+              className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -217,10 +231,12 @@ export function WebhooksPage() {
         title="Webhooks"
         description="Outbound event delivery: which endpoints hear about what, and whether it arrived."
         actions={
-          <Button variant="primary" onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            New subscription
-          </Button>
+          canManage ? (
+            <Button variant="primary" onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              New subscription
+            </Button>
+          ) : undefined
         }
       >
         <DataTable

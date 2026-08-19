@@ -3,7 +3,8 @@
  *
  * Architecture:
  *  - Static commands (navigation, quick actions) defined locally — always shown.
- *  - Dynamic results from live API search (employees, assets) — debounced 250 ms.
+ *  - Dynamic results from live API search (employees, assets) — debounced, see `useDebounced`.
+ *    Static command filtering is NOT debounced: it is local and must feel instant.
  *  - Keyboard navigation: ↑↓ to move, Enter to select, Escape to close.
  *  - Groups: Navigate | Actions | People | Assets
  *
@@ -35,6 +36,8 @@ import { api } from '@/shared/api/client';
 import type { EmployeeResponse, AssetResponse } from '@/shared/api/types';
 import { useCommandPaletteStore } from './use-command-palette';
 import { usePermissions } from '@/shared/hooks/use-permissions';
+import { useDebounced } from '@/shared/hooks/use-debounced';
+import { OVERLAY_LAYER } from '@/shared/ui/use-escape-to-close';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -264,8 +267,20 @@ export function CommandPalette() {
   }, [open, initialQuery]);
 
   const navCommands = useNavCommands(can);
-  const { data: peopleResults = [] } = useLivePeopleSearch(query, open);
-  const { data: assetResults = [] } = useLiveAssetSearch(query, open);
+  /*
+   * DEBOUNCED, which the docblock above has always claimed and the code never did.
+   *
+   * Both searches ran on every keystroke past two characters, so an eleven-character query was twenty
+   * requests across `/v1/employees` and `/v1/assets` — two paged database reads each time, for results
+   * the user never saw because the next keystroke replaced them. `EntityPicker` debounces the same
+   * endpoints; the hook is now shared rather than one surface having it and the other describing it.
+   *
+   * Static command filtering still uses the RAW query: it is local, costs nothing, and feeling instant
+   * is the point of a palette. Only the network work waits.
+   */
+  const debouncedQuery = useDebounced(query);
+  const { data: peopleResults = [] } = useLivePeopleSearch(debouncedQuery, open);
+  const { data: assetResults = [] } = useLiveAssetSearch(debouncedQuery, open);
 
   // Filter static commands against query; merge with live results
   const allCommands = useMemo<Command[]>(() => {
@@ -329,21 +344,28 @@ export function CommandPalette() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/*
+        Backdrop. `dialog` layer, not `drawer`: at `z-50` the palette rendered UNDERNEATH any `Modal`
+        (`z-[60]`), so ⌘K over an open dialog dimmed the screen and put the palette behind it. The
+        `data-overlay-layer` attribute is what `useEscapeToClose` arbitrates on, so without it Escape
+        went to whatever else was open instead of closing the palette.
+      */}
       <div
         aria-hidden="true"
-        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]"
+        data-overlay-layer={OVERLAY_LAYER.dialog}
+        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
         onClick={hide}
       />
 
       {/* Palette */}
       <div
         role="combobox"
+        data-overlay-layer={OVERLAY_LAYER.dialog}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label="Command palette"
         className={cn(
-          'fixed left-1/2 top-[18%] z-50 w-full max-w-[560px] -translate-x-1/2',
+          'fixed left-1/2 top-[18%] z-[60] w-full max-w-[560px] -translate-x-1/2',
           'overflow-hidden rounded-xl bg-surface shadow-2xl ring-1 ring-border',
           'animate-in fade-in-0 zoom-in-95 duration-150',
         )}

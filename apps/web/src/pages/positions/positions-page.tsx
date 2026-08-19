@@ -18,6 +18,7 @@ import {
   type DataTableColumn,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
+import { usePermissions } from '@/shared/hooks/use-permissions';
 import { formatDate, todayIso } from '@/shared/lib/format';
 import { AssignPositionModal, PositionModal } from './position-modals';
 import type { Position, PositionAssignment } from './position.types';
@@ -83,6 +84,12 @@ export function PositionsPage() {
   const [creating, setCreating] = useState(false);
   const [assigning, setAssigning] = useState<Position | null>(null);
   const [selected, setSelected] = useState<Position | null>(null);
+  /*
+   * GATED ON THE PERMISSION THE API ENFORCES. Every write route here carries
+   * `@RequirePermission('position.manage')`, and this page offered Create, Edit, Assign and End to
+   * anyone who could READ a position — four affordances that answer 403 for a `position.read` holder.
+   */
+  const canManage = usePermissions().can('position.manage');
   const [endingId, setEndingId] = useState<string | null>(null);
   const list = useListState();
 
@@ -161,7 +168,7 @@ export function PositionsPage() {
           {/* `Button` with the kit's icon size, not a bare `<button>`: the primitive already covers
               this — `size="icon-sm"` exists — and the FE ratchet counts raw buttons for exactly this
               reason. `aria-label` is not optional on an icon-only control. */}
-          {p.status === 'active' && (
+          {canManage && p.status === 'active' && (
             <Button
               variant="ghost"
               size="icon-sm"
@@ -172,15 +179,17 @@ export function PositionsPage() {
               <UserPlus className="h-4 w-4" strokeWidth={2} />
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Edit ${p.title}`}
-            title="Edit"
-            onClick={() => setEditing(p)}
-          >
-            <Pencil className="h-4 w-4" strokeWidth={2} />
-          </Button>
+          {canManage && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${p.title}`}
+              title="Edit"
+              onClick={() => setEditing(p)}
+            >
+              <Pencil className="h-4 w-4" strokeWidth={2} />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -219,10 +228,12 @@ export function PositionsPage() {
         title="Positions"
         description="Approved roles, their headcount, and who occupies them."
         actions={
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            New position
-          </Button>
+          canManage ? (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              New position
+            </Button>
+          ) : undefined
         }
         search={{
           value: list.search,
@@ -253,7 +264,7 @@ export function PositionsPage() {
           emptyMessage={list.search ? 'No positions match that search' : 'No positions yet'}
           emptyIcon={Briefcase}
           emptyAction={
-            list.search ? undefined : (
+            list.search || !canManage ? undefined : (
               <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
                 <Plus className="h-3.5 w-3.5" /> New position
               </Button>
@@ -329,7 +340,7 @@ export function PositionsPage() {
                   header: '',
                   align: 'right',
                   cell: (a: PositionAssignment) =>
-                    a.effectiveTo ? null : (
+                    a.effectiveTo || !canManage ? null : (
                       <Button variant="outline" size="sm" onClick={() => setEndingId(a.id)}>
                         End
                       </Button>

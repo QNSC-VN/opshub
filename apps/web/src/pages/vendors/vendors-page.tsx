@@ -32,7 +32,7 @@ import {
   ReviewGapsBanner,
   UnassessedSpendBanner,
 } from './vendor-reports';
-import { VENDOR_STATUS_FILTERS, criticalityTone, outcomeTone } from './vendor.types';
+import { VENDOR_STATUS_FILTERS, outcomeTone } from './vendor.types';
 import { useCriticalityLevels, useVendors } from './use-vendors';
 import type { Vendor } from './vendor.types';
 
@@ -136,9 +136,7 @@ export function VendorsPage() {
       key: 'criticality',
       header: 'Criticality',
       cell: (vendor) => (
-        <Badge tone={criticalityTone(vendor.criticality)}>
-          {humanizeStatus(vendor.criticality)}
-        </Badge>
+        <Badge tone={statusTone(vendor.criticality)}>{humanizeStatus(vendor.criticality)}</Badge>
       ),
     },
     {
@@ -364,7 +362,7 @@ export function VendorsPage() {
                 {
                   label: 'Criticality',
                   value: (
-                    <Badge tone={criticalityTone(selected.criticality)}>
+                    <Badge tone={statusTone(selected.criticality)}>
                       {humanizeStatus(selected.criticality)}
                     </Badge>
                   ),

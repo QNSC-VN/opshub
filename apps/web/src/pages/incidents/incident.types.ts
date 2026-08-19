@@ -58,11 +58,3 @@ export const EVENT_TYPES = ['note', 'evidence', 'notification'] as const;
  * calculates a deadline.
  */
 export const BREACH_NOTIFICATION_HOURS = 72;
-
-/** Severity → badge tone. A vocabulary two screens show, so it lives beside the type. */
-export function severityTone(severity: string): 'neutral' | 'blue' | 'amber' | 'red' {
-  if (severity === 'critical') return 'red';
-  if (severity === 'high') return 'amber';
-  if (severity === 'medium') return 'blue';
-  return 'neutral';
-}

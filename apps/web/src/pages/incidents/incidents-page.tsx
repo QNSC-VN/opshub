@@ -35,12 +35,7 @@ import {
 } from './incident-transition-modals';
 import { ReportIncidentModal } from './report-incident-modal';
 import { TimelinePanel } from './timeline-panel';
-import {
-  BREACH_NOTIFICATION_HOURS,
-  INCIDENT_STATUS_FILTERS,
-  NEXT_ACTIONS,
-  severityTone,
-} from './incident.types';
+import { BREACH_NOTIFICATION_HOURS, INCIDENT_STATUS_FILTERS, NEXT_ACTIONS } from './incident.types';
 import { useIncidents, useOverdueBreaches } from './use-incidents';
 import type { Incident } from './incident.types';
 
@@ -135,7 +130,7 @@ export function IncidentsPage() {
       key: 'severity',
       header: 'Severity',
       cell: (incident) => (
-        <Badge tone={severityTone(incident.severity)}>{humanizeStatus(incident.severity)}</Badge>
+        <Badge tone={statusTone(incident.severity)}>{humanizeStatus(incident.severity)}</Badge>
       ),
     },
     {
@@ -381,7 +376,7 @@ export function IncidentsPage() {
                 {
                   label: 'Severity',
                   value: (
-                    <Badge tone={severityTone(selected.severity)}>
+                    <Badge tone={statusTone(selected.severity)}>
                       {humanizeStatus(selected.severity)}
                     </Badge>
                   ),
