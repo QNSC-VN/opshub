@@ -15,5 +15,5 @@ export interface INotificationRepository {
   markRead(id: string, recipientId: string): Promise<void>;
   markAllRead(recipientId: string): Promise<void>;
   unreadCount(recipientId: string): Promise<number>;
-  existsBySourceEventId(sourceEventId: string): Promise<boolean>;
+  existsBySourceEventId(sourceEventId: string, executor?: DbExecutor): Promise<boolean>;
 }

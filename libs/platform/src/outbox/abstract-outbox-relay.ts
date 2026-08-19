@@ -98,13 +98,22 @@ export abstract class AbstractOutboxRelay<TRow extends { id: string; attempts: n
   /**
    * Process one row — the domain-specific side effect (send email, fire webhook…).
    *
-   * May return a PostCommitTask: a callback that runs AFTER the surrounding DB
-   * transaction commits.  Useful for pub/sub publishes that must not fire before
-   * the DB write is durable (e.g., Valkey → SSE push for notifications).
+   * `tx` IS THE RELAY'S OWN TRANSACTION, the same one `markSent` writes into. An implementation that
+   * enqueues follow-on work — one outbox feeding another — must use it, so the enqueue and this row's
+   * `sent` transition commit together or not at all. Doing that write on a separate handle, or in the
+   * post-commit task below, turns the chain into a dual write: the row is marked done, the follow-on
+   * work is lost, and nothing retries because there is no longer anything pending.
+   *
+   * The sibling repo schedules its notification email in the post-commit task for exactly this reason
+   * and has exactly that hole; the argument is here so this one does not.
+   *
+   * May return a PostCommitTask: a callback that runs AFTER the surrounding DB transaction commits.
+   * That is for side effects OUTSIDE the database which must not fire before the write is durable —
+   * a Valkey publish, an SSE push. Never for a database write.
    *
    * Return undefined/void when there is no post-commit work.
    */
-  protected abstract processRow(row: TRow): Promise<PostCommitTask | void>;
+  protected abstract processRow(row: TRow, tx: DrizzleTx): Promise<PostCommitTask | void>;
 
   /** Mark the row as successfully processed (within the relay transaction). */
   protected abstract markSent(tx: DrizzleTx, rowId: string): Promise<void>;
@@ -213,7 +222,7 @@ export abstract class AbstractOutboxRelay<TRow extends { id: string; attempts: n
 
         for (const row of batch) {
           try {
-            const task = await this.processRow(row);
+            const task = await this.processRow(row, tx);
             await this.markSent(tx, row.id);
             if (task) postCommitTasks.push(task);
             processed += 1;

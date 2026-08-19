@@ -89,7 +89,7 @@ export class EmailRelayService
       .for('update', { skipLocked: true });
   }
 
-  protected async processRow(row: EmailOutboxRow): Promise<PostCommitTask | void> {
+  protected async processRow(row: EmailOutboxRow, _tx: DrizzleTx): Promise<PostCommitTask | void> {
     await this.emailService.sendTemplate(
       row.to,
       row.template as EmailTemplateName,
