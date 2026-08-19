@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   DataTable,
   EntityPicker,
+  FormActions,
   FormField,
   Input,
   Modal,
@@ -89,14 +90,12 @@ function AssignRoleModal({
           </Select>
         </FormField>
         {err && <p className="text-xs text-danger">{err}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={loading}>
-            {loading ? 'Assigning…' : 'Assign'}
-          </Button>
-        </div>
+        <FormActions
+          loading={loading}
+          onClose={onClose}
+          submitLabel="Assign"
+          pendingLabel="Assigning…"
+        />
       </form>
     </Modal>
   );

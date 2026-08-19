@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Clock, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { Button, FormField, Modal, PageHeader, Textarea, humanizeStatus } from '@/shared/ui';
+import { FormActions, FormField, Modal, PageHeader, Textarea, humanizeStatus } from '@/shared/ui';
 import type { components } from '@/shared/api/types';
 
 type CatalogItem = components['schemas']['CatalogItemResponseDto'];
@@ -112,14 +112,12 @@ function RequestModal({
           />
         </FormField>
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Submitting…' : 'Submit request'}
-          </Button>
-        </div>
+        <FormActions
+          loading={mutation.isPending}
+          onClose={onClose}
+          submitLabel="Submit request"
+          pendingLabel="Submitting…"
+        />
       </form>
     </Modal>
   );
