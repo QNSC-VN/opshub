@@ -247,6 +247,53 @@ describe('registering', () => {
     expect(res.status).toBe(404);
   });
 
+  it('names BOTH bad references in one refusal, not the first one it hit', async () => {
+    const ghostOwner = '00000000-0000-7000-8000-0000000000fe';
+    const ghostCustodian = '00000000-0000-7000-8000-0000000000fd';
+
+    const res = await apiRequest(app, security, 'POST', '/information-assets', {
+      reference: nextRef(),
+      name: 'Two orphaned references',
+      type: 'other',
+      classification: 'internal',
+      classificationReason: WHY,
+      ownerId: ghostOwner,
+      custodianId: ghostCustodian,
+      confidentiality: 2,
+      integrity: 2,
+      availability: 2,
+    });
+
+    /*
+     * TWO REFERENCES, ONE ROUND TRIP, BOTH NAMED. The old form validated these one at a time and threw
+     * on the first, so a form with two bad ids told the user about the owner, and the corrected submit
+     * then failed on the custodian. Both ids appearing here is what proves the check batched them
+     * rather than short-circuiting.
+     */
+    expect(res.status).toBe(404);
+    expect(errorCode(res.body)).toBe('EMPLOYEE_NOT_FOUND');
+    const message = JSON.stringify(res.body);
+    expect(message).toContain(ghostOwner);
+    expect(message).toContain(ghostCustodian);
+  });
+
+  it('accepts a real owner with no custodian, so an absent optional reference is not a failure', async () => {
+    // The other half of `assertExist`: nullish ids are skipped, which is what let twelve call sites
+    // drop their `if (dto.custodianId)` guard. If the skip were wrong, this would 404 on `undefined`.
+    const res = await apiRequest(app, security, 'POST', '/information-assets', {
+      reference: nextRef(),
+      name: 'Owner only, no custodian',
+      type: 'other',
+      classification: 'internal',
+      classificationReason: WHY,
+      ownerId: FIXTURE.SECURITY.id,
+      confidentiality: 2,
+      integrity: 2,
+      availability: 2,
+    });
+    expect(res.status).toBe(201);
+  });
+
   it.each([
     [
       'personal data at internal',

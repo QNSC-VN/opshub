@@ -201,8 +201,7 @@ export class InformationAssetController {
     @CurrentUser() user: JwtPayload,
   ): Promise<InformationAssetResponseDto> {
     // `owner_id` and `custodian_id` carry no cross-schema FK, so without this a typo names nobody.
-    await this.employees.getById(dto.ownerId);
-    if (dto.custodianId) await this.employees.getById(dto.custodianId);
+    await this.employees.assertExist(dto.ownerId, dto.custodianId);
     return toDto(await this.service.register(dto, user));
   }
 
@@ -230,8 +229,7 @@ export class InformationAssetController {
     @Body() dto: UpdateInformationAssetDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<InformationAssetResponseDto> {
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
-    if (dto.custodianId) await this.employees.getById(dto.custodianId);
+    await this.employees.assertExist(dto.ownerId, dto.custodianId);
     return toDto(await this.service.update(id, dto, user));
   }
 

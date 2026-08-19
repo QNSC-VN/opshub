@@ -614,7 +614,7 @@ export class WorkforceController {
     // Refuse an allowance for an employee who does not exist: the table carries no cross-schema
     // FK (matching every other workforce table), so a typo'd uuid would otherwise become an
     // orphan row that no screen can show and no balance can use.
-    await this.employeeService.getById(dto.employeeId);
+    await this.employeeService.assertExist(dto.employeeId);
     await this.service.setLeaveEntitlement(dto, user);
   }
 

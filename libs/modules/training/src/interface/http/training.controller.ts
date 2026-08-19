@@ -348,7 +348,7 @@ export class TrainingController {
   ): Promise<TrainingRecordResponseDto> {
     // `employee_id` carries no cross-schema FK, matching every other module, so without this a typo
     // would become a record for somebody who does not exist.
-    await this.employees.getById(dto.employeeId);
+    await this.employees.assertExist(dto.employeeId);
     return toRecordDto(await this.service.recordCompletion(dto, user));
   }
 
@@ -401,7 +401,7 @@ export class TrainingController {
   async employeeRecords(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
   ): Promise<TrainingRecordResponseDto[]> {
-    await this.employees.getById(employeeId);
+    await this.employees.assertExist(employeeId);
     return (await this.service.listRecordsForEmployee(employeeId)).map(toRecordDto);
   }
 

@@ -328,8 +328,7 @@ export class PerformanceController {
   ): Promise<ReviewResponseDto> {
     // Both people must exist: `employee_id` and `reviewer_id` carry no cross-schema FK, so a typo
     // would otherwise create a review nobody can act on.
-    await this.employees.getById(dto.employeeId);
-    await this.employees.getById(dto.reviewerId);
+    await this.employees.assertExist(dto.employeeId, dto.reviewerId);
     return toReviewDto(await this.service.createReview({ ...dto, cycleId }, user));
   }
 
@@ -400,7 +399,7 @@ export class PerformanceController {
     @Body() dto: ReassignReviewerDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<ReviewResponseDto> {
-    await this.employees.getById(dto.reviewerId);
+    await this.employees.assertExist(dto.reviewerId);
     return toReviewDto(await this.service.reassignReviewer(id, dto.reviewerId, user));
   }
 

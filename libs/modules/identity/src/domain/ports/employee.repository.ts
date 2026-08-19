@@ -19,6 +19,13 @@ export const EMPLOYEE_REPOSITORY = Symbol('EMPLOYEE_REPOSITORY');
 export interface IEmployeeRepository {
   create(input: CreateEmployeeInput, tx?: DbExecutor): Promise<Employee>;
   findById(id: string): Promise<Employee | null>;
+  /**
+   * Which of these ids exist, in one query.
+   *
+   * For validating a REFERENCE rather than reading a person: thirty-four call sites called `findById`
+   * through the service and threw the result away, one round trip per id, purely for the throw.
+   */
+  findExistingIds(ids: string[]): Promise<string[]>;
   findByEmail(email: string): Promise<Employee | null>;
   findByEntraOid(oid: string): Promise<Employee | null>;
   upsertByEntraOid(

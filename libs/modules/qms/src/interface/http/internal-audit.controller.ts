@@ -147,7 +147,7 @@ export class InternalAuditController {
     @CurrentUser() user: JwtPayload,
   ): Promise<InternalAuditResponseDto> {
     // `lead_auditor_id` carries no cross-schema FK, so without this a typo would name nobody.
-    await this.employees.getById(dto.leadAuditorId);
+    await this.employees.assertExist(dto.leadAuditorId);
     return toDto(await this.service.plan(dto, user));
   }
 
@@ -177,7 +177,7 @@ export class InternalAuditController {
     @Body() dto: UpdateAuditDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<InternalAuditResponseDto> {
-    if (dto.leadAuditorId) await this.employees.getById(dto.leadAuditorId);
+    await this.employees.assertExist(dto.leadAuditorId);
     return toDto(await this.service.update(id, dto, user));
   }
 
@@ -296,7 +296,7 @@ export class InternalAuditController {
     @Body() dto: AssignAuditorDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
-    await this.employees.getById(auditorId);
+    await this.employees.assertExist(auditorId);
     await this.service.assignAuditor(id, auditorId, dto.role, user);
   }
 

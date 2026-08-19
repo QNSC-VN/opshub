@@ -138,7 +138,7 @@ export class RiskController {
   ): Promise<RiskResponseDto> {
     // `owner_id` carries no cross-schema FK, matching every other module, so without this a typo
     // would become a risk owned by nobody.
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toRiskDto(await this.service.identifyRisk(dto, user));
   }
 
@@ -166,7 +166,7 @@ export class RiskController {
     @Body() dto: UpdateRiskDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<RiskResponseDto> {
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toRiskDto(await this.service.updateRisk(id, dto, user));
   }
 
@@ -264,7 +264,7 @@ export class RiskController {
     @Body() dto: AddTreatmentDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<RiskTreatmentResponseDto> {
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toTreatmentDto(await this.service.addTreatment({ ...dto, riskId: id }, user));
   }
 
@@ -283,7 +283,7 @@ export class RiskController {
     @Body() dto: UpdateTreatmentDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<RiskTreatmentResponseDto> {
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toTreatmentDto(await this.service.updateTreatment(treatmentId, dto, user));
   }
 }

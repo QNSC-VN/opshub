@@ -204,7 +204,7 @@ export class ManagementReviewController {
     @CurrentUser() user: JwtPayload,
   ): Promise<ManagementReviewResponseDto> {
     // `chair_id` carries no cross-schema FK, so without this a typo would name nobody.
-    await this.employees.getById(dto.chairId);
+    await this.employees.assertExist(dto.chairId);
     return toDto(await this.service.schedule(dto, user));
   }
 
@@ -225,7 +225,7 @@ export class ManagementReviewController {
     @Body() dto: UpdateReviewActionDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<ReviewActionResponseDto> {
-    if (dto.ownerId) await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toActionDto(await this.service.updateAction(actionId, dto, user));
   }
 
@@ -321,7 +321,7 @@ export class ManagementReviewController {
     @Body() dto: UpdateReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<ManagementReviewResponseDto> {
-    if (dto.chairId) await this.employees.getById(dto.chairId);
+    await this.employees.assertExist(dto.chairId);
     return toDto(await this.service.update(id, dto, user));
   }
 
@@ -406,7 +406,7 @@ export class ManagementReviewController {
     @Body() dto: RaiseReviewActionDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<ReviewActionResponseDto> {
-    await this.employees.getById(dto.ownerId);
+    await this.employees.assertExist(dto.ownerId);
     return toActionDto(await this.service.raiseAction(id, dto, user));
   }
 }
