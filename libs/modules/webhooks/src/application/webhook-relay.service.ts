@@ -72,7 +72,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
       .for('update', { skipLocked: true });
   }
 
-  protected async processRow(row: DeliveryRow): Promise<PostCommitTask | void> {
+  protected async processRow(row: DeliveryRow, _tx: DrizzleTx): Promise<PostCommitTask | void> {
     const timestamp = new Date().toISOString();
     const body = JSON.stringify({
       id: row.id,

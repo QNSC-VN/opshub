@@ -18,7 +18,9 @@ import type { DrizzleTx } from '@platform';
 
 class TestableRelayService extends WebhookRelayService {
   public exposedProcessRow(row: Parameters<WebhookRelayService['processRow']>[0]) {
-    return this.processRow(row);
+    // This relay enqueues nothing, so the transaction argument goes unused. Passed as a stub rather
+    // than made optional on the base class: a relay that DOES chain must not be able to omit it.
+    return this.processRow(row, {} as DrizzleTx);
   }
 
   public exposedMarkSent(tx: DrizzleTx, rowId: string) {
