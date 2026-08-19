@@ -10,6 +10,7 @@ import {
   FormField,
   Input,
   Modal,
+  PanelState,
   StatusBadge,
   humanizeStatus,
   statusTone,
@@ -170,11 +171,12 @@ export function ContractHistoryPanel({ employeeId }: { employeeId: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {history.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {history.isError && <p className="text-xs text-danger">Failed to load the history.</p>}
-      {!history.isLoading && !history.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">No contracts recorded</p>
-      )}
+      <PanelState
+        query={history}
+        count={rows.length}
+        empty="No contracts recorded"
+        error="Failed to load the history."
+      />
 
       {rows.map((row) => (
         <article

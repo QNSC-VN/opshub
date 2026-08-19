@@ -19,6 +19,7 @@ import {
   TabToolbar,
   humanizeStatus,
   type DataTableColumn,
+  PanelState,
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
@@ -304,14 +305,18 @@ export function CatalogueTab() {
       >
         {selected && (
           <SlideOverSection title="Risks this control answers">
-            {linkedRisks.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
             {/* The audit question, named. A control with no risk behind it is either inherited from the
-                standard or unnecessary — and this is where somebody notices. */}
-            {!linkedRisks.isLoading && (linkedRisks.data?.length ?? 0) === 0 && (
-              <p className="text-xs text-fg-subtle">
-                No risks linked — nothing in the register currently justifies this control
-              </p>
-            )}
+                standard or unnecessary — and this is where somebody notices. Through `PanelState`
+                because it had NO error branch: a failed load rendered nothing at all, and the empty
+                test `!isLoading && length === 0` was true on failure too — so a broken request
+                claimed the control had no risks behind it, which is the audit finding it exists to
+                surface. */}
+            <PanelState
+              query={linkedRisks}
+              count={linkedRisks.data?.length ?? 0}
+              empty="No risks linked — nothing in the register currently justifies this control"
+              error="Failed to load the risks linked to this control."
+            />
             <div className="flex flex-col gap-1.5">
               {(linkedRisks.data ?? []).map((risk) => (
                 <div

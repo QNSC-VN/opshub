@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import { assetOptions } from '@/shared/api/picker-sources';
-import { Badge, Button, EntityPicker, RowActions, humanizeStatus } from '@/shared/ui';
+import { Badge, Button, EntityPicker, PanelState, RowActions, humanizeStatus } from '@/shared/ui';
 import { formatDateTime, orDash } from '@/shared/lib/format';
 import { classificationTone } from './asset.types';
 import { useAssetDevices, useClassificationHistory } from './use-assets';
@@ -28,11 +28,12 @@ export function ClassificationHistoryPanel({ assetId }: { assetId: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {history.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {history.isError && <p className="text-xs text-danger">Failed to load the history.</p>}
-      {!history.isLoading && !history.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">No changes recorded</p>
-      )}
+      <PanelState
+        query={history}
+        count={rows.length}
+        empty="No changes recorded"
+        error="Failed to load the history."
+      />
 
       {rows.map((change) => (
         <div
@@ -130,11 +131,12 @@ export function AssetDevicesPanel({
 
   return (
     <div className="flex flex-col gap-2">
-      {devices.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {devices.isError && <p className="text-xs text-danger">Failed to load the devices.</p>}
-      {!devices.isLoading && !devices.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">Not held on any registered device</p>
-      )}
+      <PanelState
+        query={devices}
+        count={rows.length}
+        empty="Not held on any registered device"
+        error="Failed to load the devices."
+      />
 
       {/* Stated once, above the list, when the level demands encryption: every device below is then a
           place that claim has to be true. */}

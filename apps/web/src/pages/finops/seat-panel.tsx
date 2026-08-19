@@ -16,6 +16,7 @@ import {
   FormField,
   Modal,
   PanelAction,
+  PanelState,
   Textarea,
 } from '@/shared/ui';
 import type { LicenseUtilization, SoftwareLicense } from './use-licenses';
@@ -198,13 +199,14 @@ export function SeatPanel({
         </p>
       )}
 
-      {seats.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {seats.isError && <p className="text-xs text-danger">Failed to load the seats.</p>}
-      {!seats.isLoading && !seats.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">
+      <PanelState
+        query={seats}
+        count={rows.length}
+        empty="
           {includeRevoked ? 'No seats have ever been assigned' : 'No seats in use'}
-        </p>
-      )}
+        "
+        error="Failed to load the seats."
+      />
 
       {rows.map((seat) => (
         // An ARTICLE named by its holder: a seat is a self-contained record, and the drawer's Details list

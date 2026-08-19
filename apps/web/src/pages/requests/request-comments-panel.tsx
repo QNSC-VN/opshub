@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Button, Textarea } from '@/shared/ui';
+import { Button, PanelState, Textarea } from '@/shared/ui';
 import { formatDateTime } from '@/shared/lib/format';
 import { useRequestComments } from './use-requests';
 
@@ -52,11 +52,12 @@ export function RequestCommentsPanel({ requestId }: { requestId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {thread.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {thread.isError && <p className="text-xs text-danger">Failed to load the comments.</p>}
-      {!thread.isLoading && !thread.isError && comments.length === 0 && (
-        <p className="text-xs text-fg-subtle">No comments yet</p>
-      )}
+      <PanelState
+        query={thread}
+        count={comments.length}
+        empty="No comments yet"
+        error="Failed to load the comments."
+      />
 
       {comments.map((comment) => (
         <div

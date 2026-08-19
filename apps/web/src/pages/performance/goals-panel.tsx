@@ -4,7 +4,7 @@ import { Plus, Target, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
-import { Badge, Button, ConfirmDialog, RowActions } from '@/shared/ui';
+import { Badge, Button, ConfirmDialog, PanelState, RowActions } from '@/shared/ui';
 import { orDash } from '@/shared/lib/format';
 import { SetGoalModal } from './rating-modals';
 import { REQUIRED_WEIGHT_TOTAL } from './performance.types';
@@ -77,11 +77,12 @@ export function GoalsPanel({
         variant="danger"
       />
 
-      {goals.isLoading && <p className="text-xs text-fg-subtle">Loading…</p>}
-      {goals.isError && <p className="text-xs text-danger">Failed to load the goals.</p>}
-      {!goals.isLoading && !goals.isError && rows.length === 0 && (
-        <p className="text-xs text-fg-subtle">No goals set</p>
-      )}
+      <PanelState
+        query={goals}
+        count={rows.length}
+        empty="No goals set"
+        error="Failed to load the goals."
+      />
 
       {rows.map((goal) => (
         <div
