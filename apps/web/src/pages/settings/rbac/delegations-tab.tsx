@@ -11,6 +11,7 @@ import {
   EntityPicker,
   FormActions,
   FormField,
+  IconAction,
   Input,
   Modal,
   StatusBadge,
@@ -200,15 +201,12 @@ export function DelegationsTab() {
       header: '',
       align: 'right',
       cell: (d) => (
-        <button
-          type="button"
-          aria-label="Delete delegation"
-          title="Delete delegation"
+        <IconAction
+          label="Delete delegation"
+          icon={Trash2}
+          tone="danger"
           onClick={() => setPendingDeleteId(d.id)}
-          className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        />
       ),
     },
   ];

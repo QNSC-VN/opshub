@@ -51,7 +51,7 @@ import { describe, expect, it } from 'vitest';
 // The 32 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
 // few widgets (the notification bell, the AI panel, the app shell's own nav) that were never screens.
 // Worth checking what is actually left before assuming the number can keep falling.
-const MAX_RAW_BUTTON = 32;
+const MAX_RAW_BUTTON = 7;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -212,6 +212,25 @@ const MAX_INLINE_EM_DASH = 0;
 const MAX_INLINE_DATE_FORMAT = 0;
 
 /**
+ * Raw `<button>`s with NO focus rule at all. MAY ONLY FALL — and it is at zero.
+ *
+ * THIS IS THE DEFECT; the raw-`<button>` count above is a proxy for it. Twenty-six of the thirty-two
+ * hand-rolled buttons had a `hover:` rule and no focus rule anywhere, so a keyboard user tabbing through
+ * them saw nothing move. That included four of the five in the app shell and all four in the
+ * notification bell — the controls reachable from every screen in the product.
+ *
+ * `Button` carries the ring in its base and `FOCUS_RING` names it for the few controls that should not
+ * be a `Button` at all, so a match here is something built by hand that skipped both.
+ *
+ * WHY THE TAG IS WALKED RATHER THAN MATCHED. My first version of this used
+ * `/<button[\s\S]*?>/` — non-greedy, so it stopped at the first `>`, and `onClick={() => x}` contains
+ * one. Every button whose focus rule sat after any arrow function read as focus-less, which overstated
+ * the original count as 29 and would have kept reporting three phantom violations forever. It now
+ * tracks brace depth and quotes, so the end of the tag is the end of the tag.
+ */
+const MAX_UNFOCUSABLE_BUTTON = 0;
+
+/**
  * The command palette owns its overlay, deliberately.
  *
  * It is a COMBOBOX surface, not a titled dialog: it implements `role="combobox"`, `role="option"`,
@@ -252,6 +271,52 @@ function files(predicate: (rel: string) => boolean): string[] {
  */
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^\n]*/g, '$1');
+}
+
+/**
+ * Every `<button ...>` OPENING TAG in a source file, read to its real end.
+ *
+ * Not a regex. `/<button[\s\S]*?>/` stops at the first `>`, and JSX attributes are full of arrow
+ * functions — so `onClick={() => close()}` ends the match before `className` is ever seen. This walks
+ * forward from `<button`, tracking brace depth and quote state, and ends the tag at the `>` that is
+ * actually the tag's own.
+ */
+function buttonTags(source: string): string[] {
+  const tags: string[] = [];
+  const opener = /<button\b/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = opener.exec(source)) !== null) {
+    let depth = 0;
+    let quote: string | null = null;
+    for (let i = match.index + match[0].length; i < source.length; i += 1) {
+      const char = source[i];
+      if (quote) {
+        if (char === quote && source[i - 1] !== '\\') quote = null;
+      } else if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+      } else if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+      } else if (char === '>' && depth === 0) {
+        tags.push(source.slice(match.index, i + 1));
+        break;
+      }
+    }
+  }
+  return tags;
+}
+
+/**
+ * Whether a tag says anything about focus.
+ *
+ * Both spellings count: the Tailwind utilities, and `FOCUS_RING` — the exported constant that names the
+ * same thing for controls which legitimately are not a `Button`. A case-sensitive search for `focus`
+ * misses the constant, which is how two correctly-ringed controls read as violations.
+ */
+function hasFocusRule(tag: string): boolean {
+  return tag.includes('focus') || tag.includes('FOCUS_RING');
 }
 
 const inConsumerLayers = (rel: string) =>
@@ -392,6 +457,49 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<FormActions\s/g);
     expect(total, 'FormActions is no longer used — the count above proves nothing').toBeGreaterThan(
       30,
+    );
+  });
+
+  it(`raw buttons with no focus rule <= ${MAX_UNFOCUSABLE_BUTTON}`, () => {
+    const byFile: Record<string, number> = {};
+    let total = 0;
+    for (const rel of files(inConsumerLayers)) {
+      const source = stripComments(readFileSync(join(SRC, rel), 'utf8'));
+      const unfocusable = buttonTags(source).filter((tag) => !hasFocusRule(tag)).length;
+      if (unfocusable) {
+        byFile[rel] = unfocusable;
+        total += unfocusable;
+      }
+    }
+    assertRatchet('raw buttons with no focus rule', total, MAX_UNFOCUSABLE_BUTTON, byFile);
+  });
+
+  it('finds the buttons it claims to be checking', () => {
+    // The floor for the walker itself. A tag matcher that silently stops finding tags reports a clean
+    // sweep of nothing — and the previous version of this check was wrong in the other direction, so
+    // both directions are now pinned: it must see the buttons, and it must read them whole.
+    const found = files(inConsumerLayers).flatMap((rel) =>
+      buttonTags(stripComments(readFileSync(join(SRC, rel), 'utf8'))),
+    );
+    expect(found.length, 'the tag walker sees no buttons at all').toBeGreaterThan(3);
+    // At least one real tag contains an arrow function, which is what broke the regex version.
+    expect(
+      found.some((tag) => tag.includes('=>')),
+      'no tag contains an arrow function — the walker is stopping early again',
+    ).toBe(true);
+  });
+
+  it('builds its buttons on the kit, so the ring is not per-caller', () => {
+    // The floor. Deleting buttons would satisfy the count above; what must stay true is that the shared
+    // component is doing the work, and that it still carries a focus ring for them to inherit.
+    const button = readFileSync(join(SRC, 'shared/ui/button.tsx'), 'utf8');
+    expect(button, 'Button no longer has a focus ring — every caller just lost one').toContain(
+      'focus-visible:ring',
+    );
+
+    const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<(?:Button|IconAction)\s/g);
+    expect(total, 'nothing uses the kit button — the count above proves nothing').toBeGreaterThan(
+      60,
     );
   });
 

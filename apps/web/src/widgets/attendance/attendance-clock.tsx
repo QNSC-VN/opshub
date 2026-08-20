@@ -1,4 +1,4 @@
-import { Checkbox } from '@/shared/ui';
+import { Checkbox, FOCUS_RING } from '@/shared/ui';
 import { useState, useEffect } from 'react';
 import { ENV } from '@/shared/config/env';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -174,6 +174,7 @@ export function AttendanceClock() {
         disabled={isPending || statusQ.isLoading}
         className={cn(
           'flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+          FOCUS_RING,
           isClockedIn
             ? 'bg-red-500 text-white hover:bg-red-600'
             : 'bg-emerald-500 text-white hover:bg-emerald-600',

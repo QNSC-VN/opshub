@@ -10,13 +10,16 @@ import {
   ConfirmDialog,
   DataTable,
   EntityDetailPanel,
+  FOCUS_RING,
   FormActions,
   FormField,
+  IconAction,
   Input,
   Modal,
   Select,
   type DataTableColumn,
 } from '@/shared/ui';
+import { cn } from '@/shared/lib/utils';
 import { SectionCard, SectionHeader } from './rbac-shared';
 import { usePermissions, useRoles } from './use-rbac';
 import type { RoleResponse } from '@/shared/api/types';
@@ -178,15 +181,12 @@ export function RolesTab() {
         <div onClick={(e) => e.stopPropagation()}>
           {/* A system role has no delete: the seed owns it, and removing it would break the guards. */}
           {!role.system && (
-            <button
-              type="button"
-              aria-label={`Delete ${role.name}`}
-              title={`Delete ${role.name}`}
+            <IconAction
+              label={`Delete ${role.name}`}
+              icon={Trash2}
+              tone="danger"
               onClick={() => setPendingDeleteId(role.id)}
-              className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            />
           )}
         </div>
       ),
@@ -276,7 +276,10 @@ export function RolesTab() {
                                     current.permissions.filter((x) => x !== p),
                                   )
                                 }
-                                className="text-fg-subtle transition-colors hover:text-danger"
+                                className={cn(
+                                  'rounded text-fg-subtle transition-colors hover:text-danger',
+                                  FOCUS_RING,
+                                )}
                               >
                                 <X className="h-3 w-3" />
                               </button>

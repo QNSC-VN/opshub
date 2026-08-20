@@ -46,6 +46,7 @@ import { CommandPalette } from '@/widgets/command-palette/command-palette';
 import { useCommandPaletteStore } from '@/widgets/command-palette/use-command-palette';
 import { useCurrentUser } from '@/shared/hooks/use-current-user';
 import { usePermissions } from '@/shared/hooks/use-permissions';
+import { Button } from '@/shared/ui';
 import { ThemeToggle } from '@/shared/ui/theme-toggle';
 import { FEATURES } from '@/shared/config/features';
 
@@ -320,14 +321,16 @@ export function AppShell() {
             <span className="text-sm font-semibold tracking-tight text-sidebar-fg-active">
               OpsHub
             </span>
-            <button
+            <Button
+              variant="sidebar"
+              size="icon-sm"
+              className="ml-auto"
               onClick={toggleSidebar}
               title="Hide sidebar"
               aria-label="Hide sidebar"
-              className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-sidebar-fg transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg-active"
             >
               <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
-            </button>
+            </Button>
           </div>
 
           {/* Divider */}
@@ -384,13 +387,10 @@ export function AppShell() {
             {/* Profile link */}
             <UserFooter />
             {/* Sign out */}
-            <button
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-sidebar-fg transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg-active"
-            >
+            <Button variant="sidebar" size="row" className="gap-2.5" onClick={handleLogout}>
               <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
               Sign out
-            </button>
+            </Button>
           </div>
         </aside>
       )}
@@ -401,42 +401,46 @@ export function AppShell() {
         <div className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface/85 px-6 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
           <div className="flex items-center gap-2">
             {collapsed && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={toggleSidebar}
                 title="Show sidebar"
                 aria-label="Show sidebar"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
               >
                 <PanelLeft className="h-4 w-4" strokeWidth={1.75} />
-              </button>
+              </Button>
             )}
             {/* ⌘K search trigger */}
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => showPalette()}
-              className="flex h-8 items-center gap-2 rounded-md border border-border bg-surface-muted px-3 text-sm text-fg-subtle transition-colors hover:border-border-strong hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+              className="h-8 gap-2 border-border bg-surface-muted px-3 text-sm text-fg-subtle hover:border-border-strong hover:bg-surface-muted hover:text-fg-muted"
             >
               <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
               <span className="hidden sm:inline">Search…</span>
               <kbd className="hidden rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-fg-subtle sm:inline">
                 ⌘K
               </kbd>
-            </button>
+            </Button>
           </div>
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <NotificationBell />
             {FEATURES.AI_ASSISTANT && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => setAiOpen(true)}
                 title="AI Assistant"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+                aria-label="AI Assistant"
               >
                 <Sparkles className="h-4 w-4" strokeWidth={1.75} />
-              </button>
+              </Button>
             )}
             {/* divider */}
             <div className="h-5 w-px bg-border" />

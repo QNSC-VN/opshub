@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { Button } from './button';
+import { cn } from '@/shared/lib/utils';
 
 /**
  * The pieces a TAB inside a page needs, as opposed to a whole list page.
@@ -104,6 +105,54 @@ export function RowActions({ children }: { children: ReactNode }) {
     <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
       {children}
     </div>
+  );
+}
+
+/**
+ * An icon-only row action.
+ *
+ * WHY IT IS IN THE KIT. Six places wrote the same icon button by hand — delete a role, remove a
+ * permission, delete a subscription, revoke an assignment, delete a delegation, and the three per row on
+ * the people page — with the same `rounded p-1.5 text-fg-subtle hover:bg-danger-bg hover:text-danger`.
+ * `people-page.tsx` had already extracted it locally, which is the signal that it belonged here.
+ *
+ * None of the six had a focus style, so the delete buttons in five tables were invisible to a keyboard
+ * user tabbing to them. Built on `Button`, so the ring comes from one place.
+ *
+ * `label` IS REQUIRED, not optional. An icon-only button with no accessible name announces itself as
+ * "button" — three per row is three of those, which the local version's own docblock recorded as the
+ * defect it was written to fix. Keeping it required is what stops that coming back.
+ */
+export function IconAction({
+  label,
+  icon: Icon,
+  onClick,
+  disabled,
+  tone = 'muted',
+}: {
+  label: string;
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+  onClick: () => void;
+  disabled?: boolean;
+  /** `danger` for a destructive row action — delete, revoke. */
+  tone?: 'muted' | 'danger';
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={cn(
+        'text-fg-subtle',
+        tone === 'danger' ? 'hover:bg-danger-bg hover:text-danger' : 'hover:text-fg',
+      )}
+    >
+      <Icon className="h-4 w-4" strokeWidth={2} />
+    </Button>
   );
 }
 

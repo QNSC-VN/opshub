@@ -48,3 +48,42 @@ test.describe('authenticated shell', () => {
     });
   }
 });
+
+/**
+ * The shell's own controls are visible when focused.
+ *
+ * WHY THIS IS A BROWSER TEST. jsdom computes no styles, so a unit test can only assert that a class
+ * NAME is present — it cannot tell whether the class produces anything. Tailwind's `ring` compiles to a
+ * `box-shadow`, so a real browser can be asked the one question that matters: after tabbing here, does
+ * anything actually change on screen?
+ *
+ * WHAT IT WOULD HAVE CAUGHT. Twenty-nine of the thirty-two hand-rolled buttons in the SPA had a `hover:`
+ * rule and no focus rule at all, including all five in this shell and all four in the notification bell.
+ * A keyboard user tabbing across the top bar saw nothing move — and every existing test passed, because
+ * every existing test clicks.
+ */
+test.describe('shell controls are keyboard-visible', () => {
+  /*
+   * ONLY CONTROLS THAT ALWAYS EXIST. My first version included `AI Assistant`, which is behind a feature
+   * flag, and guarded it with a mid-test `test.skip()` — that reported as a failure with an empty error
+   * in a full run rather than as a skip. A spec that has to reason about whether its subject is switched
+   * on is a spec that reports on the flag instead of on the thing.
+   */
+  const CONTROLS = ['Notifications', 'Hide sidebar'];
+
+  for (const name of CONTROLS) {
+    test(`${name} shows a focus ring`, async ({ page }) => {
+      await gotoInShell(page, '/');
+
+      const control = page.getByRole('button', { name }).first();
+      await control.focus();
+      await expect(control).toBeFocused();
+
+      const shadow = await control.evaluate((el) => getComputedStyle(el).boxShadow);
+      // `none` is the exact value a button with no focus rule reports, which is what all nine of these
+      // returned before they were moved onto the kit's Button.
+      expect(shadow, `${name} shows nothing when focused`).not.toBe('none');
+      expect(shadow).not.toBe('');
+    });
+  }
+});

@@ -12,6 +12,7 @@ import {
   EntityPicker,
   FormActions,
   FormField,
+  IconAction,
   Input,
   Modal,
   Select,
@@ -175,15 +176,12 @@ export function AssignmentsTab() {
       header: '',
       align: 'right',
       cell: (a) => (
-        <button
-          type="button"
-          aria-label="Revoke assignment"
-          title="Revoke assignment"
+        <IconAction
+          label="Revoke assignment"
+          icon={Trash2}
+          tone="danger"
           onClick={() => setPendingRevokeId(a.id)}
-          className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        />
       ),
     },
   ];

@@ -39,6 +39,7 @@ import { useCommandPaletteStore } from './use-command-palette';
 import { usePermissions } from '@/shared/hooks/use-permissions';
 import { useDebounced } from '@/shared/hooks/use-debounced';
 import { OVERLAY_LAYER } from '@/shared/ui/use-escape-to-close';
+import { Button } from '@/shared/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -389,13 +390,14 @@ export function CommandPalette() {
             className="flex-1 bg-transparent text-sm text-fg placeholder:text-fg-subtle focus:outline-none"
           />
           {query && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setQuery('')}
-              className="text-xs text-fg-subtle hover:text-fg-muted"
+              className="h-auto px-1.5 py-0.5 text-fg-subtle hover:bg-transparent hover:text-fg-muted"
             >
               Clear
-            </button>
+            </Button>
           )}
           <kbd className="hidden shrink-0 rounded border border-border bg-surface-muted px-1.5 py-0.5 text-[10px] text-fg-subtle sm:inline">
             Esc

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  Button,
   PageHeader,
   StatusBadge,
   UpgradeGate,
@@ -259,14 +260,15 @@ function SecurityPostureContent() {
         title="Security Posture"
         description="Microsoft Secure Score trends and baseline drift checks"
         actions={
-          <button
+          <Button
+            variant="outline"
             onClick={() => syncMut.mutate()}
             disabled={syncMut.isPending}
-            className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm font-medium text-fg-muted transition-colors hover:border-border-strong hover:text-fg disabled:opacity-50"
+            className="hover:border-border-strong"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', syncMut.isPending && 'animate-spin')} />
             Sync now
-          </button>
+          </Button>
         }
       />
 
@@ -393,13 +395,15 @@ function SecurityPostureContent() {
                 {checks.filter((c) => c.status === 'fail').length} failing ·{' '}
                 {checks.filter((c) => c.status === 'pass').length} passing
               </span>
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setShowPassing((p) => !p)}
-                className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
+                className="gap-1.5 hover:border-border-strong"
               >
                 {showPassing ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 {showPassing ? 'Hide passing' : 'Show passing'}
-              </button>
+              </Button>
             </div>
           </div>
 
