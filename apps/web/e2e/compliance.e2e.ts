@@ -1,4 +1,5 @@
-import { test, type APIRequestContext } from '@playwright/test';
+import { test } from './support/test';
+import { type APIRequestContext } from '@playwright/test';
 import { csrfHeaders, expect, gotoInShell } from './support/fixtures';
 
 /**

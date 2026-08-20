@@ -1,57 +1,59 @@
 import { expect, request, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 /**
- * ONE SIGNED-IN STATE PER SEAT, and the reason there is more than one.
+ * ONE SIGNED-IN STATE PER SEAT, AND A SEAT PER TEST.
  *
- * The DEFAULT rate-limit tier allows 200 requests a minute keyed on the USER id. Every spec used to sign
- * in as the same admin: roughly fifteen API calls per page load, times fifty specs inside three minutes,
- * crosses that line — and the refusal lands on whichever request is next, which is how it first arrived
- * disguised as a broken upload.
+ * The DEFAULT rate-limit tier allows 200 requests a minute keyed on the USER id, and it is one bucket
+ * across every route that tier covers — so a whole spec's traffic lands in one place.
  *
- * So the suite has four admin seats and spreads its spec FILES across them round-robin
- * (`playwright.config.ts`). Round-robin rather than a hand-written list of "heavy" files: the hand-written
- * version put two heavy files on one seat and 429'd again, and a rule nobody has to maintain cannot drift.
+ * WHAT WAS WRONG WITH FOUR SEATS PER FILE. Spec files were spread across four seats round-robin, which
+ * balances the load BETWEEN files and does nothing about the load inside one. With `workers: 1` exactly
+ * one file runs at a time, so one file's burst is one identity's burst. Measured from the API log during
+ * a full browser run: 268 requests in a single 60-second window on one seat. Adding seats to that scheme
+ * would not have changed the number, because the seat was never shared in the first place.
  *
- * Deliberately NOT solved by making the limiter configurable. A control tests can turn down stops
- * describing production.
+ * That is also why the 429s were so confusing to attribute. `RateLimitGuard` is a GUARD, so it
+ * short-circuits before the logging interceptor — nothing reaches the request log — and the refusal lands
+ * on whichever request happens to be next. It arrived once as a broken certificate upload, and once as a
+ * shell with no `nav`, which is what a 429 on the session bootstrap looks like from the outside.
+ *
+ * SO A SEAT BELONGS TO A TEST. `support/test.ts` overrides the `storageState` fixture per test, spreading
+ * a file's tests across all eight. The busiest file has seven tests and a test averages around forty
+ * requests, so every test gets its own bucket with several times the headroom it needs.
+ *
+ * Still deliberately NOT solved by making the limiter configurable. A control tests can turn down stops
+ * describing production — and this needed no such thing, because a test genuinely IS a separate session
+ * and giving it a separate identity is the honest model rather than a workaround.
  */
 export const AUTH_STATES = [
   'e2e/.auth/state.json',
   'e2e/.auth/state-2.json',
   'e2e/.auth/state-3.json',
   'e2e/.auth/state-4.json',
+  'e2e/.auth/state-5.json',
+  'e2e/.auth/state-6.json',
+  'e2e/.auth/state-7.json',
+  'e2e/.auth/state-8.json',
 ] as const;
 
 /** The primary seat, for the global setup's own sanity check and anything not sharded. */
 export const AUTH_STATE = AUTH_STATES[0];
 
 /**
- * OPEN QUESTION, recorded rather than guessed at: roughly one full run in three, ONE spec on a
- * non-primary seat starts on the login page — `gotoInShell` fails on the missing `nav`, which is the
- * assertion that exists to catch exactly this rather than let the spec fail on an empty screen later.
+ * THE "STARTS ON THE LOGIN PAGE" FLAKE, RESOLVED.
  *
- * Ruled out by measurement, so nobody repeats the work:
- *   - Valkey eviction — `maxmemory 0`, `noeviction`, `evicted_keys:0` during a failing run.
- *   - Session revocation — `authCache.revokeUser` fires only on offboarding, and no spec offboards.
- *   - The rate limiter — a 429 does not clear a session, and the message now says what it is.
+ * This file used to record it as an open question: roughly one full run in three, one spec on a
+ * non-primary seat began on the login page and `gotoInShell` failed on the missing `nav`. Valkey
+ * eviction and session revocation were both measured and ruled out. The rate limiter was ruled out too,
+ * on the grounds that "a 429 does not clear a session".
  *
- * Still to check when it next costs time: whether the BFF rotates a session on some concurrent path, and
- * whether two contexts on one origin can race the `__Host-` cookie. CI retries once, which passes, so this
- * is a flake and not a gate. It is written down because "re-run it" is not an explanation.
- */
-
-/**
- * A 429 IN A FULL RUN IS THE SUITE, NOT THE PRODUCT.
+ * That reasoning was sound and it eliminated the wrong theory. A 429 on the bootstrap request does not
+ * clear a session — it stops the app loading, so the router renders the login page and there is no `nav`
+ * to find. The evidence is a run where one failure carried a literal
+ * `{"code":"RATE_LIMITED"}` body and the others were this symptom, in the same minute.
  *
- * Every spec signs in as the same seeded admin, and each page load fires a dozen API calls, so a whole
- * run makes well over the DEFAULT tier's 200 requests per minute for that one user. The refusal then
- * lands on whichever request happens to be next — measured once as a 429 on a certificate presign, which
- * reads like a broken upload. Re-run the spec on its own before believing it; the upload paths carry the
- * stricter UPLOAD tier (30/min) and a handful of uploads per run stays comfortably inside it.
- *
- * Not worked around by skipping the limiter: it is a protective control, and a test environment that
- * disables it stops testing the thing that runs in production. Spreading the specs across seeded
- * identities is the real fix when this starts costing time.
+ * Per-test seats remove the cause. Left written down because the elimination was the interesting part:
+ * the theory was right and the test of it was wrong.
  */
 
 /**
@@ -67,7 +69,7 @@ export const FIXTURE = {
 } as const;
 
 /**
- * The admin seats, in the same order as `AUTH_STATES`. All four hold the same role; only the identity —
+ * The admin seats, in the same order as `AUTH_STATES`. All eight hold the same role; only the identity —
  * and therefore the rate-limit bucket — differs. Seeded by `db/seed.ts`.
  */
 export const SEAT_EMAILS = [
@@ -75,6 +77,10 @@ export const SEAT_EMAILS = [
   'admin2@opshub.local',
   'admin3@opshub.local',
   'admin4@opshub.local',
+  'admin5@opshub.local',
+  'admin6@opshub.local',
+  'admin7@opshub.local',
+  'admin8@opshub.local',
 ] as const;
 
 /**

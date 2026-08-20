@@ -25,4 +25,22 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    /*
+     * PLAYWRIGHT FIXTURES ARE NOT REACT, and two rules here cannot tell the difference.
+     *
+     * A fixture's signature is `async ({}, use) => …`: the empty destructuring pattern declares "this
+     * fixture depends on nothing", which `no-empty-pattern` reads as a mistake, and Playwright's `use`
+     * callback trips `react-hooks/rules-of-hooks` because the name begins with "use". Both are correct
+     * Playwright and neither is reachable from the app, so the rules are switched off for the e2e
+     * directory rather than papered over with inline disables at every fixture.
+     *
+     * Scoped to `e2e/` alone: these rules are exactly the ones that matter in `src/`.
+     */
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'no-empty-pattern': 'off',
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 );

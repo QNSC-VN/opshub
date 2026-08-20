@@ -80,10 +80,26 @@ const ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000001';
  * convenience of tests.
  */
 const E2E_ADMIN_EMPLOYEE_ID = '00000000-0000-7000-8000-000000000009';
-/** A third seat: the browser suite splits its spec files three ways. See `E2E_ADMIN_EMPLOYEE_ID`. */
+/*
+ * EIGHT SEATS, AND WHY IT IS EIGHT.
+ *
+ * Four seats were assigned per spec FILE, round-robin. That spread the load across files and did nothing
+ * about the load INSIDE one, which is where the limit was actually being crossed: with `workers: 1` only
+ * one file runs at a time, so one file's burst is one identity's burst. Measured from the API log on a
+ * full browser run: 268 requests in a single 60-second window on one seat, against a tier of 200. More
+ * seats assigned the same way would not have moved that number at all.
+ *
+ * So a seat now belongs to a TEST rather than to a file. The busiest file holds seven tests and a test
+ * averages around forty requests, so eight seats leave every test its own bucket with room to spare —
+ * and eight is the count because seven is the most tests any one file has, not because it is a round
+ * number.
+ */
 const E2E_ADMIN_THIRD_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000a';
-/** A fourth seat. The browser suite spreads its spec files across all of them, round-robin. */
 const E2E_ADMIN_FOURTH_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000b';
+const E2E_ADMIN_FIFTH_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000c';
+const E2E_ADMIN_SIXTH_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000d';
+const E2E_ADMIN_SEVENTH_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000e';
+const E2E_ADMIN_EIGHTH_EMPLOYEE_ID = '00000000-0000-7000-8000-00000000000f';
 const DEMO_EMPLOYEES: Array<{
   id: string;
   email: string;
@@ -112,6 +128,30 @@ const DEMO_EMPLOYEES: Array<{
     id: E2E_ADMIN_FOURTH_EMPLOYEE_ID,
     email: 'admin4@opshub.local',
     displayName: 'Admin User (fourth seat)',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_FIFTH_EMPLOYEE_ID,
+    email: 'admin5@opshub.local',
+    displayName: 'Admin User (fifth seat)',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_SIXTH_EMPLOYEE_ID,
+    email: 'admin6@opshub.local',
+    displayName: 'Admin User (sixth seat)',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_SEVENTH_EMPLOYEE_ID,
+    email: 'admin7@opshub.local',
+    displayName: 'Admin User (seventh seat)',
+    roleKey: 'admin',
+  },
+  {
+    id: E2E_ADMIN_EIGHTH_EMPLOYEE_ID,
+    email: 'admin8@opshub.local',
+    displayName: 'Admin User (eighth seat)',
     roleKey: 'admin',
   },
   {
