@@ -11,7 +11,7 @@
  */
 export { ActivityTimeline } from './activity-timeline';
 export { Badge, type BadgeTone } from './badge';
-export { Button, type ButtonProps } from './button';
+export { Button, FOCUS_RING, type ButtonProps } from './button';
 export { Card, CardContent, CardHeader, CardTitle } from './card';
 export { ConfirmDialog } from './confirm-dialog';
 export { DataTable, type DataTableColumn, type DataTableProps } from './data-table';

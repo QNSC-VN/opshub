@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   DataTable,
   EntityDetailPanel,
+  FOCUS_RING,
   FormActions,
   FormField,
   IconAction,
@@ -18,6 +19,7 @@ import {
   Select,
   type DataTableColumn,
 } from '@/shared/ui';
+import { cn } from '@/shared/lib/utils';
 import { SectionCard, SectionHeader } from './rbac-shared';
 import { usePermissions, useRoles } from './use-rbac';
 import type { RoleResponse } from '@/shared/api/types';
@@ -274,7 +276,10 @@ export function RolesTab() {
                                     current.permissions.filter((x) => x !== p),
                                   )
                                 }
-                                className="text-fg-subtle transition-colors hover:text-danger"
+                                className={cn(
+                                  'rounded text-fg-subtle transition-colors hover:text-danger',
+                                  FOCUS_RING,
+                                )}
                               >
                                 <X className="h-3 w-3" />
                               </button>

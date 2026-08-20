@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   DataTable,
   EntityDetailPanel,
+  IconAction,
   ListPage,
   RowAction,
   RowActions,
@@ -193,15 +194,12 @@ export function WebhooksPage() {
             </Button>
           )}
           {canManage && (
-            <button
-              type="button"
-              aria-label={`Delete subscription for ${sub.url}`}
-              title="Delete subscription"
+            <IconAction
+              label={`Delete subscription for ${sub.url}`}
+              icon={Trash2}
+              tone="danger"
               onClick={() => setPendingDeleteId(sub.id)}
-              className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            />
           )}
         </div>
       ),

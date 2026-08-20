@@ -2,8 +2,22 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type { ButtonHTMLAttributes, Ref } from 'react';
 import { cn } from '@/shared/lib/utils';
 
+/**
+ * The focus ring, as a class string.
+ *
+ * WHY IT IS EXPORTED. Most controls should be `Button`, which carries this in its base. A few genuinely
+ * should not: a `role="switch"` toggle with its own track, a card whose whole surface is the action, a
+ * combobox option row. Those still need a ring, and pasting five utilities at each site is how nine of
+ * them ended up with no ring at all — the string is long enough that leaving it out is invisible.
+ *
+ * `focus-visible`, not `focus`: a mouse click should not leave a ring behind, which is the reason the
+ * distinction exists.
+ */
+export const FOCUS_RING =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface';
+
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-[color,background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface active:translate-y-px disabled:pointer-events-none disabled:opacity-50',
+  `inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-[color,background-color,opacity] ${FOCUS_RING} active:translate-y-px disabled:pointer-events-none disabled:opacity-50`,
   {
     variants: {
       variant: {
