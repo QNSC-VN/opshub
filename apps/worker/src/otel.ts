@@ -18,4 +18,19 @@ import { shutdownOtel, startOtel } from '@qnsc-vn/observability/otel';
 
 export { shutdownOtel };
 
-startOtel({ defaultServiceName: 'opshub-worker' });
+/*
+ * `serviceNameEnvVar` IS WHY `OTEL_WORKER_SERVICE_NAME` EXISTS, and it was never passed.
+ *
+ * The variable is declared in the env schema with a default and listed in `.env.example`, so it reads as
+ * the knob for naming the worker — and nothing read it. The shared bootstrap takes the env var NAME as an
+ * option precisely so two services in one repo can be named independently; without it the worker falls
+ * back to `OTEL_SERVICE_NAME`, which is the api's variable, and the docblock above describes exactly that
+ * failure without noticing the wiring was missing.
+ *
+ * Deployed environments were unaffected: the stack sets `OTEL_SERVICE_NAME` per task, so the worker was
+ * correctly named there. What was broken is local and any environment that sets only the worker variable.
+ */
+startOtel({
+  serviceNameEnvVar: 'OTEL_WORKER_SERVICE_NAME',
+  defaultServiceName: 'opshub-worker',
+});

@@ -22,6 +22,8 @@ export class EmailService {
    * one, so this is only reachable under `dev`, where the provider logs and has nothing to send from.
    */
   private readonly from: string | undefined;
+  /** Deployment-wide reply-to, from `MAIL_REPLY_TO`. Overridden per call by `opts.replyTo`. */
+  private readonly replyTo: string | undefined;
 
   constructor(
     @Inject(EMAIL_PROVIDER) private readonly provider: IEmailProvider,
@@ -30,6 +32,19 @@ export class EmailService {
     const name = config.get('MAIL_FROM_NAME');
     const email = config.get('MAIL_FROM_EMAIL');
     this.from = email ? `${name} <${email}>` : undefined;
+    /*
+     * `MAIL_REPLY_TO` WAS DECLARED AND READ BY NOTHING.
+     *
+     * The env schema has had it since the mail config went in, `.env.example` lists it, the provider
+     * interface carries `replyTo` and `sendTemplate` accepts it per call — and no caller ever passed one,
+     * so the variable did nothing at all. An operator setting a reply-to address got mail with none, and
+     * the reply went back to a `no-reply` sender.
+     *
+     * A DEFAULT, not an override: a caller that passes its own `replyTo` still wins, which is what the
+     * per-call option is for. This only supplies the deployment-wide answer when nobody asked for a
+     * different one.
+     */
+    this.replyTo = config.get('MAIL_REPLY_TO');
   }
 
   async sendTemplate<K extends EmailTemplateName>(
@@ -43,7 +58,7 @@ export class EmailService {
       await this.provider.send({
         to,
         from: this.from,
-        replyTo: opts?.replyTo,
+        replyTo: opts?.replyTo ?? this.replyTo,
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
