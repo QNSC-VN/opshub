@@ -171,6 +171,21 @@
   --color-violet-fg: var(--status-violet-fg);
   --color-violet-bg: var(--status-violet-bg);
 
+  /*
+   * THE BOTTOM OF THE TYPE SCALE.
+   *
+   * Tailwind's smallest step is `text-xs` at 12px, and twenty-three places needed 10px — badge counts,
+   * `kbd` hints, uppercase group labels, the monospace type codes in a table. So they all wrote
+   * `text-[10px]`, and the ratchet counting those arbitrary values recorded that "this one does not need
+   * a custom scale". It did: `text-xs` is the only alternative and it is 20% bigger, so converting them
+   * would have quietly grown every badge in the product.
+   *
+   * One step, not three. The 9px and 11px one-offs snap to a real step rather than each earning their
+   * own — a scale with a rung per call site is not a scale.
+   */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 0.875rem;
+
   --font-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'Cascadia Code', monospace;
 

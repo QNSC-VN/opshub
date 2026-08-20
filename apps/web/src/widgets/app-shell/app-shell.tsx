@@ -223,7 +223,7 @@ function AvatarChip({ name, email }: { name: string; email: string }) {
   const idx = [...email].reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
   return (
     <span
-      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${colors[idx]} text-[10px] font-semibold text-white`}
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${colors[idx]} text-2xs font-semibold text-white`}
     >
       {initials || '?'}
     </span>
@@ -344,7 +344,7 @@ export function AppShell() {
               return (
                 <div key={gi} className="flex flex-col gap-0.5">
                   {group.label && (
-                    <span className="px-2 pb-1 text-[10px] font-medium uppercase tracking-widest text-sidebar-label">
+                    <span className="px-2 pb-1 text-2xs font-medium uppercase tracking-widest text-sidebar-label">
                       {group.label}
                     </span>
                   )}
@@ -365,7 +365,7 @@ export function AppShell() {
                       <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                       <span className="flex-1">{label}</span>
                       {upgradeBadge ? (
-                        <span className="rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-surface-muted text-fg-muted">
+                        <span className="rounded px-1 py-0.5 text-2xs font-semibold uppercase tracking-wide bg-surface-muted text-fg-muted">
                           Upgrade
                         </span>
                       ) : (
@@ -421,7 +421,7 @@ export function AppShell() {
             >
               <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
               <span className="hidden sm:inline">Search…</span>
-              <kbd className="hidden rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-fg-subtle sm:inline">
+              <kbd className="hidden rounded border border-border bg-surface px-1.5 py-0.5 text-2xs text-fg-subtle sm:inline">
                 ⌘K
               </kbd>
             </Button>

@@ -73,7 +73,7 @@ export function FindingsChart({ days }: { days: number }) {
             <span className="ml-auto font-semibold tabular-nums text-fg">{entry.value}</span>
           </div>
         ))}
-        <p className="mt-1 text-[10px] text-fg-subtle">open findings</p>
+        <p className="mt-1 text-2xs text-fg-subtle">open findings</p>
       </div>
     </div>
   );

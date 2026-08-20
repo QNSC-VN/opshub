@@ -330,7 +330,7 @@ const COMPLIANCE_TABS: { value: ComplianceTab; label: string; badge?: React.Reac
     value: 'shadow-it',
     label: 'Shadow IT',
     badge: FEATURES.SHADOW_IT ? undefined : (
-      <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-muted">
+      <span className="rounded bg-surface-muted px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-fg-muted">
         Upgrade
       </span>
     ),

@@ -399,7 +399,7 @@ export function CommandPalette() {
               Clear
             </Button>
           )}
-          <kbd className="hidden shrink-0 rounded border border-border bg-surface-muted px-1.5 py-0.5 text-[10px] text-fg-subtle sm:inline">
+          <kbd className="hidden shrink-0 rounded border border-border bg-surface-muted px-1.5 py-0.5 text-2xs text-fg-subtle sm:inline">
             Esc
           </kbd>
         </div>
@@ -420,7 +420,7 @@ export function CommandPalette() {
             >
               {grouped.map(([group, cmds]) => (
                 <li key={group}>
-                  <p className="mb-0.5 px-3 text-[10px] font-medium uppercase tracking-wider text-fg-subtle">
+                  <p className="mb-0.5 px-3 text-2xs font-medium uppercase tracking-wider text-fg-subtle">
                     {group}
                   </p>
                   <ul>
@@ -444,7 +444,7 @@ export function CommandPalette() {
         </div>
 
         {/* Footer hint */}
-        <div className="flex items-center justify-between border-t border-border px-4 py-2 text-[10px] text-fg-subtle">
+        <div className="flex items-center justify-between border-t border-border px-4 py-2 text-2xs text-fg-subtle">
           <span>
             <kbd className="rounded border border-border bg-surface-muted px-1 py-0.5">↑↓</kbd>{' '}
             navigate

@@ -351,7 +351,7 @@ function StepBar({ current }: { current: number }) {
             </div>
             <span
               className={cn(
-                'whitespace-nowrap text-[10px] font-medium',
+                'whitespace-nowrap text-2xs font-medium',
                 i === current ? 'text-fg' : 'text-fg-muted',
               )}
             >
@@ -452,9 +452,7 @@ function AccessCheckbox({
 function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-        {title}
-      </p>
+      <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-muted">{title}</p>
       {children}
     </div>
   );

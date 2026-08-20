@@ -109,7 +109,7 @@ function TimelineItem({ log }: { log: AuditLogResponse }) {
         )}
 
         {expanded && (
-          <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-surface-muted p-2 text-[10px] leading-relaxed text-fg-muted ring-1 ring-border">
+          <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-surface-muted p-2 text-2xs leading-relaxed text-fg-muted ring-1 ring-border">
             {JSON.stringify({ ...(log.changes ?? {}), ...(log.metadata ?? {}) }, null, 2)}
           </pre>
         )}
