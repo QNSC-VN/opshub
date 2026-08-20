@@ -1,6 +1,5 @@
-import { readdirSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
-import { AUTH_STATE, AUTH_STATES } from './e2e/support/fixtures';
+import { AUTH_STATE } from './e2e/support/fixtures';
 
 /**
  * Playwright config for the OpsHub SPA.
@@ -15,31 +14,21 @@ import { AUTH_STATE, AUTH_STATES } from './e2e/support/fixtures';
  * "the thing I just made appears in this list". Parallel workers would interleave writes into
  * each other's lists, and the failure would look like a UI bug.
  *
- * SHARED LOGINS, FOUR OF THEM, unlike rally, which logs in per test. rally has to: its bearer flow
+ * SHARED LOGINS, EIGHT OF THEM, unlike rally, which logs in per test. rally has to: its bearer flow
  * rotates the refresh token on every use and revokes the family on reuse, so a shared session trips
  * that protection. OpsHub's SPA holds no tokens at all — auth is an opaque `__Host-opshub_session`
  * cookie backed by Valkey, and nothing rotates it — so `global-setup.ts` signs in once PER SEAT and
- * the spec files are spread across those seats.
+ * `support/test.ts` hands each TEST one of those seats.
  *
- * Four rather than one because the DEFAULT rate-limit tier is keyed on the user id: fifty specs as a
- * single principal exceeds 200 requests a minute and the next request comes back 429. That is also why
- * the logins go through the BFF route, which sidesteps the AUTH_LOGIN tier rally needs a
+ * A SEAT PER TEST, NOT PER FILE. The DEFAULT rate-limit tier is keyed on the user id, so the previous
+ * scheme — spec files spread across four seats round-robin — balanced the load between files and did
+ * nothing about the load inside one. With one worker a file runs alone, so a file's burst is one
+ * identity's burst: measured at 268 requests in a single 60-second window against a tier of 200. Seats
+ * are chosen in `support/test.ts` now, which is why there is one project here rather than four.
+ *
+ * The logins still go through the BFF route, which sidesteps the AUTH_LOGIN tier rally needs a
  * `DISABLE_RATE_LIMIT` flag for.
  */
-/**
- * SPEC FILES, SPREAD ACROSS THE SEATS ROUND-ROBIN.
- *
- * Read from disk and sorted, so the assignment is deterministic and nobody maintains a list. The previous
- * version WAS a hand-written list of "heavy" files, and it put two heavy ones on the same seat and hit the
- * limiter again — the lesson being that a balance somebody has to remember is not a balance.
- */
-const SPEC_FILES = readdirSync('./e2e')
-  .filter((file) => file.endsWith('.e2e.ts'))
-  .sort();
-
-const seatFor = (seat: number): string[] =>
-  SPEC_FILES.filter((_, index) => index % AUTH_STATES.length === seat).map((file) => `**/${file}`);
-
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.ts',
@@ -58,25 +47,19 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   /**
-   * THREE PROJECTS, THREE ADMIN SEATS, and it is a rate-limit decision rather than a coverage one.
+   * ONE PROJECT. The seat is chosen per TEST by `support/test.ts`, which overrides the `storageState`
+   * fixture — and a fixture override beats a project-level `use`, so keeping four projects here would
+   * have been four identical browsers with a setting that never took effect.
    *
-   * The DEFAULT tier allows 200 requests a minute PER USER. Every spec signed in as the same admin, each
-   * page load costs roughly fifteen calls, and forty-odd specs run inside two minutes — so the suite
-   * crossed the line and whichever request landed next came back 429. It surfaced twice, the first time
-   * disguised as a broken upload.
-   *
-   * Splitting the spec FILES between two seeded admins halves each bucket. Both projects are the same
-   * browser with the same permissions; only the identity differs, so nothing about what is covered
-   * changes. The heavier, write-happy suites go on the second seat.
-   *
-   * Deliberately NOT solved by making the limit configurable: a control that tests can turn down is a
-   * control that stops describing production. If the suite doubles again, seed a third seat.
+   * What the projects used to do was shard spec FILES across four seats. That balanced files against each
+   * other and left a single file's traffic on a single identity, which is where the limit was crossed.
    */
-  projects: AUTH_STATES.map((state, seat) => ({
-    name: seat === 0 ? 'chromium' : `chromium-seat-${seat + 1}`,
-    testMatch: seatFor(seat),
-    use: { ...devices['Desktop Chrome'], storageState: state },
-  })),
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE },
+    },
+  ],
   webServer: {
     command: 'pnpm dev --port 5173',
     url: 'http://localhost:5173',

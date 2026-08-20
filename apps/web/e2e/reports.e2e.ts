@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test } from './support/test';
 import { expect, gotoInShell } from './support/fixtures';
 
 /**
