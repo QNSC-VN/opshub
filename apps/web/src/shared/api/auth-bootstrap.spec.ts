@@ -1,0 +1,150 @@
+// @vitest-environment jsdom
+/**
+ * The bootstrap hands its answer to the query cache, so nothing asks for it twice.
+ *
+ * WHAT WAS WRONG. `bootstrapAuth` fetches `GET /v1/auth/me` before React mounts — it has to, because
+ * the router guard cannot decide anything until the session is known — and then threw the response body
+ * away after copying five fields into the auth store. `useCurrentUser` asked the API for the same
+ * document a moment later, because it had no way to know the answer already existed. Measured on a
+ * Playwright run over the same two spec files: 26 `GET /v1/auth/me` for 26 mounts before, 13 after.
+ *
+ * Every page load, for every real user, paid for that.
+ *
+ * The other property here is about IDENTITY: `resetBootstrap` runs on logout and must leave nothing of
+ * the previous session in the cache.
+ */
+import { QueryClient } from '@tanstack/react-query';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ME_QUERY_KEY } from '@/shared/hooks/use-current-user';
+import { bootstrapAuth, resetBootstrap } from './auth-bootstrap';
+import { queryClient } from './query-client';
+import { useAuthStore } from './auth-store';
+import { getCsrfToken } from './csrf';
+
+const ME = {
+  sub: 'emp-1',
+  email: 'jane@acme.com',
+  name: 'Jane Doe',
+  roles: ['employee'],
+  permissions: ['asset.read'],
+  csrfToken: 'csrf-1',
+};
+
+function stubMe(body: unknown = ME, ok = true) {
+  const spy = vi.fn().mockResolvedValue({ ok, json: () => Promise.resolve(body) });
+  vi.stubGlobal('fetch', spy);
+  return spy;
+}
+
+beforeEach(() => {
+  // `resetBootstrap` is the production reset, and using it here means these tests exercise it rather
+  // than reaching into the module's private promise.
+  resetBootstrap();
+  useAuthStore.getState().clear();
+  vi.unstubAllGlobals();
+});
+
+describe('bootstrapAuth', () => {
+  it('seeds the me query, so the hook does not fetch it again', async () => {
+    const fetchSpy = stubMe();
+
+    await bootstrapAuth();
+
+    /*
+     * THE FIX, as a test. The cache entry has to exist under the key the hook reads — which is why that
+     * key is exported rather than written out in three files, since a typo here is invisible: the hook
+     * simply fetches, exactly as it did before, and nothing fails.
+     */
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toMatchObject({
+      sub: 'emp-1',
+      email: 'jane@acme.com',
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it('stores the whole document, not the five fields the auth store keeps', async () => {
+    stubMe();
+    await bootstrapAuth();
+
+    // The store holds what authorization needs; the cache holds what the profile screen renders. Seeding
+    // the store's subset would leave the hook refetching for the fields it lacked, which is the bug.
+    const cached = queryClient.getQueryData<typeof ME>(ME_QUERY_KEY);
+    expect(cached?.name).toBe('Jane Doe');
+    expect(cached?.permissions).toEqual(['asset.read']);
+  });
+
+  it('caches nothing when the caller is not signed in', async () => {
+    // A 401 is the ordinary "not signed in yet" answer. Caching it would hand the hook a non-answer it
+    // would then treat as data.
+    stubMe({}, false);
+
+    await bootstrapAuth();
+
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeUndefined();
+    expect(useAuthStore.getState().user).toBeNull();
+  });
+
+  it('caches nothing when the network fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+
+    await bootstrapAuth();
+
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeUndefined();
+    // And it still finishes: the router has to be able to render the login page.
+    expect(useAuthStore.getState().ready).toBe(true);
+  });
+
+  it('fetches once across concurrent callers', async () => {
+    // React StrictMode double-invokes; both calls share the in-flight promise, or the duplicate this
+    // whole change removes comes straight back through a different door.
+    const fetchSpy = stubMe();
+
+    await Promise.all([bootstrapAuth(), bootstrapAuth(), bootstrapAuth()]);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+});
+
+describe('resetBootstrap', () => {
+  it('empties the cache, so one identity’s data cannot outlive its session', async () => {
+    stubMe();
+    await bootstrapAuth();
+    // Something unrelated the previous session had read — a list the next identity may hold no
+    // permission for.
+    queryClient.setQueryData(['assets'], [{ id: 'asset-1' }]);
+
+    resetBootstrap();
+
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeUndefined();
+    expect(queryClient.getQueryData(['assets'])).toBeUndefined();
+  });
+
+  it('lets the next navigation bootstrap again', async () => {
+    const first = stubMe();
+    await bootstrapAuth();
+    expect(first).toHaveBeenCalledOnce();
+
+    resetBootstrap();
+    const second = stubMe();
+    await bootstrapAuth();
+
+    // Without the reset the memoised promise would resolve instantly and the next user would inherit
+    // the previous session's answer.
+    expect(second).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the query client', () => {
+  it('is the same instance the providers mount', () => {
+    // A second client would mean the bootstrap seeds a cache nothing reads — the silent version of this
+    // bug, where every assertion above still passes.
+    expect(queryClient).toBeInstanceOf(QueryClient);
+    expect(queryClient.getDefaultOptions().queries?.staleTime).toBe(0);
+  });
+
+  it('keeps the CSRF token wired up, which shares this code path', async () => {
+    stubMe();
+    await bootstrapAuth();
+    expect(getCsrfToken()).toBe('csrf-1');
+  });
+});

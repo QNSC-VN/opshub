@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { User, Mail, Briefcase, Building2, ExternalLink, CheckCircle2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
-import { STALE } from '@/shared/api/cache';
+import { useCurrentUser } from '@/shared/hooks/use-current-user';
 import {
   Badge,
   FormActions,
@@ -32,7 +32,6 @@ import { EM_DASH, formatDate } from '@/shared/lib/format';
 import { MyContracts, MyRoleHistory } from './my-employment';
 import type { components } from '@/shared/api/generated/api';
 
-type MeDto = components['schemas']['MeResponseDto'];
 type EmployeeDto = components['schemas']['EmployeeResponseDto'];
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
@@ -193,18 +192,6 @@ function EditProfileModal({ employee, onClose, onSuccess }: EditProfileModalProp
   );
 }
 
-function useMe() {
-  return useQuery<MeDto>({
-    queryKey: ['auth', 'me'],
-    queryFn: async () => {
-      const { data, error } = await api.GET('/v1/auth/me');
-      if (error || !data) throw new Error('Failed to load profile');
-      return data as MeDto;
-    },
-    staleTime: STALE.REPORT,
-  });
-}
-
 function useEmployee(id: string | undefined) {
   return useQuery<EmployeeDto>({
     queryKey: ['employees', id],
@@ -251,7 +238,7 @@ function RoleBadge({ role }: { role: string }) {
 
 export function ProfilePage() {
   const qc = useQueryClient();
-  const { data: me, isLoading: meLoading } = useMe();
+  const { data: me, isLoading: meLoading } = useCurrentUser();
   const { data: employee, isLoading: empLoading } = useEmployee(me?.sub);
   const [showEdit, setShowEdit] = useState(false);
   const [localEmployee, setLocalEmployee] = useState<EmployeeDto | null>(null);
