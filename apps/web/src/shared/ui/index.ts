@@ -41,6 +41,7 @@ export { TabPanel, Tabs, type TabItem } from './tabs';
 export {
   FormActions,
   FormError,
+  IconAction,
   PanelAction,
   RowAction,
   RowActions,

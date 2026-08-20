@@ -15,6 +15,7 @@ import { ENV } from '@/shared/config/env';
 import { Bell, Check, CheckCheck, X, Inbox } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import { Button } from '@/shared/ui';
 import { STALE } from '@/shared/api/cache';
 import { sessionFetch } from '@/shared/api/session-fetch';
 import type { InAppNotification, NotificationListResult } from '@/shared/api/types';
@@ -150,10 +151,12 @@ export function NotificationBell() {
 
   return (
     <div className="relative">
-      <button
+      <Button
         ref={buttonRef}
+        variant="ghost"
+        size="icon"
+        className="relative h-8 w-8 text-fg-subtle"
         onClick={() => setOpen((o) => !o)}
-        className="relative flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
         aria-label="Notifications"
       >
         <Bell className="h-4 w-4" strokeWidth={1.75} />
@@ -162,7 +165,7 @@ export function NotificationBell() {
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-      </button>
+      </Button>
 
       {open && (
         <div
@@ -174,21 +177,26 @@ export function NotificationBell() {
             <span className="text-sm font-semibold text-fg">Notifications</span>
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1 px-2 py-1 hover:text-fg-muted"
                   onClick={markAllRead}
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fg-muted hover:bg-surface-hover hover:text-fg-muted"
                   title="Mark all as read"
                 >
                   <CheckCheck className="h-3.5 w-3.5" />
                   Mark all read
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="h-auto w-auto p-1 text-fg-subtle"
                 onClick={() => setOpen(false)}
-                className="rounded-md p-1 text-fg-subtle hover:bg-surface-hover"
+                aria-label="Close notifications"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -213,13 +221,15 @@ export function NotificationBell() {
           {/* Footer */}
           {(data?.items.length ?? 0) > 0 && (
             <div className="border-t border-border px-4 py-2.5">
-              <button
+              <Button
+                variant="ghost"
+                size="row"
+                className="justify-center gap-1.5 text-xs hover:bg-transparent hover:text-fg-muted"
                 onClick={markAllRead}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-fg-muted transition-colors hover:text-fg-muted"
               >
                 <Check className="h-3.5 w-3.5" />
                 Mark all as read
-              </button>
+              </Button>
             </div>
           )}
         </div>
