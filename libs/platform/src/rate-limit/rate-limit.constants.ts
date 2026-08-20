@@ -10,10 +10,15 @@ export interface RateLimitTier {
   limit: number;
   /**
    * How to derive the rate-limit key.
-   * - 'ip'           — client IP (default; used for pre-auth endpoints)
-   * - 'userId'       — JWT sub (post-auth; NAT-safe)
-   * - 'refreshToken' — SHA-256 of the refresh_token cookie (per-session;
-   *                    NAT-safe without needing a decoded JWT)
+   * - 'ip'           — client IP; for pre-auth endpoints, where there is no credential yet
+   * - 'userId'       — the caller's SESSION: the session cookie or bearer token, hashed (default)
+   * - 'refreshToken' — SHA-256 of the refresh_token cookie (per-session)
+   *
+   * `userId` IS A HISTORICAL NAME. It used to read the decoded JWT `sub`, which is always undefined
+   * here: this guard is global and `JwtAuthGuard` is a route guard, so authentication has not run when
+   * the limiter executes. Every tier using it silently keyed on the IP instead — see the guard's own
+   * docblock for what that cost. The name is kept because the tier table is append-only and renaming a
+   * key changes every declaration; what it means is "per caller, not per network".
    */
   keyBy?: 'ip' | 'userId' | 'refreshToken';
 }
@@ -23,9 +28,16 @@ export interface RateLimitTier {
  * Append-only — never remove or change semantics of an existing tier name.
  */
 export const RATE_LIMIT_TIERS = {
-  /** Default: most read/write endpoints — 200 req/min per userId */
+  /**
+   * Default: most read/write endpoints — 200 req/min per session.
+   *
+   * PER SESSION AND NOT PER NETWORK, which is the whole point and was broken until the guard stopped
+   * asking for a principal that does not exist yet. Shared across a NAT this bound is meaningless: a
+   * page load costs roughly a dozen calls, so one office reached it at about fifteen simultaneous page
+   * loads and everybody there started getting 429s at once.
+   */
   DEFAULT: { name: 'DEFAULT', windowMs: 60_000, limit: 200 },
-  /** Strict: expensive search/list endpoints — 60 req/min per userId */
+  /** Strict: expensive search/list endpoints — 60 req/min per session */
   STRICT: { name: 'STRICT', windowMs: 60_000, limit: 60 },
   /** Auth login: brute-force protection — 5 attempts / 15 min per IP */
   AUTH_LOGIN: { name: 'AUTH_LOGIN', windowMs: 15 * 60_000, limit: 5, keyBy: 'ip' },
@@ -35,9 +47,9 @@ export const RATE_LIMIT_TIERS = {
    * so 300 employees behind the same corporate proxy each still get 30/min.
    */
   AUTH_REFRESH: { name: 'AUTH_REFRESH', windowMs: 60_000, limit: 30, keyBy: 'refreshToken' },
-  /** AI chat — LLM calls are expensive; 10 req/min per userId to cap inference cost. */
+  /** AI chat — LLM calls are expensive; 10 req/min per session to cap inference cost. */
   AI: { name: 'AI', windowMs: 60_000, limit: 10, keyBy: 'userId' },
-  /** File upload presign/confirm — S3 PUT costs; 30 req/min per userId. */
+  /** File upload presign/confirm — S3 PUT costs; 30 req/min per session. */
   UPLOAD: { name: 'UPLOAD', windowMs: 60_000, limit: 30, keyBy: 'userId' },
 } as const satisfies Record<string, RateLimitTier>;
 
