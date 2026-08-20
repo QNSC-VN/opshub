@@ -154,7 +154,7 @@ export function FileUploadWidget({
         {!uploading && !displayUrl && mode === 'image' && (
           <div className="flex flex-col items-center gap-1 text-center">
             <Upload className="h-5 w-5 text-fg-subtle" />
-            <span className="text-[10px] text-fg-subtle leading-tight px-1">Click or drag</span>
+            <span className="text-2xs text-fg-subtle leading-tight px-1">Click or drag</span>
           </div>
         )}
 

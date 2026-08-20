@@ -49,26 +49,26 @@ export function WorkforceSummary({ days }: { days: number }) {
       <div className="rounded-lg bg-surface-muted p-3">
         <p className="text-xs text-fg-subtle">Leave requests</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{totalLeave}</p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">this period</p>
+        <p className="mt-0.5 text-2xs text-fg-subtle">this period</p>
       </div>
       <div className="rounded-lg bg-surface-muted p-3">
         <p className="text-xs text-fg-subtle">Overtime hours</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{Math.round(totalOTHours)}</p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">total submitted</p>
+        <p className="mt-0.5 text-2xs text-fg-subtle">total submitted</p>
       </div>
       <div className="rounded-lg bg-surface-muted p-3">
         <p className="text-xs text-fg-subtle">Approved OT hours</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">
           {Math.round(approvedOT?.totalHours ?? 0)}
         </p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">
+        <p className="mt-0.5 text-2xs text-fg-subtle">
           avg {Math.round(approvedOT?.avgHours ?? 0)}h / request
         </p>
       </div>
       <div className="rounded-lg bg-surface-muted p-3">
         <p className="text-xs text-fg-subtle">Approved OT requests</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">{approvedOT?.count ?? 0}</p>
-        <p className="mt-0.5 text-[10px] text-fg-subtle">approved this period</p>
+        <p className="mt-0.5 text-2xs text-fg-subtle">approved this period</p>
       </div>
     </div>
   );

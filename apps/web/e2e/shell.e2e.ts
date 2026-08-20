@@ -87,3 +87,25 @@ test.describe('shell controls are keyboard-visible', () => {
     });
   }
 });
+
+/**
+ * The 2xs type step renders at the size it claims.
+ *
+ * WHY A BROWSER. `--text-2xs` living in `@theme` is a text assertion a unit test can make; that Tailwind
+ * GENERATED a rule from it, and that the rule reaches the element, is not. Delete the token and the class
+ * stays in the markup, matches nothing, and every badge falls back to the inherited size — nothing throws.
+ *
+ * Twenty-six elements moved onto this step from `text-[10px]`, so the whole conversion rests on it.
+ */
+test('the 2xs type step computes to 10px', async ({ page }) => {
+  await gotoInShell(page, '/');
+
+  // The sidebar's group labels are `text-2xs` and are present on every screen.
+  const label = page.locator('.text-2xs').first();
+  await expect(label).toBeAttached();
+
+  const size = await label.evaluate((el) => getComputedStyle(el).fontSize);
+  // 10px exactly, not "smaller than the default": a token resolving to nothing would inherit 16px and a
+  // token set to the wrong rung would give 12px, and both are the failures worth naming.
+  expect(size).toBe('10px');
+});

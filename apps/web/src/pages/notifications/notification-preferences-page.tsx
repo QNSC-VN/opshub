@@ -287,7 +287,7 @@ export function NotificationPreferencesPage() {
               <div className="flex items-center gap-6 shrink-0 pt-0.5">
                 <div className="flex flex-col items-center gap-1">
                   <Bell className="h-3.5 w-3.5 text-fg-muted" strokeWidth={1.75} />
-                  <span className="text-[10px] text-fg-subtle">In-app</span>
+                  <span className="text-2xs text-fg-subtle">In-app</span>
                   <Toggle
                     checked={wildcard?.inApp ?? true}
                     onChange={(v) => handleWildcard('inApp', v)}
@@ -296,7 +296,7 @@ export function NotificationPreferencesPage() {
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   <Mail className="h-3.5 w-3.5 text-fg-muted" strokeWidth={1.75} />
-                  <span className="text-[10px] text-fg-subtle">Email</span>
+                  <span className="text-2xs text-fg-subtle">Email</span>
                   <Toggle
                     checked={wildcard?.email ?? true}
                     onChange={(v) => handleWildcard('email', v)}
@@ -327,11 +327,11 @@ export function NotificationPreferencesPage() {
                 </p>
                 <div className="flex items-center justify-center gap-1">
                   <Bell className="h-3.5 w-3.5 text-fg-subtle" strokeWidth={1.75} />
-                  <span className="text-[10px] text-fg-subtle">In-app</span>
+                  <span className="text-2xs text-fg-subtle">In-app</span>
                 </div>
                 <div className="flex items-center justify-center gap-1">
                   <Mail className="h-3.5 w-3.5 text-fg-subtle" strokeWidth={1.75} />
-                  <span className="text-[10px] text-fg-subtle">Email</span>
+                  <span className="text-2xs text-fg-subtle">Email</span>
                 </div>
                 <div />
               </div>
@@ -352,7 +352,7 @@ export function NotificationPreferencesPage() {
                     >
                       <div>
                         <p className="text-sm text-fg">{label}</p>
-                        <p className="text-[10px] font-mono text-fg-subtle">{type}</p>
+                        <p className="text-2xs font-mono text-fg-subtle">{type}</p>
                       </div>
                       <div className="flex justify-center">
                         <Toggle

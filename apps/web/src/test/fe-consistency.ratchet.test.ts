@@ -55,9 +55,19 @@ const MAX_RAW_BUTTON = 7;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
-// Arbitrary `text-[13px]`-style values. Destination is a plain Tailwind size — this one does
-// not need a custom scale, unlike the font-size check omitted above. 29 → 27 (people) → 26 (rbac).
-const MAX_ARBITRARY_TEXT = 26;
+/**
+ * Arbitrary `text-[10px]`-style values. MAY ONLY FALL — and it is at zero.
+ *
+ * THE NOTE HERE USED TO SAY "destination is a plain Tailwind size — this one does not need a custom
+ * scale". That was wrong, and it is why the number sat at 26 for so long: twenty-three of them were
+ * `text-[10px]`, Tailwind's smallest step is `text-xs` at 12px, and converting them would have grown
+ * every badge, `kbd` hint and group label in the product by a fifth. There was no destination.
+ *
+ * So the scale gained its bottom step, `text-2xs`, and the two `11px` and one `9px` one-offs snapped to
+ * a real rung rather than each earning their own. Baseline zero, because a destination now exists for
+ * the size people actually reach for.
+ */
+const MAX_ARBITRARY_TEXT = 0;
 // Largest single source file, counted as `split('\n').length` — ONE MORE than `wc -l`, which
 // is worth stating because setting this from `wc -l` output puts it one below the real count
 // and the ratchet fails on the file it was measured from. rally's docblock flags the same trap.

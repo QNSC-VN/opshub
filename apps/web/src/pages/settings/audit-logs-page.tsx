@@ -241,14 +241,14 @@ export function AuditLogsPage() {
           <>
             {selected.changes && Object.keys(selected.changes).length > 0 && (
               <SlideOverSection title="Changes">
-                <pre className="overflow-x-auto rounded-md border border-border bg-surface-muted p-3 text-[11px] text-fg-muted">
+                <pre className="overflow-x-auto rounded-md border border-border bg-surface-muted p-3 text-xs text-fg-muted">
                   {JSON.stringify(selected.changes, null, 2)}
                 </pre>
               </SlideOverSection>
             )}
             {selected.metadata && Object.keys(selected.metadata).length > 0 && (
               <SlideOverSection title="Metadata">
-                <pre className="overflow-x-auto rounded-md border border-border bg-surface-muted p-3 text-[11px] text-fg-muted">
+                <pre className="overflow-x-auto rounded-md border border-border bg-surface-muted p-3 text-xs text-fg-muted">
                   {JSON.stringify(selected.metadata, null, 2)}
                 </pre>
               </SlideOverSection>
