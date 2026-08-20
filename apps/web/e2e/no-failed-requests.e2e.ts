@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test } from './support/test';
 import { SHELL_ROUTES } from './support/routes';
 import { expect, gotoInShell, settle } from './support/fixtures';
 
