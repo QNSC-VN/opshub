@@ -10,6 +10,9 @@ import {
   DescriptionList,
   PageHeader,
   PaginationFooter,
+  PanelAction,
+  RowAction,
+  RowActions,
   SegmentedControl,
   SlideOver,
   SlideOverSection,
@@ -100,27 +103,21 @@ function findingColumns(actions: {
     {
       key: 'actions',
       header: 'Actions',
-      // `stopPropagation` because the row itself opens the detail panel: without it, acknowledging
-      // a finding would also open the panel for it.
+      // Through `RowActions`, which owns the `stopPropagation` these needed: the row itself opens the
+      // detail panel, so without it acknowledging a finding would also open the panel for it.
       cell: (f) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <RowActions>
           {f.status === 'open' && (
-            <button
-              onClick={() => actions.onAcknowledge(f.id)}
-              className="rounded px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent-muted"
-            >
+            <RowAction tone="accent" onClick={() => actions.onAcknowledge(f.id)}>
               Acknowledge
-            </button>
+            </RowAction>
           )}
           {(f.status === 'open' || f.status === 'acknowledged') && (
-            <button
-              onClick={() => actions.onResolve(f.id)}
-              className="rounded px-2 py-1 text-xs font-medium text-success transition-colors hover:bg-success-bg"
-            >
+            <RowAction tone="success" onClick={() => actions.onResolve(f.id)}>
               Resolve
-            </button>
+            </RowAction>
           )}
-        </div>
+        </RowActions>
       ),
     },
   ];
@@ -219,25 +216,25 @@ function FindingsTab() {
           selected && (selected.status === 'open' || selected.status === 'acknowledged') ? (
             <div className="flex items-center gap-2">
               {selected.status === 'open' && (
-                <button
+                <PanelAction
+                  tone="accent"
                   onClick={() => {
                     handleAcknowledge(selected.id);
                     setSelected(null);
                   }}
-                  className="rounded-md bg-accent-muted px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-muted"
                 >
                   Acknowledge
-                </button>
+                </PanelAction>
               )}
-              <button
+              <PanelAction
+                tone="success"
                 onClick={() => {
                   setResolveId(selected.id);
                   setSelected(null);
                 }}
-                className="rounded-md bg-success-bg px-3 py-1.5 text-xs font-medium text-success hover:bg-success-bg"
               >
                 Resolve
-              </button>
+              </PanelAction>
             </div>
           ) : undefined
         }

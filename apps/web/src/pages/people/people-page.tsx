@@ -9,6 +9,7 @@ import {
   ConfirmDialog,
   DataTable,
   EntityDetailPanel,
+  IconAction,
   ListPage,
   FileUploadWidget,
   SegmentedControl,
@@ -343,39 +344,5 @@ export function PeoplePage() {
         confirmLabel="Remove photo"
       />
     </>
-  );
-}
-
-/**
- * An icon-only row action.
- *
- * `aria-label` is required rather than optional: three icon buttons per row with no accessible name
- * is three "button" announcements, and the previous version had exactly that.
- */
-function IconAction({
-  label,
-  icon: Icon,
-  onClick,
-  tone = 'muted',
-}: {
-  label: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  onClick: () => void;
-  tone?: 'muted' | 'danger';
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={
-        tone === 'danger'
-          ? 'rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger'
-          : 'rounded p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg'
-      }
-    >
-      <Icon className="h-4 w-4" strokeWidth={2} />
-    </button>
   );
 }

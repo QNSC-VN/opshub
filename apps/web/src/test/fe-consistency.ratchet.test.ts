@@ -51,7 +51,7 @@ import { describe, expect, it } from 'vitest';
 // The 32 that remain are mostly inside `shared/ui` itself, where a `<button>` IS the primitive, plus a
 // few widgets (the notification bell, the AI panel, the app shell's own nav) that were never screens.
 // Worth checking what is actually left before assuming the number can keep falling.
-const MAX_RAW_BUTTON = 32;
+const MAX_RAW_BUTTON = 15;
 // Inline style is nearly clean already. Static colour and spacing belong in token utilities;
 // the residue is data-driven (a computed width, a chart dimension).
 const MAX_INLINE_STYLE = 4;
@@ -210,6 +210,25 @@ const MAX_INLINE_EM_DASH = 0;
  * opinion is deliberate and documented.
  */
 const MAX_INLINE_DATE_FORMAT = 0;
+
+/**
+ * Raw `<button>`s with NO focus style at all. MAY ONLY FALL.
+ *
+ * THIS IS THE DEFECT; the raw-`<button>` count above is a proxy for it. Twenty-nine of the thirty-two
+ * hand-rolled buttons had a `hover:` rule and no `focus:` or `focus-visible:` rule anywhere — so a
+ * keyboard user tabbing through them saw nothing move. That included the five in the app shell (collapse,
+ * expand, sign out, command palette, AI) and the four in the notification bell, which is to say the
+ * controls reachable from every screen in the product.
+ *
+ * `Button` carries `focus-visible:ring-2 ring-accent/40 ring-offset-1` in its base, so anything built on
+ * it is covered and this only ever counts something built by hand.
+ *
+ * 29 → 12. The remaining twelve are not one shape: a `role="switch"` toggle with its own track, an
+ * option row inside the command palette's combobox, tinted chips. Each needs its own decision about
+ * which primitive it should be, and a mechanical rewrite would have got several of them wrong — so this
+ * counts them down rather than failing on them.
+ */
+const MAX_UNFOCUSABLE_BUTTON = 12;
 
 /**
  * The command palette owns its overlay, deliberately.
@@ -392,6 +411,42 @@ describe('FE consistency ratchets (only ever decrease)', () => {
     const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<FormActions\s/g);
     expect(total, 'FormActions is no longer used — the count above proves nothing').toBeGreaterThan(
       30,
+    );
+  });
+
+  it(`raw buttons with no focus style <= ${MAX_UNFOCUSABLE_BUTTON}`, () => {
+    /*
+     * Matched on the OPENING TAG rather than the file, because a file can hold one button with a ring
+     * and one without — `app-shell.tsx` did exactly that, and a file-level check would have called it
+     * covered. `focus` catches both `focus:` and `focus-visible:`; the point is whether the author
+     * thought about focus at all, not which spelling they used.
+     */
+    const byFile: Record<string, number> = {};
+    let total = 0;
+    for (const rel of files(inConsumerLayers)) {
+      const source = stripComments(readFileSync(join(SRC, rel), 'utf8'));
+      const unfocusable = (source.match(/<button\b[\s\S]*?>/g) ?? []).filter(
+        (tag) => !tag.includes('focus'),
+      ).length;
+      if (unfocusable) {
+        byFile[rel] = unfocusable;
+        total += unfocusable;
+      }
+    }
+    assertRatchet('raw buttons with no focus style', total, MAX_UNFOCUSABLE_BUTTON, byFile);
+  });
+
+  it('builds its buttons on the kit, so the ring is not per-caller', () => {
+    // The floor. Deleting buttons would satisfy the count above; what must stay true is that the shared
+    // component is doing the work, and that it still carries a focus ring for them to inherit.
+    const button = readFileSync(join(SRC, 'shared/ui/button.tsx'), 'utf8');
+    expect(button, 'Button no longer has a focus ring — every caller just lost one').toContain(
+      'focus-visible:ring',
+    );
+
+    const { total } = countMatches((rel) => rel.endsWith('.tsx'), /<(?:Button|IconAction)\s/g);
+    expect(total, 'nothing uses the kit button — the count above proves nothing').toBeGreaterThan(
+      60,
     );
   });
 

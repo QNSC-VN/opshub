@@ -12,6 +12,7 @@ import {
   EntityDetailPanel,
   FormActions,
   FormField,
+  IconAction,
   Input,
   Modal,
   Select,
@@ -178,15 +179,12 @@ export function RolesTab() {
         <div onClick={(e) => e.stopPropagation()}>
           {/* A system role has no delete: the seed owns it, and removing it would break the guards. */}
           {!role.system && (
-            <button
-              type="button"
-              aria-label={`Delete ${role.name}`}
-              title={`Delete ${role.name}`}
+            <IconAction
+              label={`Delete ${role.name}`}
+              icon={Trash2}
+              tone="danger"
               onClick={() => setPendingDeleteId(role.id)}
-              className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            />
           )}
         </div>
       ),
