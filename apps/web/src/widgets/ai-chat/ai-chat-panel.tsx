@@ -3,6 +3,7 @@ import { Sparkles, SendHorizonal, RefreshCw, AlertCircle, Bot, User } from 'luci
 import { cn } from '@/shared/lib/utils';
 import { SlideOver } from '@/shared/ui/slide-over';
 import { useAiChat, type ChatMessage } from './use-ai-chat';
+import { Button } from '@/shared/ui';
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
@@ -29,14 +30,14 @@ function EmptyState({ onSuggest }: { onSuggest: (text: string) => void }) {
       </div>
       <div className="flex w-full flex-col gap-2">
         {SUGGESTIONS.map((s) => (
-          <button
+          <Button
             key={s}
-            type="button"
+            variant="outline"
             onClick={() => onSuggest(s)}
-            className="rounded-lg border border-border bg-surface-muted px-4 py-2.5 text-left text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-fg"
+            className="h-auto justify-start bg-surface-muted px-4 py-2.5 text-left text-xs hover:border-accent/40 hover:bg-surface"
           >
             {s}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
@@ -65,9 +66,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       <div
         className={cn(
           'max-w-[84%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
-          isUser
-            ? 'bg-accent text-white'
-            : 'bg-surface-muted text-fg ring-1 ring-border',
+          isUser ? 'bg-accent text-white' : 'bg-surface-muted text-fg ring-1 ring-border',
         )}
       >
         {msg.content.split('\n').map((line, i) => (
@@ -140,17 +139,18 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     void handleSend();
   }
 
-  const headerActions = messages.length > 0 ? (
-    <button
-      type="button"
-      onClick={clear}
-      title="Clear conversation"
-      aria-label="Clear conversation"
-      className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-    >
-      <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
-    </button>
-  ) : undefined;
+  const headerActions =
+    messages.length > 0 ? (
+      <button
+        type="button"
+        onClick={clear}
+        title="Clear conversation"
+        aria-label="Clear conversation"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+    ) : undefined;
 
   return (
     <SlideOver
@@ -213,7 +213,10 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
         {error && (
           <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm dark:border-red-900/40 dark:bg-red-950/30">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500 dark:text-red-400" strokeWidth={2} />
+            <AlertCircle
+              className="mt-0.5 h-4 w-4 shrink-0 text-red-500 dark:text-red-400"
+              strokeWidth={2}
+            />
             <p className="text-red-700 dark:text-red-300">{error}</p>
           </div>
         )}

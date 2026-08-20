@@ -20,6 +20,7 @@ import { api } from '@/shared/api/client';
 import { useCurrentUser } from '@/shared/hooks/use-current-user';
 import {
   Badge,
+  Button,
   FormActions,
   FormField,
   Input,
@@ -316,13 +317,15 @@ export function ProfilePage() {
                       {humanizeStatus(displayEmployee.status)}
                     </StatusBadge>
                   )}
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowEdit(true)}
-                    className="flex items-center gap-1.5 h-8 rounded-lg border border-border px-3 text-xs font-medium text-fg-muted hover:bg-surface-hover"
+                    className="gap-1.5"
                   >
                     <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
                     Edit
-                  </button>
+                  </Button>
                 </div>
               </div>
               {me.roles.length > 0 && (

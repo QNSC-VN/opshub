@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { api } from '@/shared/api/client';
 import { apiErrorMessage } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated/api';
+import { IconAction } from '@/shared/ui';
 
 type PreferenceDto = components['schemas']['PreferenceResponseDto'];
 
@@ -303,13 +304,11 @@ export function NotificationPreferencesPage() {
                   />
                 </div>
                 {wildcard && (
-                  <button
+                  <IconAction
+                    label="Reset global override"
+                    icon={RotateCcw}
                     onClick={resetWildcard}
-                    className="flex items-center gap-1 text-xs text-fg-subtle hover:text-fg-muted pt-4"
-                    title="Reset global override"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </button>
+                  />
                 )}
               </div>
             </div>
@@ -373,13 +372,11 @@ export function NotificationPreferencesPage() {
                       </div>
                       <div className="flex justify-center">
                         {!resolved.isDefault && (
-                          <button
+                          <IconAction
+                            label={`Reset ${label} to default`}
+                            icon={RotateCcw}
                             onClick={() => handleReset(type)}
-                            title="Reset to default"
-                            className="rounded p-1 text-fg-subtle hover:text-fg-muted"
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} />
-                          </button>
+                          />
                         )}
                       </div>
                     </div>
