@@ -649,3 +649,69 @@ variable "alarm_emails" {
   type        = list(string)
   default     = []
 }
+
+# ── Outbound email ────────────────────────────────────────────────────────────
+
+variable "email_provider" {
+  description = <<-EOT
+    Which transport sends mail: "dev" logs and sends nothing, "ses" uses this account's SES.
+
+    Defaults to "dev" so applying this module changes nothing about mail until somebody chooses to
+    turn it on. Choosing "ses" needs `mail_from_email` set AND the sender's domain verified in SES —
+    the IAM grant below is created either way, and grants nothing when there is no sender.
+  EOT
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "ses", "resend"], var.email_provider)
+    error_message = "email_provider must be dev, ses or resend."
+  }
+}
+
+variable "mail_from_email" {
+  description = <<-EOT
+    The verified sender address, e.g. no-reply@opshub.example.com.
+
+    NO DEFAULT, deliberately. The app used to default this to a domain a deployment may not own, and
+    the result was not a failure: mail went out failing SPF and DKIM, which is silent non-delivery or
+    delivery to spam. Empty is the honest value when mail is off, and the app refuses to boot with a
+    non-dev provider and no sender.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.email_provider == "dev" || var.mail_from_email != ""
+    error_message = "mail_from_email is required when email_provider is not \"dev\"."
+  }
+}
+
+variable "mail_from_name" {
+  description = "Display name on outgoing mail."
+  type        = string
+  default     = "OpsHub"
+}
+
+variable "mail_reply_to" {
+  description = <<-EOT
+    Where replies go. Empty means they land on the no-reply sender.
+
+    Worth setting once a human is on the other end of anything the product sends: a reply to a
+    notification is a reply to nobody otherwise.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "ses_configuration_set" {
+  description = <<-EOT
+    SES configuration set to tag every send with. Optional.
+
+    What it buys is attribution, not delivery: without one, a bounce or complaint arrives as an event
+    nothing can tie back to the message that caused it. Sends work either way, which is why this is
+    easy to leave unset and regret later.
+  EOT
+  type        = string
+  default     = ""
+}

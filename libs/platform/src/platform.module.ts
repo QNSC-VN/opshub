@@ -26,6 +26,7 @@ import { ActorScope } from './auth/actor-scope.service';
 import { RouteAuthzAudit } from './auth/route-authz-audit';
 import { DevEmailProvider } from './email/providers/dev.provider';
 import { ResendEmailProvider } from './email/providers/resend.provider';
+import { SesEmailProvider } from './email/providers/ses.provider';
 import { EmailService } from './email/email.service';
 import { EmailSchedulerService } from './email/email-scheduler.service';
 import { NotificationSchedulerService } from './notifications/notification-scheduler.service';
@@ -106,6 +107,19 @@ import { EntityAttachmentsService } from './storage/entity-attachments.service';
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) => {
         const provider = config.get('EMAIL_PROVIDER');
+        if (provider === 'ses') {
+          /*
+           * NO KEY TO CHECK, which is the point of choosing SES: the credential is the task role, so
+           * there is nothing to forget in a secret store. What CAN be forgotten is the `ses:SendEmail`
+           * grant on that role — and that failure surfaces as `AccessDenied` on every send while the
+           * service reports healthy, so it is called out in the provider's own docblock rather than
+           * guessed at here. `MAIL_FROM_EMAIL` is already refused at boot for any non-dev provider.
+           */
+          return new SesEmailProvider(
+            config.get('AWS_REGION'),
+            config.get('SES_CONFIGURATION_SET'),
+          );
+        }
         if (provider === 'resend') {
           const apiKey = config.get('RESEND_API_KEY');
           if (!apiKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');

@@ -96,10 +96,14 @@ export default defineConfig({
       // moved: lines had drifted 3.06 behind, which is exactly the "protects nothing" case it guards.
       // Set about a point under actual, so run-to-run variance does not fail a branch that added no
       // code.
-      // Raised 2026-08-21 with the outbound-URL guard — `outbound-url.spec.ts`, the relay's
-      // delivery-time cases and the SSRF end-to-end block. Measured lines 38.69 / statements 38.55 /
-      // branches 30.44 / functions 26.25, and `check:coverage-floors` failed the PR before these moved:
-      // branches had drifted 3.44 behind, which is the "protects nothing" case it exists to catch.
+      // Raised 2026-08-21, twice in one day and merged into one note. First the outbound-URL guard —
+      // `outbound-url.spec.ts`, the relay's delivery-time cases, the SSRF end-to-end block — then the
+      // SES transport's `ses.provider.spec.ts`. `check:coverage-floors` failed BOTH branches before the
+      // floors moved: branches had drifted 3.44 behind on the first, which is past the 3-point limit
+      // that means a floor protects nothing at all.
+      // Measured on the two TOGETHER — lines 38.80 / statements 38.66 / branches 30.61 / functions
+      // 26.32. Neither branch's own figure applies once both are in, which is why the rebase
+      // re-measured rather than keeping whichever number won the conflict.
       thresholds: {
         lines: 37,
         functions: 25,
