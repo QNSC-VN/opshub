@@ -52,11 +52,14 @@ function toDto(a: Asset): AssetResponseDto {
   };
 }
 
-function toAssignmentDto(a: AssetAssignment): AssetAssignmentResponseDto {
+function toAssignmentDto(
+  a: AssetAssignment & { employeeName?: string | null },
+): AssetAssignmentResponseDto {
   return {
     id: a.id,
     assetId: a.assetId,
     employeeId: a.employeeId,
+    employeeName: a.employeeName ?? null,
     assignedAt: a.assignedAt.toISOString(),
     returnedAt: a.returnedAt ? a.returnedAt.toISOString() : null,
     notes: a.notes,

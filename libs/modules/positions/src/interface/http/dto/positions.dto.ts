@@ -113,3 +113,17 @@ export class EmployeePositionResponseDto {
   endReason!: string | null;
   createdAt!: string;
 }
+
+/**
+ * Who holds a position — the same row with the PERSON named.
+ *
+ * A separate shape rather than a nullable field on the one above, for the reason its own docblock
+ * gives about positions: the writes (`assign`, `endAssignment`) hand back the row to a caller who
+ * just supplied the employee id, so resolving it would tell them what they passed in. Only the read
+ * needs the name, and the SPA rendered `employeeId` there — a list headed "who holds this role"
+ * answering with a uuid.
+ */
+export class PositionAssignmentResponseDto extends EmployeePositionResponseDto {
+  /** Null when the employee row is gone. The assignment is still part of the position's history. */
+  employeeName!: string | null;
+}

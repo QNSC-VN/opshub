@@ -4,6 +4,8 @@ import {
   ErrorCodes,
   assertDateOrder,
   InjectDrizzle,
+  nameOf,
+  resolveEmployeeNames,
   NotFoundException,
   PreconditionFailedException,
   type DrizzleDB,
@@ -262,9 +264,18 @@ export class PositionsService {
     return this.repo.listAssignmentsForEmployee(employeeId);
   }
 
-  async listAssignmentsForPosition(positionId: string): Promise<EmployeePosition[]> {
+  async listAssignmentsForPosition(
+    positionId: string,
+  ): Promise<(EmployeePosition & { employeeName: string | null })[]> {
     await this.getPosition(positionId);
-    return this.repo.listAssignmentsForPosition(positionId);
+    const rows = await this.repo.listAssignmentsForPosition(positionId);
+    // Names for the whole list in one query: this is read to answer "who holds this role", which a
+    // column of uuids cannot.
+    const names = await resolveEmployeeNames(
+      this.db,
+      rows.map((r) => r.employeeId),
+    );
+    return rows.map((r) => ({ ...r, employeeName: nameOf(names, r.employeeId) }));
   }
 
   /** The position an employee holds now, or null when they hold none. */

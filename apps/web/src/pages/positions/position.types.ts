@@ -7,4 +7,9 @@ import type { components } from '@/shared/api/types';
  * answer — and it comes from the generated schema rather than being assembled here.
  */
 export type Position = components['schemas']['PositionOccupancyResponseDto'];
-export type PositionAssignment = components['schemas']['EmployeePositionResponseDto'];
+/*
+ * The NAMED read shape. `GET /positions/:id/assignments` returns `PositionAssignmentResponseDto` —
+ * the same row plus `employeeName` — while the writes keep the plain one, because a caller who just
+ * supplied an employee id does not need it resolved back.
+ */
+export type PositionAssignment = components['schemas']['PositionAssignmentResponseDto'];

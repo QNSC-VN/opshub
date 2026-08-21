@@ -68,6 +68,8 @@ interface PositionRow {
 interface AssignmentRow {
   id: string;
   employeeId: string;
+  /** Resolved on the READ of a position's assignments; absent on the write shapes, by design. */
+  employeeName?: string | null;
   positionId: string;
   /** History rows only — see the `positions/me` test for why the join exists. */
   positionCode?: string;
@@ -418,6 +420,39 @@ describe('a frozen position', () => {
 
     // The occupant is still counted: a hiring pause is not a dismissal.
     expect(await occupancyOf(position.id)).toMatchObject({ filled: 1 });
+  });
+});
+
+describe('naming who holds the role', () => {
+  /*
+   * `GET /positions/:id/assignments` is opened to answer "who has held this role", and the SPA
+   * rendered `employeeId` — so the table answered with uuids.
+   *
+   * The WRITES keep the plain shape on purpose, and that asymmetry is asserted below: `assign` hands
+   * the row back to a caller who just supplied the employee id, so resolving it would tell them what
+   * they passed in. A field that appears on every shape "for consistency" is a query nobody needed.
+   */
+  it('names the employee on a position READ, and not on the write that created it', async () => {
+    const position = await createPosition(1);
+    const created = await assign(position.id, FIXTURE.NO_PERMISSIONS.id, '2041-01-01');
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(
+      (unwrap<AssignmentRow>(created.body) as { employeeName?: unknown }).employeeName,
+      'the write resolved a name its caller already had',
+    ).toBeUndefined();
+
+    const { status, body } = await apiRequest(
+      app,
+      hr,
+      'GET',
+      `/positions/${position.id}/assignments`,
+    );
+    expect(status, JSON.stringify(body)).toBe(200);
+    const rows = unwrap<AssignmentRow[]>(body);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.employeeName, `assignment ${row.id} came back with no employee name`).toBeTruthy();
+    }
   });
 });
 

@@ -5312,6 +5312,11 @@ export interface components {
       id: string;
       assetId: string;
       employeeId: string;
+      /**
+       * @description Who held the machine. Null when the employee row is gone — the assignment history outlives them,
+       *     and it is the record that answers "who had this laptop in March".
+       */
+      employeeName: string | null;
       assignedAt: string;
       returnedAt: string | null;
       notes: string | null;
@@ -6060,7 +6065,9 @@ export interface components {
       status: string;
       createdAt: string;
     };
-    EmployeePositionResponseDto: {
+    PositionAssignmentResponseDto: {
+      /** @description Null when the employee row is gone. The assignment is still part of the position's history. */
+      employeeName: string | null;
       id: string;
       employeeId: string;
       positionId: string;
@@ -6092,6 +6099,15 @@ export interface components {
       /** Format: date */
       effectiveFrom: string;
       endReason?: string;
+    };
+    EmployeePositionResponseDto: {
+      id: string;
+      employeeId: string;
+      positionId: string;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+      endReason: string | null;
+      createdAt: string;
     };
     EndAssignmentDto: {
       /** Format: date */
@@ -6320,7 +6336,11 @@ export interface components {
       id: string;
       cycleId: string;
       employeeId: string;
+      /** @description Resolved server-side. Null when the employee row is gone; the review still stands. */
+      employeeName: string | null;
       reviewerId: string;
+      /** @description Resolved server-side. Null when the reviewer has left — which is why reassignment exists. */
+      reviewerName: string | null;
       /** @description The role the employee was reviewed IN, frozen at creation. Null when unassigned then. */
       positionId: string | null;
       status: string;
@@ -13571,7 +13591,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EmployeePositionResponseDto'][];
+          'application/json': components['schemas']['PositionAssignmentResponseDto'][];
         };
       };
       /** @description Unauthorized — missing or invalid authentication */

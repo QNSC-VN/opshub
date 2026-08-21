@@ -130,7 +130,8 @@ export function AssignmentHistoryPanel({ assetId }: { assetId: string }) {
           >
             <div className="flex flex-wrap items-center gap-1.5">
               <UserCheck className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
-              <span className="font-mono text-xs text-fg">{assignment.employeeId}</span>
+              {/* The chain of custody, by name: "who had this laptop in March" is the question. */}
+              <span className="text-xs text-fg">{orDash(assignment.employeeName)}</span>
               {open ? (
                 <Badge tone="blue">Holding it now</Badge>
               ) : (

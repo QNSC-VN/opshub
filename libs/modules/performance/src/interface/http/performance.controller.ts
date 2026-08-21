@@ -73,12 +73,16 @@ function toCycleDto(c: PerformanceCycle): CycleResponseDto {
   };
 }
 
-function toReviewDto(r: PerformanceReview): ReviewResponseDto {
+function toReviewDto(
+  r: PerformanceReview & { employeeName?: string | null; reviewerName?: string | null },
+): ReviewResponseDto {
   return {
     id: r.id,
     cycleId: r.cycleId,
     employeeId: r.employeeId,
+    employeeName: r.employeeName ?? null,
     reviewerId: r.reviewerId,
+    reviewerName: r.reviewerName ?? null,
     positionId: r.positionId,
     status: r.status,
     selfAssessment: r.selfAssessment,

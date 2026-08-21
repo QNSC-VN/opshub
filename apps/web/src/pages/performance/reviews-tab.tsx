@@ -123,8 +123,10 @@ export function ReviewsTab() {
     {
       key: 'employee',
       header: 'Employee',
+      // The name. "Who reviews whom" is the sentence at the top of this page, and two columns of
+      // uuid could not answer it.
       cell: (review) => (
-        <span className="font-mono text-xs text-fg-muted">{review.employeeId}</span>
+        <span className="text-xs text-fg-muted">{orDash(review.employeeName)}</span>
       ),
     },
     {
@@ -136,7 +138,7 @@ export function ReviewsTab() {
         isReviewer(review) ? (
           <Badge tone="blue">You</Badge>
         ) : (
-          <span className="font-mono text-xs text-fg-muted">{review.reviewerId}</span>
+          <span className="text-xs text-fg-muted">{orDash(review.reviewerName)}</span>
         ),
       hideOnMobile: true,
     },
@@ -325,11 +327,25 @@ export function ReviewsTab() {
                 },
                 {
                   label: 'Employee',
-                  value: <span className="font-mono text-xs">{selected.employeeId}</span>,
+                  value: (
+                    <span>
+                      {orDash(selected.employeeName)}
+                      <span className="ml-2 font-mono text-2xs text-fg-subtle">
+                        {selected.employeeId}
+                      </span>
+                    </span>
+                  ),
                 },
                 {
                   label: 'Reviewer',
-                  value: <span className="font-mono text-xs">{selected.reviewerId}</span>,
+                  value: (
+                    <span>
+                      {orDash(selected.reviewerName)}
+                      <span className="ml-2 font-mono text-2xs text-fg-subtle">
+                        {selected.reviewerId}
+                      </span>
+                    </span>
+                  ),
                 },
                 {
                   label: 'Rating',
