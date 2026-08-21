@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   InjectDrizzle,
+  nameOf,
+  resolveEmployeeNames,
   type DrizzleDB,
   NotFoundException,
   ConflictException,
@@ -135,9 +137,18 @@ export class AssetService {
     return this.getById(assetId);
   }
 
-  async listAssignments(assetId: string): Promise<AssetAssignment[]> {
+  async listAssignments(
+    assetId: string,
+  ): Promise<(AssetAssignment & { employeeName: string | null })[]> {
     await this.getById(assetId);
-    return this.assetRepo.listAssignments(assetId);
+    const rows = await this.assetRepo.listAssignments(assetId);
+    // The chain of custody, by name. A column of uuids cannot answer "who had this laptop in March",
+    // which is the only question this history is opened for.
+    const names = await resolveEmployeeNames(
+      this.db,
+      rows.map((r) => r.employeeId),
+    );
+    return rows.map((r) => ({ ...r, employeeName: nameOf(names, r.employeeId) }));
   }
 
   // ── Photo upload ──────────────────────────────────────────────────────────

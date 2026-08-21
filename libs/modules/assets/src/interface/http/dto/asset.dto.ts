@@ -58,6 +58,11 @@ export class AssetAssignmentResponseDto {
   id!: string;
   assetId!: string;
   employeeId!: string;
+  /**
+   * Who held the machine. Null when the employee row is gone — the assignment history outlives them,
+   * and it is the record that answers "who had this laptop in March".
+   */
+  employeeName!: string | null;
   assignedAt!: string;
   returnedAt!: string | null;
   notes!: string | null;

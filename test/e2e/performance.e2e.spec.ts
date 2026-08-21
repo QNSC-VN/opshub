@@ -59,7 +59,11 @@ interface ReviewRow {
   id: string;
   cycleId: string;
   employeeId: string;
+  /** Resolved server-side. Null only when the employee row is gone. */
+  employeeName: string | null;
   reviewerId: string;
+  /** Resolved server-side. Null when the reviewer has left — which is why reassignment exists. */
+  reviewerName: string | null;
   positionId: string | null;
   status: string;
   selfAssessment: string | null;
@@ -280,6 +284,48 @@ describe('creating a review', () => {
       reviewerId: FIXTURE.MANAGER.id,
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('naming the two people a review is about', () => {
+  /*
+   * "Who reviews whom" is the sentence at the top of this screen, and both columns that answer it
+   * rendered a uuid. A review names TWO people, so this is the one list where the defect doubled.
+   *
+   * Both names come from ONE lookup: `resolveEmployeeNames` deduplicates, so a manager reviewing
+   * eight people is one id, not eight. Asserted through the API because the SPA cannot spend a
+   * request per name and may not hold `employee.read` at all.
+   */
+  it('names the employee and the reviewer in the list', async () => {
+    const cycle = await openCycle('NAMES');
+    await createReview(cycle.id, FIXTURE.NO_PERMISSIONS.id, FIXTURE.MANAGER.id);
+
+    const list = await apiRequest(app, hr, 'GET', `/performance/reviews?cycleId=${cycle.id}`);
+    expect(list.status, JSON.stringify(list.body)).toBe(200);
+    const rows = unwrap<ReviewRow[]>(list.body);
+    expect(rows.length).toBeGreaterThan(0);
+
+    for (const row of rows) {
+      expect(row.employeeName, `review ${row.id} has no employee name`).toBeTruthy();
+      expect(row.reviewerName, `review ${row.id} has no reviewer name`).toBeTruthy();
+    }
+    // Distinct people, distinct names — a resolver keyed wrongly would give both rows the same one.
+    expect(rows[0].employeeName).not.toBe(rows[0].reviewerName);
+  });
+
+  it('names them on the single review too', async () => {
+    /*
+     * A separate service method from the list, so it needs its own assertion: one of the two paths
+     * quietly showing a uuid is exactly the state this change was made to end.
+     */
+    const cycle = await openCycle('NAMES-ONE');
+    const review = await createReview(cycle.id, FIXTURE.NO_PERMISSIONS.id, FIXTURE.MANAGER.id);
+
+    const one = await apiRequest(app, hr, 'GET', `/performance/reviews/${review.id}`);
+    expect(one.status, JSON.stringify(one.body)).toBe(200);
+    const got = unwrap<ReviewRow>(one.body);
+    expect(got.employeeName).toBeTruthy();
+    expect(got.reviewerName).toBeTruthy();
   });
 });
 

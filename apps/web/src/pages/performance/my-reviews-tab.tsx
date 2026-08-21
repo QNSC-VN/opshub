@@ -16,7 +16,7 @@ import {
   statusTone,
   type DataTableColumn,
 } from '@/shared/ui';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate, orDash } from '@/shared/lib/format';
 import { RateReviewModal, SelfAssessmentModal } from './rating-modals';
 import { useCycleLabels, useMyReviews, useReviewsToWrite } from './use-performance';
 import type { Review } from './performance.types';
@@ -132,7 +132,7 @@ export function MyReviewsTab() {
       key: 'employee',
       header: 'Employee',
       cell: (review) => (
-        <span className="font-mono text-xs text-fg-muted">{review.employeeId}</span>
+        <span className="text-xs text-fg-muted">{orDash(review.employeeName)}</span>
       ),
     },
     {

@@ -316,8 +316,9 @@ export function PositionsPage() {
                 {
                   key: 'employee',
                   header: 'Employee',
+                  // Who has held the role, by name. The history is opened to read exactly that.
                   cell: (a: PositionAssignment) => (
-                    <span className="font-mono text-xs">{a.employeeId}</span>
+                    <span className="text-xs">{orDash(a.employeeName)}</span>
                   ),
                 },
                 {

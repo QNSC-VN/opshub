@@ -24,6 +24,7 @@ import {
   CreatePositionDto,
   EmployeePositionHistoryResponseDto,
   EmployeePositionResponseDto,
+  PositionAssignmentResponseDto,
   EndAssignmentDto,
   ListPositionsQueryDto,
   PositionOccupancyResponseDto,
@@ -47,6 +48,13 @@ function toPositionDto(p: Position): PositionResponseDto {
 
 function toOccupancyDto(p: PositionOccupancy): PositionOccupancyResponseDto {
   return { ...toPositionDto(p), filled: p.filled, vacancies: p.vacancies };
+}
+
+/** The named read shape. `toAssignmentDto` stays for the writes, which have no name to give. */
+function toNamedAssignmentDto(
+  a: EmployeePosition & { employeeName: string | null },
+): PositionAssignmentResponseDto {
+  return { ...toAssignmentDto(a), employeeName: a.employeeName };
 }
 
 function toAssignmentDto(a: EmployeePosition): EmployeePositionResponseDto {
@@ -133,12 +141,12 @@ export class PositionsController {
     summary: 'Everyone who has held this position, newest first',
     description: 'History, not just current occupants — closed assignments are never deleted.',
   })
-  @ApiOkResponse({ type: [EmployeePositionResponseDto] })
+  @ApiOkResponse({ type: [PositionAssignmentResponseDto] })
   @ApiCommonErrors(401, 403, 404)
   async listAssignments(
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<EmployeePositionResponseDto[]> {
-    return (await this.service.listAssignmentsForPosition(id)).map(toAssignmentDto);
+  ): Promise<PositionAssignmentResponseDto[]> {
+    return (await this.service.listAssignmentsForPosition(id)).map(toNamedAssignmentDto);
   }
 
   @Post()

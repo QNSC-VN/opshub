@@ -3,6 +3,8 @@ import {
   ConflictException,
   ErrorCodes,
   InjectDrizzle,
+  nameOf,
+  resolveEmployeeNames,
   NotFoundException,
   PreconditionFailedException,
   RequestEngine,
@@ -80,6 +82,17 @@ const WEIGHT_TOLERANCE = 0.01;
  * a fact about a single row, so the table is the right place — but each is ALSO restated as a coded
  * refusal below, because a raw constraint violation reaches the caller as a 500 with no code.
  */
+/**
+ * A review with both of the people it names resolved.
+ *
+ * A type rather than two optional fields on `PerformanceReview`: the domain row genuinely does not
+ * have them, and making them optional there would let a read path forget to resolve and still typecheck.
+ */
+export type NamedReview = PerformanceReview & {
+  employeeName: string | null;
+  reviewerName: string | null;
+};
+
 @Injectable()
 export class PerformanceService {
   private readonly cycleTrail: ResourceAuditTrail;
@@ -293,12 +306,38 @@ export class PerformanceService {
     filters: ReviewFilters,
     limit: number,
     offset: number,
-  ): Promise<{ rows: PerformanceReview[]; total: number }> {
-    return this.repo.listReviews(filters, limit, offset);
+  ): Promise<{ rows: NamedReview[]; total: number }> {
+    const page = await this.repo.listReviews(filters, limit, offset);
+    /*
+     * BOTH names, in one query for the page. A review row names two people and rendered neither: the
+     * Employee and Reviewer columns were uuids, so the list could not answer "who reviews whom" —
+     * which is the sentence at the top of the screen.
+     *
+     * One lookup for both, because `resolveEmployeeNames` deduplicates: a manager reviewing eight
+     * people appears once in the id list.
+     */
+    const names = await resolveEmployeeNames(this.db, [
+      ...page.rows.map((r) => r.employeeId),
+      ...page.rows.map((r) => r.reviewerId),
+    ]);
+    return {
+      ...page,
+      rows: page.rows.map((r) => ({
+        ...r,
+        employeeName: nameOf(names, r.employeeId),
+        reviewerName: nameOf(names, r.reviewerId),
+      })),
+    };
   }
 
-  async getReview(id: string): Promise<PerformanceReview> {
-    return this.mustFindReview(id);
+  async getReview(id: string): Promise<NamedReview> {
+    const review = await this.mustFindReview(id);
+    const names = await resolveEmployeeNames(this.db, [review.employeeId, review.reviewerId]);
+    return {
+      ...review,
+      employeeName: nameOf(names, review.employeeId),
+      reviewerName: nameOf(names, review.reviewerId),
+    };
   }
 
   async listGoals(reviewId: string): Promise<PerformanceGoal[]> {

@@ -150,7 +150,11 @@ export class ReviewResponseDto {
   id!: string;
   cycleId!: string;
   employeeId!: string;
+  /** Resolved server-side. Null when the employee row is gone; the review still stands. */
+  employeeName!: string | null;
   reviewerId!: string;
+  /** Resolved server-side. Null when the reviewer has left — which is why reassignment exists. */
+  reviewerName!: string | null;
   /** The role the employee was reviewed IN, frozen at creation. Null when unassigned then. */
   positionId!: string | null;
   status!: string;
