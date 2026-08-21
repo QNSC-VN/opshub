@@ -92,6 +92,17 @@ function makeQueryChain(returnValue: unknown) {
   // Terminal calls resolve to the return value
   (chain['returning'] as ReturnType<typeof vi.fn>).mockResolvedValue(returnValue);
   (chain['limit'] as ReturnType<typeof vi.fn>).mockResolvedValue(returnValue);
+  /*
+   * AWAITABLE AT EVERY STAGE, which is what a real drizzle builder is.
+   *
+   * Before this, only `limit` and `returning` resolved, so a query ending anywhere else handed back
+   * the chain object itself — and the engine did `rows.map(...)` on it. That surfaced as
+   * `rows.map is not a function` in seventeen unrelated cases the moment a name lookup ended on
+   * `where` instead of `limit`: a double that models one call path breaks every test in the file
+   * when a different, equally valid path appears.
+   */
+  chain['then'] = (onFulfilled: (v: unknown) => unknown, onRejected: (e: unknown) => unknown) =>
+    Promise.resolve(returnValue).then(onFulfilled, onRejected);
   return chain;
 }
 

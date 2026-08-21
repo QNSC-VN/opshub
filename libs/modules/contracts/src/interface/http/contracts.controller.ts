@@ -43,10 +43,14 @@ import {
  * ONE mapper, taking the decision as an argument rather than two mappers that could drift: a second
  * "redacted" mapper is exactly how a new field gets added to one and not the other.
  */
-function toContractDto(c: EmploymentContract, compensation: boolean): ContractResponseDto {
+function toContractDto(
+  c: EmploymentContract & { employeeName?: string | null },
+  compensation: boolean,
+): ContractResponseDto {
   return {
     id: c.id,
     employeeId: c.employeeId,
+    employeeName: c.employeeName ?? null,
     positionId: c.positionId,
     reference: c.reference,
     contractType: c.contractType,
@@ -155,7 +159,7 @@ export class ContractsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<ContractResponseDto> {
-    const contract = await this.service.getContract(id);
+    const contract = await this.service.getContractWithEmployee(id);
     return toContractDto(contract, await this.maySeePay(user, [contract]));
   }
 

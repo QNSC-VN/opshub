@@ -5972,6 +5972,14 @@ export interface components {
       title: string;
       category: string;
       ownerId: string;
+      /**
+       * @description The owner's display name, resolved server-side. Null when the employee row is gone — a policy
+       *     outlives the person accountable for it, and losing the document with them would be far worse.
+       *
+       *     Sent because an Owner column showing a uuid does not say who is accountable, and the SPA cannot
+       *     resolve one name per row without one request per row.
+       */
+      ownerName: string | null;
       retiredAt: string | null;
       createdAt: string;
     };
@@ -6011,6 +6019,8 @@ export interface components {
     };
     AcknowledgedByResponseDto: {
       employeeId: string;
+      /** @description Who acknowledged it. Null when the employee row is gone; the acknowledgement still stands. */
+      employeeName: string | null;
       acknowledgedAt: string;
     };
     EmployeePositionHistoryResponseDto: {
@@ -6100,6 +6110,11 @@ export interface components {
       status: 'draft' | 'active' | 'expired' | 'terminated';
       id: string;
       employeeId: string;
+      /**
+       * @description The employee's display name, resolved server-side. Null when the employee row is gone — a
+       *     contract is exactly the record that has to outlive the person it was signed with.
+       */
+      employeeName: string | null;
       positionId: string | null;
       reference: string;
       startDate: string;

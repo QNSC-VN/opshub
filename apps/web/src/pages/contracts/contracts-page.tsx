@@ -18,7 +18,7 @@ import {
 } from '@/shared/ui';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { usePermissions } from '@/shared/hooks/use-permissions';
-import { formatDate, isoDaysFromNow } from '@/shared/lib/format';
+import { formatDate, isoDaysFromNow, orDash } from '@/shared/lib/format';
 import { ContractHistoryPanel, RenewContractModal } from './contract-renewal';
 import {
   ActivateContractModal,
@@ -112,7 +112,9 @@ export function ContractsPage() {
     {
       key: 'employee',
       header: 'Employee',
-      cell: (c) => <span className="font-mono text-xs text-fg-muted">{c.employeeId}</span>,
+      // The NAME. A Contracts list identified by uuid could not answer "whose terms are these",
+      // which is the only reason to look at the column.
+      cell: (c) => <span className="text-xs text-fg-muted">{orDash(c.employeeName)}</span>,
     },
     {
       key: 'type',
@@ -283,7 +285,14 @@ export function ContractsPage() {
                 },
                 {
                   label: 'Employee',
-                  value: <span className="font-mono text-xs">{selected.employeeId}</span>,
+                  value: (
+                    <span>
+                      {orDash(selected.employeeName)}
+                      <span className="ml-2 font-mono text-2xs text-fg-subtle">
+                        {selected.employeeId}
+                      </span>
+                    </span>
+                  ),
                 },
                 {
                   label: 'Position',

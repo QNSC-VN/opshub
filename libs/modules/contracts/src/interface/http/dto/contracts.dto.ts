@@ -121,6 +121,11 @@ export class CompensationResponseDto {
 export class ContractResponseDto {
   id!: string;
   employeeId!: string;
+  /**
+   * The employee's display name, resolved server-side. Null when the employee row is gone — a
+   * contract is exactly the record that has to outlive the person it was signed with.
+   */
+  employeeName!: string | null;
   positionId!: string | null;
   reference!: string;
   @ApiProperty({ enum: contractTypeEnum.enumValues })

@@ -59,6 +59,8 @@ const PAY = { baseSalary: '4500.00', salaryCurrency: 'USD', salaryPeriod: 'month
 interface ContractRow {
   id: string;
   employeeId: string;
+  /** Resolved server-side. Null only when the employee row is gone. */
+  employeeName: string | null;
   reference: string;
   contractType: string;
   startDate: string;
@@ -132,6 +134,42 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app?.close();
+});
+
+describe('naming the employee on a contract', () => {
+  /*
+   * The Employee column in the SPA rendered `employeeId`, so a list of who is employed on what terms
+   * identified nobody — the one question the column exists for. It has to be the API that answers it:
+   * reading the directory needs `employee.read`, which a contracts reader is not required to hold, and
+   * a page of fifty rows cannot cost fifty requests.
+   */
+  it('names the employee in the list and in the single contract', async () => {
+    const created = await draft(FIXTURE.NO_PERMISSIONS.id);
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = unwrap<ContractRow>(created.body).id;
+
+    const list = await apiRequest(
+      app,
+      hr,
+      'GET',
+      `/contracts?employeeId=${FIXTURE.NO_PERMISSIONS.id}`,
+    );
+    expect(list.status).toBe(200);
+    const rows = unwrap<ContractRow[]>(list.body);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(
+        row.employeeName,
+        `contract ${row.id} came back with employee ${row.employeeId} and no name`,
+      ).toBeTruthy();
+    }
+
+    // The single-contract path is a SEPARATE service method, so it needs its own assertion — one of
+    // the two showing a uuid is exactly the state this change was made to end.
+    const one = await apiRequest(app, hr, 'GET', `/contracts/${id}`);
+    expect(one.status).toBe(200);
+    expect(unwrap<ContractRow>(one.body).employeeName).toBe(rows[0].employeeName);
+  });
 });
 
 describe('drafting', () => {

@@ -6,6 +6,8 @@ import {
   NotFoundException,
   PreconditionFailedException,
   RequestEngine,
+  nameOf,
+  resolveEmployeeNames,
   type DrizzleDB,
 } from '@platform';
 import type { Actor } from '@shared-kernel';
@@ -80,8 +82,38 @@ export class DocumentsService {
     return doc;
   }
 
+  /**
+   * One document, with its owner named — the drawer's read path.
+   *
+   * Separate from `getDocument` rather than folded into it, because that one is the guard every write
+   * path calls first (retire, publish, submit) and none of those render an owner. Widening it would
+   * have added a lookup to fifteen mutations to serve one screen.
+   */
+  async getDocumentWithOwner(
+    id: string,
+  ): Promise<ControlledDocument & { ownerName: string | null }> {
+    const doc = await this.getDocument(id);
+    const names = await resolveEmployeeNames(this.db, [doc.ownerId]);
+    return { ...doc, ownerName: nameOf(names, doc.ownerId) };
+  }
+
   async listDocuments(filters: DocumentFilters, limit: number, offset: number) {
-    return this.repo.list(filters, limit, offset);
+    const page = await this.repo.list(filters, limit, offset);
+    /*
+     * OWNER NAMES for the whole page, in one query.
+     *
+     * The Owner column rendered `ownerId` — thirty-six characters that answer "who is accountable
+     * for this policy" with nothing at all. Resolved here rather than in the SPA because the
+     * directory endpoint needs `employee.read`, which a document reader is not required to hold.
+     */
+    const names = await resolveEmployeeNames(
+      this.db,
+      page.rows.map((r) => r.ownerId),
+    );
+    return {
+      ...page,
+      rows: page.rows.map((r) => ({ ...r, ownerName: nameOf(names, r.ownerId) })),
+    };
   }
 
   async listVersions(documentId: string): Promise<DocumentVersion[]> {
@@ -298,7 +330,16 @@ export class DocumentsService {
   /** Who has acknowledged a version — the compliance view for one document. */
   async listAcknowledgedBy(versionId: string) {
     await this.mustGetVersion(versionId);
-    return this.repo.listAcknowledgedBy(versionId);
+    const rows = await this.repo.listAcknowledgedBy(versionId);
+    /*
+     * This list is read to answer "who has signed off on this revision", so a uuid per line makes it
+     * useless for the only question it is asked. Names resolved in one query for the whole list.
+     */
+    const names = await resolveEmployeeNames(
+      this.db,
+      rows.map((r) => r.employeeId),
+    );
+    return rows.map((r) => ({ ...r, employeeName: nameOf(names, r.employeeId) }));
   }
 
   private async mustGetVersion(id: string): Promise<DocumentVersion> {
