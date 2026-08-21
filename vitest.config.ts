@@ -96,11 +96,15 @@ export default defineConfig({
       // moved: lines had drifted 3.06 behind, which is exactly the "protects nothing" case it guards.
       // Set about a point under actual, so run-to-run variance does not fail a branch that added no
       // code.
+      // Raised 2026-08-21 with the outbound-URL guard — `outbound-url.spec.ts`, the relay's
+      // delivery-time cases and the SSRF end-to-end block. Measured lines 38.69 / statements 38.55 /
+      // branches 30.44 / functions 26.25, and `check:coverage-floors` failed the PR before these moved:
+      // branches had drifted 3.44 behind, which is the "protects nothing" case it exists to catch.
       thresholds: {
-        lines: 36,
-        functions: 24,
-        branches: 27,
-        statements: 36,
+        lines: 37,
+        functions: 25,
+        branches: 29,
+        statements: 37,
       },
     },
   },
