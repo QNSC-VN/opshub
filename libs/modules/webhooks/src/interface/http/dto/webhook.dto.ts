@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { describeUnsafeTarget } from '@platform';
 
 // ─── Supported event types (used for validation) ──────────────────────────────
 
@@ -15,7 +16,23 @@ export const SUPPORTED_WEBHOOK_EVENTS = [
 // ─── Create subscription ──────────────────────────────────────────────────────
 
 export const CreateWebhookSubscriptionSchema = z.object({
-  url: z.string().url().max(2048),
+  /*
+   * REFUSED AT WRITE TIME, and again at delivery time.
+   *
+   * This was `z.string().url()` alone, and the relay that calls it runs in a task whose security group
+   * allows egress anywhere — so a caller with `webhook.manage` could aim the queue at RDS, the cache, the
+   * internal ALB or the ECS task-credential endpoint. The message names the reason, because "invalid
+   * URL" on a perfectly well-formed address is the kind of refusal that gets reported as a bug.
+   */
+  url: z
+    .string()
+    .url()
+    .max(2048)
+    .superRefine((value, ctx) => {
+      const problem = describeUnsafeTarget(value);
+      if (problem)
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `URL rejected: ${problem}` });
+    }),
   /** HMAC-SHA256 signing secret. Min 16 chars for adequate entropy. */
   secret: z.string().min(16).max(255),
   /** At least one event type must be subscribed. */

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, asc, eq, lt, lte } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 import { createHmac } from 'crypto';
-import { InjectDrizzle, AbstractOutboxRelay, Span } from '@platform';
+import { AbstractOutboxRelay, InjectDrizzle, Span, describeUnsafeResolvedTarget } from '@platform';
 import type { DrizzleDB, DrizzleTx, PostCommitTask } from '@platform';
 import { webhookDeliveries, webhookSubscriptions } from '../../../../../db/schema';
 import { MS_PER_SEC } from '@shared-kernel';
@@ -73,6 +73,21 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
   }
 
   protected async processRow(row: DeliveryRow, _tx: DrizzleTx): Promise<PostCommitTask | void> {
+    /*
+     * CHECKED HERE AS WELL AS AT WRITE TIME, because they are different moments. The DTO judged the
+     * string when the subscription was saved; this resolves the name now. A host that pointed somewhere
+     * public then can point at `10.0.0.5` today, and the stored URL is unchanged either way.
+     *
+     * Thrown rather than skipped, so the row follows the ordinary failure path — attempts increment, the
+     * reason lands in `last_error` where the subscription's owner can read it, and it dead-letters like
+     * anything else. Silently dropping it would leave a subscription that looks healthy and delivers
+     * nothing.
+     */
+    const unsafe = await describeUnsafeResolvedTarget(row.url);
+    if (unsafe) {
+      throw new Error(`Refusing to deliver to ${row.url}: ${unsafe}`);
+    }
+
     const timestamp = new Date().toISOString();
     const body = JSON.stringify({
       id: row.id,

@@ -79,6 +79,50 @@ async function deliveryCount(subscriptionId: string): Promise<number> {
 }
 
 describe('webhook delivery integrity', () => {
+  /** Try to register a subscription pointing at `url`, and return the status. */
+  async function attempt(url: string): Promise<{ status: number; body: string }> {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/subscriptions',
+      headers: bearer(admin),
+      payload: {
+        url,
+        secret: 'e2e-secret-value-long-enough',
+        events: ['request.approved'],
+        description: 'ssrf probe',
+      },
+    });
+    return { status: res.statusCode, body: res.body };
+  }
+
+  it.each([
+    ['https://169.254.169.254/latest/meta-data/', 'the cloud metadata endpoint'],
+    ['https://169.254.170.2/v2/credentials', 'the ECS task credential endpoint'],
+    ['https://127.0.0.1:3001/v1/employees', 'the API itself'],
+    ['https://10.0.4.17:5432/', 'RDS'],
+    ['https://localhost/hook', 'a local hostname'],
+    ['https://[::1]/hook', 'IPv6 loopback'],
+    ['http://hooks.example.com/hook', 'plaintext http'],
+  ])('refuses a subscription aimed at %s (%s)', async (url) => {
+    /*
+     * THROUGH THE REAL ROUTE, because the unit spec proves the predicate and cannot prove it is WIRED.
+     * `url` was `z.string().url()` and the relay runs in a task with egress to `0.0.0.0/0`, so every one
+     * of these was a queued POST into the VPC — and the failure text is returned by the deliveries
+     * endpoint, so the status leaked back to whoever owned the subscription.
+     */
+    const { status, body } = await attempt(url);
+
+    expect(status, `${url} was accepted: ${body}`).toBe(422);
+    // The reason travels with it: "invalid URL" on a well-formed address reads as a bug in the product.
+    expect(body).toContain('URL rejected');
+  });
+
+  it('still accepts an ordinary public endpoint', async () => {
+    // The converse. A guard that refused everything would satisfy every case above.
+    const { status, body } = await attempt('https://hooks.example.com/opshub');
+    expect(status, body).toBeLessThan(300);
+  });
+
   it('removes a subscription’s queued deliveries with it, rather than orphaning them', async () => {
     const subscriptionId = await createSubscription('e2e: cascade on delete');
     await queueDelivery(subscriptionId);

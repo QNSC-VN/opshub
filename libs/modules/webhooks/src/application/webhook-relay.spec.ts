@@ -272,3 +272,52 @@ describe('WebhookRelayService — markSent()', () => {
     expect(deliveredAt).toBeLessThanOrEqual(after + 50);
   });
 });
+
+describe('the target is checked again at delivery time', () => {
+  /*
+   * WHY THE DTO'S CHECK IS NOT ENOUGH, and why removing this one broke no test until now.
+   *
+   * The DTO judges the URL string when the subscription is saved. That protects against a typo. It does
+   * not protect against an author: a hostname that resolved publicly then can be re-pointed at the VPC
+   * afterwards, and the stored URL never changes. So the relay resolves the name again immediately
+   * before the request — and the mutation that deleted that call passed every existing test, which is
+   * the reason this block exists.
+   */
+  it('refuses an unsafe target and never issues the request', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const relay = new TestableRelayService({} as never);
+
+    await expect(
+      relay.exposedProcessRow(makeRow({ url: 'https://169.254.169.254/latest/meta-data/' })),
+    ).rejects.toThrow(/Refusing to deliver/);
+
+    // The point is the request not happening. A throw after the POST would leave the side effect done.
+    expect(fetchSpy, 'the relay contacted the target before refusing it').not.toHaveBeenCalled();
+  });
+
+  it('names the reason, which reaches the subscription owner', async () => {
+    /*
+     * Thrown rather than skipped, so the row takes the ordinary failure path: attempts increment and the
+     * text lands in `last_error`, which the deliveries endpoint returns. A silent drop would leave a
+     * subscription that looks healthy and delivers nothing.
+     */
+    vi.stubGlobal('fetch', vi.fn());
+    const relay = new TestableRelayService({} as never);
+
+    await expect(
+      relay.exposedProcessRow(makeRow({ url: 'https://10.0.4.17:5432/' })),
+    ).rejects.toThrow(/blocked range/);
+  });
+
+  it('still delivers to a safe target', async () => {
+    // The converse. A relay that refused everything would satisfy both cases above.
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+    vi.stubGlobal('fetch', fetchSpy);
+    const relay = new TestableRelayService({} as never);
+
+    await relay.exposedProcessRow(makeRow({ url: 'https://hooks.example.com/opshub' }));
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+});
