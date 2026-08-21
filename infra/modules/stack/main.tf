@@ -193,6 +193,14 @@ locals {
     # Read by the OTel resource and by the served OpenAPI document, both of which
     # reported "dev" in every environment before this was injected.
     { name = "SERVICE_VERSION", value = var.image_tag },
+    # Mail. Both services send: the api sends inline where a caller waits for the result, the worker
+    # relays the outbox — so a value set on one and not the other is a half outage that reads as a
+    # flake. Shared for that reason rather than duplicated per service.
+    { name = "EMAIL_PROVIDER", value = var.email_provider },
+    { name = "MAIL_FROM_NAME", value = var.mail_from_name },
+    { name = "MAIL_FROM_EMAIL", value = var.mail_from_email },
+    { name = "MAIL_REPLY_TO", value = var.mail_reply_to },
+    { name = "SES_CONFIGURATION_SET", value = var.ses_configuration_set },
   ]
 }
 
@@ -1224,3 +1232,61 @@ resource "aws_cloudwatch_metric_alarm" "outbox_dead_letter" {
 # replaces claimed "the plan fails instead of producing an environment that looks healthy",
 # which described enforcement that did not exist: the forbidden combination would have
 # applied cleanly behind a warning nobody reads in CI output.
+
+# ── Outbound email: the permission half ───────────────────────────────────────
+#
+# WITHOUT `ses:SendEmail` ON THE TASK ROLE, EVERY SEND FAILS `AccessDenied` — before the sender is
+# even looked at. The relay's attempts exhaust, the rows dead-letter, and the service goes on
+# reporting healthy, so the first symptom is somebody asking why they never got an email. The sibling
+# repo ran BOTH of its environments that way for a while, with `EMAIL_PROVIDER=ses` and a correct
+# `MAIL_FROM_EMAIL` sitting right beside the missing grant. Shipping the provider without this would
+# reproduce that exactly.
+#
+# SCOPED TWO WAYS, because `ses:SendEmail` on `"*"` would let a compromised task send as any verified
+# identity in the account — including another environment's:
+#   • `Resource` is this account's identity for the SENDER'S OWN DOMAIN, so one environment cannot
+#     send through an identity it does not share.
+#   • The `ses:FromAddress` condition pins the envelope sender to exactly `mail_from_email`, so the
+#     grant cannot be turned into impersonating another address on the same domain.
+#
+# THE ARN IS CONSTRUCTED, not read from the identity resource. IAM will happily reference a resource
+# that does not exist yet, so verifying the domain and applying this stack can happen in either order
+# and the permission simply starts working once verification completes. A data source would make the
+# whole stack fail until the identity existed.
+#
+# `count` on the sender rather than on the provider: the grant is harmless when mail is off, and tying
+# it to `email_provider` would mean an apply that flips the provider also has to create the policy,
+# turning a config change into a permissions change.
+locals {
+  mail_domain      = var.mail_from_email == "" ? "" : split("@", var.mail_from_email)[1]
+  ses_identity_arn = "arn:aws:ses:${var.region}:${data.aws_caller_identity.current.account_id}:identity/${local.mail_domain}"
+
+  ses_send_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+        Resource = local.ses_identity_arn
+        Condition = {
+          StringEquals = { "ses:FromAddress" = var.mail_from_email }
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "api_ses_send" {
+  count  = var.mail_from_email == "" ? 0 : 1
+  name   = "${local.name}-api-ses-send"
+  role   = split("/", module.api.task_role_arn)[1]
+  policy = local.ses_send_policy
+}
+
+# The worker relays the outbox, so it sends more mail than the api does. Both need the grant.
+resource "aws_iam_role_policy" "worker_ses_send" {
+  count  = var.mail_from_email == "" ? 0 : 1
+  name   = "${local.name}-worker-ses-send"
+  role   = split("/", module.worker.task_role_arn)[1]
+  policy = local.ses_send_policy
+}

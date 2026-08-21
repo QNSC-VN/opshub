@@ -182,7 +182,16 @@ export const EnvSchema = z
     ANTHROPIC_MODEL: z.string().default('claude-opus-4-8'),
 
     // ── Email ──────────────────────────────────────────────────────────────────
-    EMAIL_PROVIDER: z.enum(['dev', 'resend']).default('dev'),
+    /**
+     * Which transport actually sends.
+     *
+     * `ses` is the one to reach for: it is in the same AWS account as everything else and
+     * authenticates with the task role, so there is no third-party account and no API key in a secret.
+     * `resend` stays because it is a working transport and removing it would be a decision about
+     * vendors rather than about code. `dev` logs to the console and sends nothing, which is the default
+     * so that a fresh checkout needs no mail setup at all.
+     */
+    EMAIL_PROVIDER: z.enum(['dev', 'resend', 'ses']).default('dev'),
     MAIL_FROM_NAME: z.string().default('OpsHub'),
     /**
      * NO DEFAULT, deliberately — see the refusal in the `superRefine` below.
@@ -196,6 +205,14 @@ export const EnvSchema = z
     MAIL_FROM_EMAIL: z.string().email().optional(),
     MAIL_REPLY_TO: z.string().email().optional(),
     RESEND_API_KEY: z.string().optional(),
+    /**
+     * The SES configuration set to tag every send with.
+     *
+     * Optional, and what it buys is attribution rather than delivery: without one, a bounce or
+     * complaint arrives as an event nobody can tie back to the message that caused it. Sends work
+     * either way, which is exactly why this is easy to leave unset and regret later.
+     */
+    SES_CONFIGURATION_SET: z.string().optional(),
 
     // ── Frontend ───────────────────────────────────────────────────────────────
     /** Public base URL used to build links inside notification emails. */
