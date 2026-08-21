@@ -567,3 +567,20 @@ describe('RequestEngine.expire()', () => {
     expect(webhookEnqueue.fanout).not.toHaveBeenCalled();
   });
 });
+
+/*
+ * NOT TESTED HERE: that `list()` resolves requester names in ONE query rather than one per row.
+ *
+ * It is the property that separates the implementation from the obvious wrong one, and it is invisible
+ * from outside — the response is byte-identical either way. I tried twice and shipped neither:
+ *
+ *   - An end-to-end timing check needed more seeded rows than the fixture has, and measured the machine.
+ *   - A unit test needed a `db` mock that reaches the list path. This file's `makeQueryChain` resolves on
+ *     `limit`, and `list()` ends on `.offset()`, so the chain handed back a plain object and `rows.map`
+ *     threw — which my first attempt swallowed in a `.catch` and passed while asserting nothing. Building
+ *     a chain that answers the list path correctly means knowing the exact order of its selects, and a
+ *     mock pinned to call order is a test that breaks on an unrelated refactor.
+ *
+ * So the guard is the batched `inArray` in `list()` and the comment above it. Recorded here because
+ * "there is no test for this" is worth knowing, and a reader who assumes there is one would be wrong.
+ */

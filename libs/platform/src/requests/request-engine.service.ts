@@ -11,7 +11,7 @@ import {
 } from '../errors/exceptions';
 import { ErrorCodes } from '../errors/error-codes';
 import { WebhookEnqueueService } from '../webhooks/webhook-enqueue.service';
-import { requestItems, requestApprovals, requestComments } from '../../../../db/schema';
+import { employees, requestItems, requestApprovals, requestComments } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
 import { DelegationService } from '../authz/delegation.service';
 import { NotificationSchedulerService } from '../notifications/notification-scheduler.service';
@@ -462,7 +462,13 @@ export class RequestEngine {
         asc(requestApprovals.id),
       );
 
-    return { ...row, approvals: approvalRows };
+    const [requester] = await this.db
+      .select({ displayName: employees.displayName })
+      .from(employees)
+      .where(eq(employees.id, row.requesterId))
+      .limit(1);
+
+    return { ...row, approvals: approvalRows, requesterName: requester?.displayName ?? null };
   }
 
   /**
@@ -541,10 +547,30 @@ export class RequestEngine {
       (approvalMap.get(key) ?? approvalMap.set(key, []).get(key)!).push(a);
     }
 
+    /*
+     * Requester names, in ONE query for the whole page — the same reason the approvals above are
+     * batched. Fifty rows must not become fifty lookups, and the alternative the SPA had was worse: it
+     * showed the uuid, so an approver could not tell who was asking without opening each row.
+     *
+     * DISTINCT ids, because one person filing several requests is the normal case on this screen.
+     */
+    const requesterIds = [...new Set(rows.map((r) => r.requesterId))];
+    const nameRows =
+      requesterIds.length > 0
+        ? await this.db
+            .select({ id: employees.id, displayName: employees.displayName })
+            .from(employees)
+            .where(inArray(employees.id, requesterIds))
+        : [];
+    const nameMap = new Map(nameRows.map((n) => [n.id, n.displayName]));
+
     return {
       rows: rows.map((r) => ({
         ...r,
         approvals: approvalMap.get(r.id) ?? [],
+        // Null rather than absent when the employee row is gone: a request outlives its requester, and
+        // an offboarded leaver's is the kind an auditor comes back to.
+        requesterName: nameMap.get(r.requesterId) ?? null,
       })),
       total: count,
     };

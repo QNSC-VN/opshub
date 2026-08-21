@@ -40,17 +40,21 @@ let ownRequestId: string;
 /** A request owned by HR — the thing the employee must NOT be able to reach. */
 let foreignRequestId: string;
 
-async function listRequests(
-  session: Session,
-  query = '',
-): Promise<{ id: string; requesterId: string }[]> {
+interface RequestRow {
+  id: string;
+  requesterId: string;
+  /** Resolved server-side. Null when the requester's employee row is gone. */
+  requesterName: string | null;
+}
+
+async function listRequests(session: Session, query = ''): Promise<RequestRow[]> {
   const res = await app.inject({
     method: 'GET',
     url: `/v1/requests${query}`,
     headers: bearer(session),
   });
   expect(res.statusCode, res.body).toBe(200);
-  return (JSON.parse(res.body) as { data: { id: string; requesterId: string }[] }).data;
+  return (JSON.parse(res.body) as { data: RequestRow[] }).data;
 }
 
 beforeAll(async () => {
@@ -130,6 +134,86 @@ describe('request visibility', () => {
         'leak: WHERE was built from optional filters, so no filters meant no WHERE.',
     ).toEqual([]);
     expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it('names the requester, so an approval queue can be decided from', async () => {
+    /*
+     * WHAT THE INBOX SHOWED BEFORE: the request type and `id.slice(0, 8)`. No requester — so the screen
+     * whose buttons are Approve and Reject did not say who was asking. The id made it worse rather than
+     * better: these are uuid v7, TIME-PREFIXED, so requests filed in the same window share their leading
+     * characters and several rows rendered the same eight.
+     *
+     * Asserted against the API rather than only in the browser, because it is the API that has to supply
+     * it: the SPA cannot resolve fifty uuids without fifty requests.
+     */
+    const rows = await listRequests(employee);
+    expect(rows.length).toBeGreaterThan(0);
+
+    for (const row of rows) {
+      expect(
+        row.requesterName,
+        `request ${row.id} came back with no requester name, so the inbox row is undecidable`,
+      ).toBeTruthy();
+    }
+  });
+
+  it('still names the requester after they are offboarded', async () => {
+    /*
+     * I WROTE THIS TEST BACKWARDS FIRST, and the failure was the useful part: I asserted the name comes
+     * back null once the requester leaves. It does not, because offboarding sets `status` and does not
+     * delete the row — there is no DELETE route for an employee at all, only `/avatar`.
+     *
+     * Which makes the real property the opposite one, and a better one: a leaver's request still says who
+     * filed it. An offboarded employee's access request is exactly what an access review comes back to,
+     * and a queue that forgot the name would be answering "somebody asked for this" — the same
+     * uninterpretable row the uuid gave, arriving by a different route.
+     *
+     * The resolution stays a LEFT lookup and `requesterName` stays nullable anyway: it costs nothing, and
+     * an inner join would make the REQUEST disappear with the employee rather than just the name.
+     */
+    const admin = await login(app, FIXTURE.ADMIN);
+    const email = `inbox.leaver.${Date.now().toString(36)}@opshub.local`;
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/employees',
+      headers: bearer(admin),
+      payload: { email, displayName: 'Departing Requester', roles: ['employee'] },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const body = JSON.parse(created.body) as { data?: { id: string }; id?: string };
+    const leaverId = body.data?.id ?? body.id!;
+
+    const leaver = await login(app, { email });
+    const filed = await app.inject({
+      method: 'POST',
+      url: '/v1/workforce/leave',
+      headers: bearer(leaver),
+      payload: {
+        // A Monday and a Tuesday: a weekend window is refused with LEAVE_NO_WORKING_DAYS, which is
+        // what the first version of this test picked.
+        leaveType: 'annual',
+        startDate: '2027-05-03',
+        endDate: '2027-05-04',
+        reason: 'filed by somebody about to leave',
+      },
+    });
+    expect(filed.statusCode, filed.body).toBe(201);
+
+    const offboarded = await app.inject({
+      method: 'PATCH',
+      url: `/v1/employees/${leaverId}/status`,
+      headers: bearer(admin),
+      payload: { status: 'offboarded' },
+    });
+    expect(offboarded.statusCode, offboarded.body).toBe(200);
+
+    const rows = await listRequests(hr, `?requesterId=${leaverId}`);
+    expect(rows.length, 'the request vanished along with its requester').toBeGreaterThan(0);
+    expect(
+      rows[0].requesterName,
+      'an offboarded requester lost their name, so an access review reads "somebody asked for this"',
+    ).toBe('Departing Requester');
   });
 
   it('does not let a requesterId filter widen the narrowing', async () => {

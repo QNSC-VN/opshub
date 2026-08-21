@@ -10,6 +10,23 @@
  *  - `fetch` is replaced with a vi.stubGlobal() spy so we can control responses.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+/*
+ * NO REAL DNS IN A UNIT TEST.
+ *
+ * The relay resolves the target host immediately before delivering, which is the defence against a
+ * subscription URL being re-pointed at the VPC after it was saved. In a unit test that became a genuine
+ * lookup of `example.com`: one case took five seconds, and under the full suite the timing made two
+ * unrelated header assertions read a previous test's recorded call. It passed in isolation and failed in
+ * the suite — introduced by the SSRF change and missed because I ran that spec on its own.
+ *
+ * Stubbed to a public address, so the resolve-time check runs its real logic and reaches its verdict
+ * without leaving the process. Cases that need a REFUSAL use literal private addresses, which the static
+ * half of the check answers without any lookup at all.
+ */
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+}));
 import { createHmac } from 'crypto';
 import { WebhookRelayService } from './webhook-relay.service';
 import type { DrizzleTx } from '@platform';
