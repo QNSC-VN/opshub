@@ -12,3 +12,4 @@ export * from './idempotency.interceptor';
 export * from './pagination';
 export * from './query-boolean';
 export * from '../pipes/sanitization.pipe';
+export * from './outbound-url';
