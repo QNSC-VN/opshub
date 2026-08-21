@@ -56,6 +56,14 @@ export class RequestItemResponseDto {
   @ApiProperty() id!: string;
   @ApiProperty() type!: string;
   @ApiProperty() requesterId!: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'The requester\u2019s display name, resolved server-side. Null when the employee row is gone — a ' +
+      'request outlives the person who filed it. Sent because an approval queue showing a uuid does ' +
+      'not say who is asking.',
+  })
+  requesterName!: string | null;
   @ApiPropertyOptional({ nullable: true }) assigneeId!: string | null;
   @ApiProperty() status!: string;
   @ApiProperty() priority!: string;

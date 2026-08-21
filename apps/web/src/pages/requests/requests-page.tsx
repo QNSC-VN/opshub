@@ -23,7 +23,7 @@ import {
 import { useListState } from '@/shared/hooks/use-list-state';
 import { useCurrentUser } from '@/shared/hooks/use-current-user';
 import { usePermissions } from '@/shared/hooks/use-permissions';
-import { formatDate, formatDateTime } from '@/shared/lib/format';
+import { formatDate, formatDateTime, orDash } from '@/shared/lib/format';
 import { ReviewModal } from './review-modal';
 import { RequestCommentsPanel } from './request-comments-panel';
 import { canCancelRequest, isOpen } from './request-policy';
@@ -113,12 +113,28 @@ export function RequestsPage() {
 
   const columns: DataTableColumn<RequestItemResponse>[] = [
     {
+      /*
+       * WHAT THIS ROW USED TO SAY, and why it was not enough to decide from: the request type and
+       * `id.slice(0, 8)`. No requester, no subject, nothing but a type an approver already knew from the
+       * filter they clicked.
+       *
+       * The id made it worse rather than better. These are uuid v7 — TIME-PREFIXED — so requests filed
+       * within the same window share their leading characters, and the only per-row identifier rendered
+       * four visually identical values on a screen whose buttons are Approve and Reject.
+       *
+       * So the secondary line is the requester now, which is the fact an approver actually needs. The
+       * full id lives in the drawer, where there is room for all of it.
+       */
       key: 'request',
       header: 'Request',
       cell: (req) => (
         <div className="min-w-0">
           <p className="truncate font-medium text-fg">{humanizeStatus(req.type)}</p>
-          <p className="truncate font-mono text-xs text-fg-subtle">{req.id.slice(0, 8)}</p>
+          <p className="truncate text-xs text-fg-subtle">
+            {/* `orDash` rather than the raw id as a fallback: a missing name means the requester's row
+                is gone, and showing a uuid there would reintroduce exactly what this replaced. */}
+            {orDash(req.requesterName)}
+          </p>
         </div>
       ),
     },
@@ -143,6 +159,26 @@ export function RequestsPage() {
       key: 'submitted',
       header: 'Submitted',
       cell: (req) => <span className="text-xs text-fg-muted">{formatDate(req.submittedAt)}</span>,
+      hideOnMobile: true,
+    },
+    {
+      /*
+       * WHERE IT IS IN THE CHAIN. `currentStep` and `totalSteps` were already in the response and shown
+       * nowhere, so a two-step approval looked identical to a one-step one — and an approver could not
+       * tell whether saying yes finished the request or handed it on.
+       *
+       * Single-step requests say so rather than reading "1 of 1", which is noise on the majority of rows.
+       */
+      key: 'step',
+      header: 'Step',
+      cell: (req) =>
+        req.totalSteps > 1 ? (
+          <span className="text-xs text-fg-muted">
+            {req.currentStep} of {req.totalSteps}
+          </span>
+        ) : (
+          <span className="text-xs text-fg-subtle">Single</span>
+        ),
       hideOnMobile: true,
     },
     {
@@ -273,7 +309,16 @@ export function RequestsPage() {
                 { label: 'Submitted', value: formatDateTime(selected.submittedAt) },
                 {
                   label: 'Requester',
-                  value: <span className="font-mono text-xs">{selected.requesterId}</span>,
+                  value: (
+                    <span>
+                      {orDash(selected.requesterName)}
+                      {/* The uuid stays, in full and secondary: it is what somebody quotes in a ticket,
+                          and the drawer has room where the row did not. */}
+                      <span className="ml-2 font-mono text-2xs text-fg-subtle">
+                        {selected.requesterId}
+                      </span>
+                    </span>
+                  ),
                 },
                 {
                   label: 'Assignee',

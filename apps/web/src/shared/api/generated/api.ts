@@ -5679,6 +5679,8 @@ export interface components {
       id: string;
       type: string;
       requesterId: string;
+      /** @description The requester’s display name, resolved server-side. Null when the employee row is gone — a request outlives the person who filed it. Sent because an approval queue showing a uuid does not say who is asking. */
+      requesterName?: string | null;
       assigneeId?: string | null;
       status: string;
       priority: string;

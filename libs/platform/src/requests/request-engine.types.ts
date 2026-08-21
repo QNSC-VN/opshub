@@ -90,6 +90,19 @@ export interface RequestApproval {
 export interface RequestItemWithApprovals extends RequestItem {
   approvals: RequestApproval[];
   comments?: RequestComment[];
+  /**
+   * The requester's display name, resolved for the caller.
+   *
+   * WHY THE SERVER RESOLVES IT. `requesterId` is a uuid, and an approval queue that shows a uuid does
+   * not say who is asking — so the inbox listed rows an approver could not decide from. The SPA could
+   * look each id up, but a page of fifty rows is fifty requests for fifty names; the list already
+   * batch-loads approvals in one query and this rides the same pattern.
+   *
+   * Null when the requester's row is gone. A request outlives the employee who filed it — an offboarded
+   * leaver's access request is exactly the kind an auditor comes back to — so this is nullable rather
+   * than an inner join that would make the request disappear with the person.
+   */
+  requesterName?: string | null;
 }
 
 export interface SubmitRequestOptions {

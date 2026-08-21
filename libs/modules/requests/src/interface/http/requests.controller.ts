@@ -54,6 +54,7 @@ function toDto(r: RequestItemWithApprovals): RequestItemResponseDto {
     id: r.id,
     type: r.type,
     requesterId: r.requesterId,
+    requesterName: r.requesterName ?? null,
     assigneeId: r.assigneeId,
     status: r.status,
     priority: r.priority,
