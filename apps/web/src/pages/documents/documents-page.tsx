@@ -114,7 +114,9 @@ export function DocumentsPage() {
     {
       key: 'owner',
       header: 'Owner',
-      cell: (doc) => <span className="font-mono text-xs text-fg-muted">{doc.ownerId}</span>,
+      // The NAME, not `ownerId`. This column's only job is to say who is accountable for the policy,
+      // and thirty-six characters of uuid answered that with nothing.
+      cell: (doc) => <span className="text-xs text-fg-muted">{orDash(doc.ownerName)}</span>,
       hideOnMobile: true,
     },
     {
@@ -260,7 +262,16 @@ export function DocumentsPage() {
                 },
                 {
                   label: 'Owner',
-                  value: <span className="font-mono text-xs">{selected.ownerId}</span>,
+                  value: (
+                    <span>
+                      {orDash(selected.ownerName)}
+                      {/* The uuid stays here, secondary: the drawer has room, and it is what somebody
+                          quotes in a ticket. */}
+                      <span className="ml-2 font-mono text-2xs text-fg-subtle">
+                        {selected.ownerId}
+                      </span>
+                    </span>
+                  ),
                 },
                 {
                   label: 'In force',

@@ -49,13 +49,14 @@ import {
   PublishVersionDto,
 } from './dto/documents.dto';
 
-function toDocumentDto(d: ControlledDocument): DocumentResponseDto {
+function toDocumentDto(d: ControlledDocument & { ownerName?: string | null }): DocumentResponseDto {
   return {
     id: d.id,
     code: d.code,
     title: d.title,
     category: d.category,
     ownerId: d.ownerId,
+    ownerName: d.ownerName ?? null,
     retiredAt: d.retiredAt ? d.retiredAt.toISOString() : null,
     createdAt: d.createdAt.toISOString(),
   };
@@ -174,7 +175,7 @@ export class DocumentsController {
   @ApiOkResponse({ type: DocumentResponseDto })
   @ApiCommonErrors(401, 403, 404)
   async getById(@Param('id', ParseUUIDPipe) id: string): Promise<DocumentResponseDto> {
-    return toDocumentDto(await this.service.getDocument(id));
+    return toDocumentDto(await this.service.getDocumentWithOwner(id));
   }
 
   @Get(':id/versions')
@@ -290,6 +291,7 @@ export class DocumentsController {
   ): Promise<AcknowledgedByResponseDto[]> {
     return (await this.service.listAcknowledgedBy(id)).map((a) => ({
       employeeId: a.employeeId,
+      employeeName: a.employeeName,
       acknowledgedAt: a.acknowledgedAt.toISOString(),
     }));
   }

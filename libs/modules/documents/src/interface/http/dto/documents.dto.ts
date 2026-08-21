@@ -52,6 +52,14 @@ export class DocumentResponseDto {
   title!: string;
   category!: string;
   ownerId!: string;
+  /**
+   * The owner's display name, resolved server-side. Null when the employee row is gone — a policy
+   * outlives the person accountable for it, and losing the document with them would be far worse.
+   *
+   * Sent because an Owner column showing a uuid does not say who is accountable, and the SPA cannot
+   * resolve one name per row without one request per row.
+   */
+  ownerName!: string | null;
   retiredAt!: string | null;
   createdAt!: string;
 }
@@ -90,5 +98,7 @@ export class AcknowledgementResponseDto {
 
 export class AcknowledgedByResponseDto {
   employeeId!: string;
+  /** Who acknowledged it. Null when the employee row is gone; the acknowledgement still stands. */
+  employeeName!: string | null;
   acknowledgedAt!: string;
 }

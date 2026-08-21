@@ -41,7 +41,9 @@ function AcknowledgementsPanel({ versionId }: { versionId: string }) {
       )}
       {rows.slice(0, 8).map((ack) => (
         <p key={ack.employeeId} className="mt-0.5 text-xs text-fg-muted">
-          <span className="font-mono">{ack.employeeId}</span>
+          {/* Who signed off, by name: this list is read to answer exactly that, and a column of
+              uuids cannot. */}
+          <span>{orDash(ack.employeeName)}</span>
           <span className="text-fg-subtle"> · {formatDateTime(ack.acknowledgedAt)}</span>
         </p>
       ))}

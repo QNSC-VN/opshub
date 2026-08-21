@@ -11,8 +11,9 @@ import {
 } from '../errors/exceptions';
 import { ErrorCodes } from '../errors/error-codes';
 import { WebhookEnqueueService } from '../webhooks/webhook-enqueue.service';
-import { employees, requestItems, requestApprovals, requestComments } from '../../../../db/schema';
+import { requestItems, requestApprovals, requestComments } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
+import { nameOf, resolveEmployeeNames } from '../directory/employee-names';
 import { DelegationService } from '../authz/delegation.service';
 import { NotificationSchedulerService } from '../notifications/notification-scheduler.service';
 import type {
@@ -462,13 +463,9 @@ export class RequestEngine {
         asc(requestApprovals.id),
       );
 
-    const [requester] = await this.db
-      .select({ displayName: employees.displayName })
-      .from(employees)
-      .where(eq(employees.id, row.requesterId))
-      .limit(1);
+    const names = await resolveEmployeeNames(this.db, [row.requesterId]);
 
-    return { ...row, approvals: approvalRows, requesterName: requester?.displayName ?? null };
+    return { ...row, approvals: approvalRows, requesterName: nameOf(names, row.requesterId) };
   }
 
   /**
@@ -552,17 +549,13 @@ export class RequestEngine {
      * batched. Fifty rows must not become fifty lookups, and the alternative the SPA had was worse: it
      * showed the uuid, so an approver could not tell who was asking without opening each row.
      *
-     * DISTINCT ids, because one person filing several requests is the normal case on this screen.
+     * Shared with every other screen that names a person: this was the first place to need it and is
+     * no longer the only one.
      */
-    const requesterIds = [...new Set(rows.map((r) => r.requesterId))];
-    const nameRows =
-      requesterIds.length > 0
-        ? await this.db
-            .select({ id: employees.id, displayName: employees.displayName })
-            .from(employees)
-            .where(inArray(employees.id, requesterIds))
-        : [];
-    const nameMap = new Map(nameRows.map((n) => [n.id, n.displayName]));
+    const names = await resolveEmployeeNames(
+      this.db,
+      rows.map((r) => r.requesterId),
+    );
 
     return {
       rows: rows.map((r) => ({
@@ -570,7 +563,7 @@ export class RequestEngine {
         approvals: approvalMap.get(r.id) ?? [],
         // Null rather than absent when the employee row is gone: a request outlives its requester, and
         // an offboarded leaver's is the kind an auditor comes back to.
-        requesterName: nameMap.get(r.requesterId) ?? null,
+        requesterName: nameOf(names, r.requesterId),
       })),
       total: count,
     };

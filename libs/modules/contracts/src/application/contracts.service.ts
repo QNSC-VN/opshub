@@ -3,6 +3,8 @@ import {
   ConflictException,
   ErrorCodes,
   InjectDrizzle,
+  nameOf,
+  resolveEmployeeNames,
   NotFoundException,
   NotificationSchedulerService,
   PreconditionFailedException,
@@ -67,7 +69,30 @@ export class ContractsService {
   }
 
   async listContracts(filters: ContractFilters, limit: number, offset: number) {
-    return this.repo.list(filters, limit, offset);
+    const page = await this.repo.list(filters, limit, offset);
+    /*
+     * EMPLOYEE NAMES for the page, in one query. The Employee column rendered `employeeId`, so the
+     * list of who is employed on what terms identified nobody. Resolved server-side because reading
+     * the directory needs `employee.read`, which a contracts reader is not required to hold.
+     */
+    const names = await resolveEmployeeNames(
+      this.db,
+      page.rows.map((r) => r.employeeId),
+    );
+    return {
+      ...page,
+      rows: page.rows.map((r) => ({ ...r, employeeName: nameOf(names, r.employeeId) })),
+    };
+  }
+
+  /** One contract with its employee named — the drawer's read path. See documents for why it is
+   * separate from `getContract`, which every write path calls as a guard. */
+  async getContractWithEmployee(
+    id: string,
+  ): Promise<EmploymentContract & { employeeName: string | null }> {
+    const contract = await this.getContract(id);
+    const names = await resolveEmployeeNames(this.db, [contract.employeeId]);
+    return { ...contract, employeeName: nameOf(names, contract.employeeId) };
   }
 
   async listForEmployee(employeeId: string): Promise<EmploymentContract[]> {

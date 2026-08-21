@@ -192,6 +192,52 @@ describe('controlled document approval', () => {
   });
 });
 
+describe('naming the people a document points at', () => {
+  /*
+   * WHY THIS IS ASSERTED AT ALL. The SPA showed `ownerId` in the Owner column and a uuid per line in
+   * the acknowledgement list, so the two questions those screens exist to answer — who is accountable
+   * for this policy, and who has signed off on this revision — were answered with 36 characters that
+   * identify nobody. The names have to come from the API: `GET /v1/employees` needs `employee.read`,
+   * which a document reader is not required to hold, and the SPA cannot spend one request per row.
+   */
+  it('names the owner in the list and in the single document', async () => {
+    const list = await get<{ data: { id: string; ownerId: string; ownerName: string | null }[] }>(
+      '/v1/documents?limit=50',
+      security,
+    );
+    expect(list.status).toBe(200);
+    const mine = list.body.data.find((d) => d.id === documentId);
+    expect(mine, 'the document under test is not in the library listing').toBeDefined();
+    expect(
+      mine!.ownerName,
+      `document ${mine!.id} came back with owner ${mine!.ownerId} and no name`,
+    ).toBeTruthy();
+
+    const one = await get<{ ownerName: string | null }>(`/v1/documents/${documentId}`, security);
+    expect(one.status).toBe(200);
+    // The single-document read path resolves it too — it is a SEPARATE service method from the list,
+    // so a change to one leaves the other showing a uuid.
+    expect(one.body.ownerName).toBe(mine!.ownerName);
+  });
+
+  it('names who acknowledged a version', async () => {
+    const acked = await get<{ employeeId: string; employeeName: string | null }[]>(
+      `/v1/documents/versions/${v1Id}/acknowledgements`,
+      security,
+    );
+    expect(acked.status, JSON.stringify(acked.body)).toBe(200);
+    expect(acked.body.length, 'nobody has acknowledged v1, so this proves nothing').toBeGreaterThan(
+      0,
+    );
+    for (const row of acked.body) {
+      expect(
+        row.employeeName,
+        `acknowledgement by ${row.employeeId} came back with no name`,
+      ).toBeTruthy();
+    }
+  });
+});
+
 describe('finding a document in the library', () => {
   it('searches over the code and the title, which is what a picker needs', async () => {
     /*
